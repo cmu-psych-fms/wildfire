@@ -15,12 +15,21 @@ GameServer.prototype.addPlayer = function (client) {
         this.startGameTickTimer();
         console.log('start timers');
     }
-    this.players[client.userid] = client;
-    this.engine.addPlayer(client.userid);
-    this.numPlayers += 1;
     for (let k in this.players) {
         this.players[k].emit('join', {id: client.userid});
     }
+    this.players[client.userid] = client;
+    this.engine.addPlayer(client.userid);
+    this.numPlayers += 1;
+
+    var payload = {};
+    for (let k in this.players) {
+        payload[k] = [this.engine.players[k].position.x,
+                      this.engine.players[k].position.y,
+                      this.engine.players[k].angle];
+    }
+    this.players[client.userid].emit('connected', {id:client.userid,
+                                                   snapshot: payload});
 };
 
 GameServer.prototype.delPlayer = function (client) {
@@ -32,6 +41,9 @@ GameServer.prototype.delPlayer = function (client) {
     }
     delete this.players[client.userid];
     this.engine.delPlayer(client.userid);
+    for (let k in this.players) {
+        this.players[k].emit('part', {id:client.userid});
+    }
 };
 
 GameServer.prototype.handlePing = function (client, ts) {

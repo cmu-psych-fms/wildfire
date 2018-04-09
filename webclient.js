@@ -104,7 +104,13 @@ WebClient.prototype.onKeyUp = function (ev) {
 WebClient.prototype.onConnect = function (data) {
     console.log('connect', data);
     this.id = data.id;
-    this.engine.addPlayer(this.id);
+    for (let k in data.snapshot) {
+        this.engine.addPlayer(k);
+        this.engine.players[k].position.x = data.snapshot[k][0];
+        this.engine.players[k].position.y = data.snapshot[k][1];
+        this.engine.players[k].angle = data.snapshot[k][2];
+    }
+
     game.update( new Date().getTime() );
 };
 

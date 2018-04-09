@@ -51,24 +51,16 @@ sio.sockets.on('connection', function (client) {
     //and store this on their socket/connection
     client.userid = uuid();
 
-    //tell the player they connected, giving them their id
-    client.emit('connected', { id: client.userid } );
-    server.addPlayer(client);
-
     //Useful to know when someone connects
     console.log('\t socket.io:: player ' + client.userid + ' connected');
 
-    //Now we want to handle some of the messages that clients will send.
-    //They send messages here, and we send them to the game_server to handle.
+    //tell the player they connected, giving them their id
+    server.addPlayer(client);
+
     client.on('message', function(m) {
-
         server.onMessage(client, m);
+    });
 
-    }); //client.on message
-
-    //When this client disconnects, we want to tell the game server
-    //about that as well, so it can remove them from the game they are
-    //in, and make sure the other player knows that they left and so on.
     client.on('disconnect', function () {
         console.log('\t socket.io:: player ' + client.userid + ' disconnected');
         server.delPlayer(client);
