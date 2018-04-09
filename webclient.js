@@ -53,7 +53,7 @@ WebClient.prototype.connect = function () {
 };
 
 WebClient.prototype.begin = function () {
-    // this.connect();
+    this.connect();
     document.addEventListener('keydown', this.onKeyDown.bind(this));
     document.addEventListener('keyup', this.onKeyUp.bind(this));
 
