@@ -58,8 +58,11 @@ WebClient.prototype.begin = function () {
     document.addEventListener('keyup', this.onKeyUp.bind(this));
 
     this.canvas = document.getElementById('gamecanvas');
-    this.canvas.width = 710;
-    this.canvas.height = 630;
+    // this.canvas.width = 710;
+    // this.canvas.height = 630;
+    this.canvas.width = 600;
+    this.canvas.height = 400;
+
     this.ctx = this.canvas.getContext('2d');
 };
 
@@ -104,11 +107,19 @@ WebClient.prototype.onKeyUp = function (ev) {
 WebClient.prototype.onConnect = function (data) {
     console.log('connect', data);
     this.id = data.id;
-    for (let k in data.snapshot) {
+    for (let k in data.players) {
         this.engine.addPlayer(k);
-        this.engine.players[k].position.x = data.snapshot[k][0];
-        this.engine.players[k].position.y = data.snapshot[k][1];
-        this.engine.players[k].angle = data.snapshot[k][2];
+        this.engine.players[k].position.x = data.players[k][0];
+        this.engine.players[k].position.y = data.players[k][1];
+        this.engine.players[k].angle = data.players[k][2];
+    }
+    this.engine.fortresses = Array(data.fortresses.length);
+    for (let i=0; i<data.fortresses.length; i++) {
+        this.engine.fortresses[i] = {alive: data.fortresses[i][0],
+                                     position: {x:data.fortresses[i][1],
+                                                y:data.fortresses[i][2]},
+                                     angle: data.fortresses[i][3],
+                                     radius: data.fortresses[i][4]};
     }
 
     game.update( new Date().getTime() );
@@ -173,34 +184,161 @@ WebClient.prototype.processKbdInput = function () {
 
 WebClient.prototype.processServerUpdates = function () {
     for (let i=0; i<this.network.serverUpdates.length; i++) {
-        var players = this.network.serverUpdates[i];
+        var players = this.network.serverUpdates[i].p;
         for (let k in players) {
             // console.log('update', k, players[k], this.engine.players[k])
             if (this.engine.players[k]) {
-                this.engine.players[k].position.x = players[k][0];
-                this.engine.players[k].position.y = players[k][1];
-                this.engine.players[k].angle = players[k][2];
+                this.engine.players[k].alive = players[k][0],
+                this.engine.players[k].position.x = players[k][1];
+                this.engine.players[k].position.y = players[k][2];
+                this.engine.players[k].angle = players[k][3];
             }
+        }
+        var fortresses = this.network.serverUpdates[i].f;
+        for (let i=0; i<this.engine.fortresses.length;i++) {
+            this.engine.fortresses[i].alive = fortresses[i][0];
+            this.engine.fortresses[i].position.x = fortresses[i][1];
+            this.engine.fortresses[i].position.y = fortresses[i][2];
+            this.engine.fortresses[i].angle = fortresses[i][3];
+        }
+        var shells = this.network.serverUpdates[i].s;
+        this.engine.shells = Array(shells.length);
+        for (let i=0; i<this.engine.shells.length; i++) {
+            this.engine.shells[i] = {position: {x: shells[i][0],
+                                                y: shells[i][1]},
+                                     angle: shells[i][2]};
+        }
+        var missiles = this.network.serverUpdates[i].m;
+        this.engine.missiles = Array(missiles.length);
+        for (let i=0; i<this.engine.missiles.length; i++) {
+            this.engine.missiles[i] = {position: {x: missiles[i][0],
+                                                  y: missiles[i][1]},
+                                       angle: missiles[i][2]};
         }
     }
     this.network.serverUpdates.length = 0;
 };
 
-WebClient.prototype.drawGameState = function () {
-    this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-    this.ctx.strokeStyle = '#009900';
-    for (let x=0; x<this.engine.config.mapSize; x++)
-        for (let y=0; y<this.engine.config.mapSize; y++) {
-            this.ctx.strokeRect (x*20, y*20, 20, 20);
+WebClient.prototype.drawExplosion = function(ctx, x, y) {
+    var ofs = 0;
+    var radius;
+    for (radius=15; radius<70; radius+=8) {
+        var angle;
+        ofs += 3;
+        if (radius < 60) { ctx.strokeStyle = '#FFFF00'; }
+        else { ctx.strokeStyle = '#FF0000'; }
+        for (angle=0; angle<360; angle += 30) {
+            ctx.beginPath();
+            ctx.arc(x, y, radius, deg2rad(angle+ofs),deg2rad(angle+ofs+10),false);
+            ctx.stroke();
         }
-
-
-    for (let id in this.engine.players) {
-        shipWireframe.draw (this.ctx,
-                            this.engine.players[id].position.x,
-                            this.engine.players[id].position.y,
-                            this.engine.players[id].angle);
     }
+    ctx.strokeStyle = '#FFFF00';
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI*2, false);
+    ctx.stroke();
+};
+
+WebClient.prototype.drawGameState = function () {
+    this.ctx.save();
+    this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+    this.ctx.translate(-this.engine.players[this.id].position.x+this.canvas.width/2,
+                       -this.engine.players[this.id].position.y+this.canvas.height/2);
+    this.ctx.strokeStyle = '#003300';
+    var maxx = this.engine.config.mapSize * this.engine.config.mapCellSize;
+    var maxy = this.engine.config.mapSize * this.engine.config.mapCellSize;
+    for (let x=0; x<this.engine.config.mapSize; x++) {
+        this.ctx.moveTo(x*this.engine.config.mapCellSize, 0);
+        this.ctx.lineTo(x*this.engine.config.mapCellSize, maxy);
+    }
+    for (let y=0; y<this.engine.config.mapSize; y++) {
+        this.ctx.moveTo(0, y*this.engine.config.mapCellSize);
+        this.ctx.lineTo(maxx, y*this.engine.config.mapCellSize);
+    }
+    this.ctx.stroke();
+    this.ctx.lineWidth = 4;
+    this.ctx.strokeStyle = '#00AA00';
+    this.ctx.strokeRect(0, 0, maxx, maxy);
+    this.ctx.lineWidth = 1;
+    for (let i=0; i<this.engine.fortresses.length; i++) {
+        if (this.engine.fortresses[i].alive) {
+            // this.ctx.beginPath();
+            // this.ctx.arc(this.engine.fortresses[i].position.x,
+            //              this.engine.fortresses[i].position.y,
+            //              30,
+            //              deg2rad(this.engine.fortresses[i].angle)-Math.PI*5/8,
+            //              deg2rad(this.engine.fortresses[i].angle)+Math.PI*5/8);
+            // this.ctx.strokeStyle = '#FFFF00';
+            // this.ctx.stroke();
+            this.engine.hexagons[this.engine.fortresses[i].radius].draw(this.ctx,
+                                                                        this.engine.fortresses[i].position.x,
+                                                                        this.engine.fortresses[i].position.y,
+                                                                        0,
+                                                                        '#999999');
+            this.engine.hexagons[40].fill(this.ctx,
+                                          this.engine.fortresses[i].position.x,
+                                          this.engine.fortresses[i].position.y,
+                                          this.engine.fortresses[i].angle,
+                                         '#000000');
+            this.ctx.strokeStyle = '#003300';
+            this.ctx.stroke();
+            this.ctx.lineWidth = 1.5;
+            this.engine.hexagons[40].drawPartial(this.ctx,
+                                                 this.engine.fortresses[i].position.x,
+                                                 this.engine.fortresses[i].position.y,
+                                                 this.engine.fortresses[i].angle,
+                                                 '#00FF00');
+            this.ctx.lineWidth = 1;
+
+            fortressWireframe.draw(this.ctx,
+                                   this.engine.fortresses[i].position.x,
+                                   this.engine.fortresses[i].position.y,
+                                   this.engine.fortresses[i].angle);
+
+            // this.ctx.beginPath();
+            // this.ctx.arc(this.engine.fortresses[i].position.x,
+            //              this.engine.fortresses[i].position.y,
+            //              this.engine.fortresses[i].radius,
+            //              0, Math.PI*2);
+            // this.ctx.strokeStyle = '#999999';
+            // this.ctx.stroke();
+        } else {
+            this.ctx.beginPath();
+            this.ctx.arc(this.engine.fortresses[i].position.x,
+                         this.engine.fortresses[i].position.y,
+                         30,
+                         0, Math.PI*2);
+            this.ctx.fillStyle = '#222222';
+            this.ctx.fill();
+        }
+    }
+    for (let id in this.engine.players) {
+        if (this.engine.players[id].alive)
+            shipWireframe.draw (this.ctx,
+                                this.engine.players[id].position.x,
+                                this.engine.players[id].position.y,
+                                this.engine.players[id].angle);
+        else
+            this.drawExplosion(this.ctx,
+                               this.engine.players[id].position.x,
+                               this.engine.players[id].position.y);
+    }
+
+    // Projectiles
+    for (let i=0; i<this.engine.missiles.length;i++) {
+        missileWireframe.draw(this.ctx,
+                              this.engine.missiles[i].position.x,
+                              this.engine.missiles[i].position.y,
+                              this.engine.missiles[i].angle);
+    }
+    for (let i=0; i<this.engine.shells.length;i++) {
+        shellWireframe.draw(this.ctx,
+                            this.engine.shells[i].position.x,
+                            this.engine.shells[i].position.y,
+                            this.engine.shells[i].angle);
+    }
+
+    this.ctx.restore();
 };
 
 WebClient.prototype.update = function (t) {

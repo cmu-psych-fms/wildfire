@@ -5,6 +5,7 @@ function GameServer() {
     this.numPlayers = 0;
     this.players = {};
     this.engine = new engine.GameEngine(new config.Config());
+    this.engine.placeFortresses(10, 50);
 }
 
 GameServer.prototype = {};
@@ -24,12 +25,22 @@ GameServer.prototype.addPlayer = function (client) {
 
     var payload = {};
     for (let k in this.players) {
-        payload[k] = [this.engine.players[k].position.x,
+        payload[k] = [this.engine.players[k].alive?1:0,
+                      this.engine.players[k].position.x,
                       this.engine.players[k].position.y,
                       this.engine.players[k].angle];
     }
+    var fpayload = Array(this.engine.fortresses.length);
+    for (let i =0;i<this.engine.fortresses.length; i++) {
+        fpayload[i] = [this.engine.fortresses[i].alive?1:0,
+                       this.engine.fortresses[i].position.x,
+                       this.engine.fortresses[i].position.y,
+                       this.engine.fortresses[i].angle,
+                       this.engine.fortresses[i].radius];
+    }
     this.players[client.userid].emit('connected', {id:client.userid,
-                                                   snapshot: payload});
+                                                   players: payload,
+                                                   fortresses: fpayload});
 };
 
 GameServer.prototype.delPlayer = function (client) {
@@ -52,7 +63,7 @@ GameServer.prototype.handlePing = function (client, ts) {
 
 GameServer.prototype.onMessage = function (client, m) {
     var p = this.engine.players[client.userid];
-    console.log('message', m);
+    // console.log('message', m);
     if (p) {
         var cmd = m[0];
         var data = JSON.parse(m.slice(1));
@@ -89,15 +100,35 @@ GameServer.prototype.stopServerUpdates = function () {
 }
 
 GameServer.prototype.sendServerUpdate = function () {
-    var payload = {};
+    var full = {};
+    full.p = {};
     for (let k in this.players) {
-        payload[k] = [this.engine.players[k].position.x,
-                      this.engine.players[k].position.y,
-                      this.engine.players[k].angle];
+        full.p[k] = [this.engine.players[k].alive?1:0,
+                     this.engine.players[k].position.x,
+                     this.engine.players[k].position.y,
+                     this.engine.players[k].angle];
     }
-
+    full.f = Array(this.engine.fortresses.length);
+    for (let i =0;i<this.engine.fortresses.length; i++) {
+        full.f[i] = [this.engine.fortresses[i].alive?1:0,
+                       this.engine.fortresses[i].position.x,
+                       this.engine.fortresses[i].position.y,
+                       this.engine.fortresses[i].angle];
+    }
+    full.m = Array(this.engine.missiles.length);
+    for (let i =0;i<this.engine.missiles.length; i++) {
+        full.m[i] = [this.engine.missiles[i].position.x,
+                     this.engine.missiles[i].position.y,
+                     this.engine.missiles[i].angle];
+    }
+    full.s = Array(this.engine.shells.length);
+    for (let i =0;i<this.engine.shells.length; i++) {
+        full.s[i] = [this.engine.shells[i].position.x,
+                     this.engine.shells[i].position.y,
+                     this.engine.shells[i].angle];
+    }
     for (let k in this.players) {
-        this.players[k].emit('serverupdate', payload);
+        this.players[k].emit('serverupdate', full);
     }
 };
 
