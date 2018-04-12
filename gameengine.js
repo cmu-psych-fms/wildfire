@@ -21,6 +21,16 @@ function angle_diff(angle1, angle2) {
     }
 }
 
+function rotate_translate (o_x, o_y, x, y, angle) {
+    // FIXME: we shouldn't need to tweak the angle
+    var a = deg2rad(-angle+90);
+    var s = Math.cos(a);
+    var c = Math.sin(a);
+    return {x: x * c - y * s + o_x,
+            y: y * c + x * s + o_y};
+}
+
+
 function angleTo(p1, p2) {
     var a = Math.atan2(p2.y-p1.y, p2.x-p1.x);
     return stdAngle(rad2deg(a));
@@ -138,24 +148,54 @@ function GameEngine(config) {
     this.fortresses = [];
     this.missiles = [];
     this.shells = [];
+    this.asteroids = [];
     this.ticks = 0;
 
     this.hexagons = {};
-    this.hexagons[150] = new Hexagon(150);
-    this.hexagons[40] = new Hexagon(40);
+    this.hexagons[this.config.fortress.bigHex] = new Hexagon(this.config.fortress.bigHex);
+    this.hexagons[this.config.fortress.smallHex] = new Hexagon(this.config.fortress.smallHex);
 }
 
 GameEngine.prototype = {};
+
+GameEngine.prototype.makeAsteroid = function (n) {
+    var asteroid = {position: {x:Math.random()*this.config.mapSize*this.config.mapCellSize,
+                               y:Math.random()*this.config.mapSize*this.config.mapCellSize},
+                    velocity: { x: Math.cos(Math.random()*Math.PI*2) * 0.1,
+                                y: Math.sin(Math.random()*Math.PI*2) * 0.1},
+                    angularVelocity: Math.random()*0.05-0.1,
+                    angle: 0,
+                    bubbles: new Array(n)};
+    asteroid.bubbles[0] = {x:0, y:0, r: Math.random()*60+10};
+    var size = 40;
+    for (let i=1; i<n; i++) {
+        var r = Math.random() * size+10;
+        var a = Math.random()*Math.PI*2;
+        var b = {x: asteroid.bubbles[i-1].x + Math.cos(a) * (r+asteroid.bubbles[i-1].r),
+                 y: asteroid.bubbles[i-1].y + Math.sin(a) * (r+asteroid.bubbles[i-1].r),
+                 r: r};
+        asteroid.bubbles[i] = b;
+    }
+
+    return asteroid;
+}
+
+GameEngine.prototype.placeAsteroids = function (n, tries) {
+    this.asteroids = new Array(n);
+    for (let i=0; i<n; i++) {
+        this.asteroids[i] = this.makeAsteroid(6);
+    }
+};
 
 GameEngine.prototype.placeFortresses = function (n, tries) {
     this.fortresses = [];
     console.log('start placing', this.fortresses.length);
     for (let i=0; i<tries; i++) {
-        var pos = {x: Math.random()*this.config.mapSize*20,
-                   y: Math.random()*this.config.mapSize*20};
+        var pos = {x: Math.random()*(this.config.mapSize*this.config.mapCellSize-this.config.fortress.bigHex*2)+this.config.fortress.bigHex,
+                   y: Math.random()*(this.config.mapSize*this.config.mapCellSize-this.config.fortress.bigHex*2)+this.config.fortress.bigHex}
         var ok = true;
         for (let j=0; j<this.fortresses.length; j++) {
-            if (distance(this.fortresses[j].position, pos) < 150*2) {
+            if (distance(this.fortresses[j].position, pos) < this.config.fortress.bigHex*2) {
                 ok = false;
                 break;
             }
@@ -166,7 +206,7 @@ GameEngine.prototype.placeFortresses = function (n, tries) {
                                   angle: 0,
                                   playerTarget: null,
                                   missileTarget: null,
-                                  radius: 150,
+                                  radius: this.config.fortress.bigHex,
                                   config: this.config.fortress
                                  });
         if (this.fortresses.length >= n) break;
@@ -175,7 +215,7 @@ GameEngine.prototype.placeFortresses = function (n, tries) {
 };
 
 GameEngine.prototype.createMap = function () {
-    this.map = Array(this.config.mapSize * this.config.mapSize);
+    this.map = new Array(this.config.mapSize * this.config.mapSize);
 };
 
 GameEngine.prototype.stepOneTick = function () {
@@ -184,6 +224,7 @@ GameEngine.prototype.stepOneTick = function () {
     this.updateFortresses();
     this.updateMissiles();
     this.updateShells();
+    this.updateAsteroids();
     // this.updateEntities();
     // this.handleCollisions();
 };
@@ -290,31 +331,33 @@ GameEngine.prototype.updateMissiles = function () {
     var acc = [];
     for (let i=0; i<this.missiles.length; i++) {
         var m = this.missiles[i];
-        m.position.x += m.velocity.x;
-        m.position.y += m.velocity.y;
-        if (m.position.x < 0 ||
-            m.position.x > this.config.mapSize * this.config.mapCellSize ||
-            m.position.y < 0 ||
-            m.position.y > this.config.mapSize * this.config.mapCellSize) {
-            this.killMissile(m);
-            continue;
-        }
-        if (this.ticks - m.spawnTick > this.config.missile.lifespan) {
-            this.killMissile(m);
-            continue;
-        }
-        for (let i=0; i<this.fortresses.length; i++) {
-            var f = this.fortresses[i];
-            if (f.alive && distance(f.position, m.position) < 40) {
-            // if (f.alive && this.hexagons[40].inside(f.position, m.position)) {
+        if (m.alive) {
+            m.position.x += m.velocity.x;
+            m.position.y += m.velocity.y;
+            if (m.position.x < 0 ||
+                m.position.x > this.config.mapSize * this.config.mapCellSize ||
+                m.position.y < 0 ||
+                m.position.y > this.config.mapSize * this.config.mapCellSize) {
                 this.killMissile(m);
-                var to = angleTo(f.position, m.position);
-                var a = angle_diff(f.angle, to);
-                if (a > 120 || a < -120) {
-                    f.alive = false;
-                    // console.log(Math.round(f.angle), Math.round(to), a);
+                continue;
+            }
+            if (this.ticks - m.spawnTick > this.config.missile.lifespan) {
+                this.killMissile(m);
+                continue;
+            }
+            for (let i=0; i<this.fortresses.length; i++) {
+                var f = this.fortresses[i];
+                if (f.alive && distance(f.position, m.position) < this.config.fortress.smallHex) {
+                    // if (f.alive && this.hexagons[this.config.fortress.smallHex].inside(f.position, m.position)) {
+                    this.killMissile(m);
+                    var to = angleTo(f.position, m.position);
+                    var a = angle_diff(f.angle, to);
+                    if (a > 120 || a < -120) {
+                        f.alive = false;
+                        // console.log(Math.round(f.angle), Math.round(to), a);
+                    }
+                    break;
                 }
-                break;
             }
         }
         if (m.alive) acc.push(m);
@@ -433,6 +476,41 @@ GameEngine.prototype.updateFortress = function (f) {
 GameEngine.prototype.updatePlayers = function () {
     for (let id in this.players) {
         this.updatePlayer(this.players[id]);
+    }
+};
+
+GameEngine.prototype.updateAsteroids = function () {
+    for (let i=0; i<this.asteroids.length; i++) {
+        this.asteroids[i].position.x += this.asteroids[i].velocity.x;
+        this.asteroids[i].position.y += this.asteroids[i].velocity.y;
+        this.asteroids[i].angle = stdAngle(this.asteroids[i].angle+this.asteroids[i].angularVelocity);
+
+        if (this.asteroids[i].position.x < 0) this.asteroids[i].velocity.x *= -1;
+        if (this.asteroids[i].position.y < 0) this.asteroids[i].velocity.y *= -1;
+        if (this.asteroids[i].position.x > this.config.mapSize*this.config.mapCellSize) this.asteroids[i].velocity.x *= -1;
+        if (this.asteroids[i].position.y > this.config.mapSize*this.config.mapCellSize) this.asteroids[i].velocity.y *= -1;
+
+
+
+        for (let b=0; b<this.asteroids[i].bubbles.length; b++) {
+            var pos = rotate_translate(this.asteroids[i].position.x,
+                                       this.asteroids[i].position.y,
+                                       this.asteroids[i].bubbles[b].x,
+                                       this.asteroids[i].bubbles[b].y,
+                                       this.asteroids[i].angle);
+            for (let j=0; j<this.missiles.length; j++) {
+                if (this.missiles[j].alive && distance(this.missiles[j].position, pos) < this.asteroids[i].bubbles[b].r) {
+                    this.missiles[j].alive = false;
+                }
+            }
+            for (let k in this.players) {
+                if (this.players[k].alive) {
+                    if (distance(this.players[k].position, pos) < this.asteroids[i].bubbles[b].r) {
+                        this.killPlayer(this.players[k]);
+                    }
+                }
+            }
+        }
     }
 };
 

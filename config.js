@@ -9,6 +9,8 @@ function Config() {
                    collisionRadius: 10,
                    deathTimer: 120};
     this.fortress = { lockTime: 120,
+                      smallHex: 40,
+                      bigHex: 170,
                       collisionRadius: 18,
                       speed: 0.25,
                       lockSpeed: 5};

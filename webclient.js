@@ -61,7 +61,7 @@ WebClient.prototype.begin = function () {
     // this.canvas.width = 710;
     // this.canvas.height = 630;
     this.canvas.width = 600;
-    this.canvas.height = 400;
+    this.canvas.height = 500;
 
     this.ctx = this.canvas.getContext('2d');
 };
@@ -113,7 +113,7 @@ WebClient.prototype.onConnect = function (data) {
         this.engine.players[k].position.y = data.players[k][1];
         this.engine.players[k].angle = data.players[k][2];
     }
-    this.engine.fortresses = Array(data.fortresses.length);
+    this.engine.fortresses = new Array(data.fortresses.length);
     for (let i=0; i<data.fortresses.length; i++) {
         this.engine.fortresses[i] = {alive: data.fortresses[i][0],
                                      position: {x:data.fortresses[i][1],
@@ -121,6 +121,7 @@ WebClient.prototype.onConnect = function (data) {
                                      angle: data.fortresses[i][3],
                                      radius: data.fortresses[i][4]};
     }
+    this.engine.asteroids = data.asteroids;
 
     game.update( new Date().getTime() );
 };
@@ -202,18 +203,24 @@ WebClient.prototype.processServerUpdates = function () {
             this.engine.fortresses[i].angle = fortresses[i][3];
         }
         var shells = this.network.serverUpdates[i].s;
-        this.engine.shells = Array(shells.length);
+        this.engine.shells = new Array(shells.length);
         for (let i=0; i<this.engine.shells.length; i++) {
             this.engine.shells[i] = {position: {x: shells[i][0],
                                                 y: shells[i][1]},
                                      angle: shells[i][2]};
         }
         var missiles = this.network.serverUpdates[i].m;
-        this.engine.missiles = Array(missiles.length);
+        this.engine.missiles = new Array(missiles.length);
         for (let i=0; i<this.engine.missiles.length; i++) {
             this.engine.missiles[i] = {position: {x: missiles[i][0],
                                                   y: missiles[i][1]},
                                        angle: missiles[i][2]};
+        }
+        var asteroids = this.network.serverUpdates[i].a;
+        for (let i=0; i<this.engine.asteroids.length; i++) {
+            this.engine.asteroids[i].position.x = asteroids[i][0];
+            this.engine.asteroids[i].position.y = asteroids[i][1];
+            this.engine.asteroids[i].angle = asteroids[i][2];
         }
     }
     this.network.serverUpdates.length = 0;
@@ -275,19 +282,19 @@ WebClient.prototype.drawGameState = function () {
                                                                         this.engine.fortresses[i].position.y,
                                                                         0,
                                                                         '#999999');
-            this.engine.hexagons[40].fill(this.ctx,
-                                          this.engine.fortresses[i].position.x,
-                                          this.engine.fortresses[i].position.y,
-                                          this.engine.fortresses[i].angle,
-                                         '#000000');
+            this.engine.hexagons[this.engine.config.fortress.smallHex].fill(this.ctx,
+                                                                            this.engine.fortresses[i].position.x,
+                                                                            this.engine.fortresses[i].position.y,
+                                                                            this.engine.fortresses[i].angle,
+                                                                            '#000000');
             this.ctx.strokeStyle = '#003300';
             this.ctx.stroke();
             this.ctx.lineWidth = 1.5;
-            this.engine.hexagons[40].drawPartial(this.ctx,
-                                                 this.engine.fortresses[i].position.x,
-                                                 this.engine.fortresses[i].position.y,
-                                                 this.engine.fortresses[i].angle,
-                                                 '#00FF00');
+            this.engine.hexagons[this.engine.config.fortress.smallHex].drawPartial(this.ctx,
+                                                                                   this.engine.fortresses[i].position.x,
+                                                                                   this.engine.fortresses[i].position.y,
+                                                                                   this.engine.fortresses[i].angle,
+                                                                                   '#00FF00');
             this.ctx.lineWidth = 1;
 
             fortressWireframe.draw(this.ctx,
@@ -337,6 +344,40 @@ WebClient.prototype.drawGameState = function () {
                             this.engine.shells[i].position.y,
                             this.engine.shells[i].angle);
     }
+    // asteroids
+    this.ctx.strokeStyle = '#FF3333';
+    this.ctx.fillStyle = '#3333FF';
+    for (let i=0; i<this.engine.asteroids.length;i++) {
+        this.ctx.save();
+        this.ctx.translate(this.engine.asteroids[i].position.x,
+                           this.engine.asteroids[i].position.y);
+        this.ctx.rotate(deg2rad(this.engine.asteroids[i].angle));
+        for (let j=0; j<this.engine.asteroids[i].bubbles.length; j++) {
+            this.ctx.beginPath();
+            this.ctx.arc(this.engine.asteroids[i].bubbles[j].x,
+                         this.engine.asteroids[i].bubbles[j].y,
+                         this.engine.asteroids[i].bubbles[j].r,
+                         0, Math.PI*2);
+            this.ctx.fill();
+            // this.ctx.stroke();
+        }
+        this.ctx.restore();
+    }
+
+    // for (let i=0; i<this.engine.asteroids.length;i++) {
+    //     for (let j=0; j<this.engine.asteroids[i].bubbles.length; j++) {
+    //         var pos = rotate_translate(this.engine.asteroids[i].position.x,
+    //                                    this.engine.asteroids[i].position.y,
+    //                                    this.engine.asteroids[i].bubbles[j].x,
+    //                                    this.engine.asteroids[i].bubbles[j].y,
+    //                                    this.engine.asteroids[i].angle);
+    //         this.ctx.beginPath();
+    //         this.ctx.arc(pos.x, pos.y,
+    //                      this.engine.asteroids[i].bubbles[j].r,
+    //                      0, Math.PI*2);
+    //         this.ctx.stroke();
+    //     }
+    // }
 
     this.ctx.restore();
 };

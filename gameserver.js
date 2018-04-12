@@ -6,6 +6,7 @@ function GameServer() {
     this.players = {};
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
+    this.engine.placeAsteroids(10, 50);
 }
 
 GameServer.prototype = {};
@@ -30,7 +31,7 @@ GameServer.prototype.addPlayer = function (client) {
                       this.engine.players[k].position.y,
                       this.engine.players[k].angle];
     }
-    var fpayload = Array(this.engine.fortresses.length);
+    var fpayload = new Array(this.engine.fortresses.length);
     for (let i =0;i<this.engine.fortresses.length; i++) {
         fpayload[i] = [this.engine.fortresses[i].alive?1:0,
                        this.engine.fortresses[i].position.x,
@@ -40,7 +41,8 @@ GameServer.prototype.addPlayer = function (client) {
     }
     this.players[client.userid].emit('connected', {id:client.userid,
                                                    players: payload,
-                                                   fortresses: fpayload});
+                                                   fortresses: fpayload,
+                                                   asteroids: this.engine.asteroids});
 };
 
 GameServer.prototype.delPlayer = function (client) {
@@ -108,24 +110,30 @@ GameServer.prototype.sendServerUpdate = function () {
                      this.engine.players[k].position.y,
                      this.engine.players[k].angle];
     }
-    full.f = Array(this.engine.fortresses.length);
+    full.f = new Array(this.engine.fortresses.length);
     for (let i =0;i<this.engine.fortresses.length; i++) {
         full.f[i] = [this.engine.fortresses[i].alive?1:0,
                        this.engine.fortresses[i].position.x,
                        this.engine.fortresses[i].position.y,
                        this.engine.fortresses[i].angle];
     }
-    full.m = Array(this.engine.missiles.length);
+    full.m = new Array(this.engine.missiles.length);
     for (let i =0;i<this.engine.missiles.length; i++) {
         full.m[i] = [this.engine.missiles[i].position.x,
                      this.engine.missiles[i].position.y,
                      this.engine.missiles[i].angle];
     }
-    full.s = Array(this.engine.shells.length);
+    full.s = new Array(this.engine.shells.length);
     for (let i =0;i<this.engine.shells.length; i++) {
         full.s[i] = [this.engine.shells[i].position.x,
                      this.engine.shells[i].position.y,
                      this.engine.shells[i].angle];
+    }
+    full.a = new Array(this.engine.asteroids.length);
+    for (let i =0;i<this.engine.asteroids.length; i++) {
+        full.a[i] = [this.engine.asteroids[i].position.x,
+                     this.engine.asteroids[i].position.y,
+                     this.engine.asteroids[i].angle];
     }
     for (let k in this.players) {
         this.players[k].emit('serverupdate', full);
