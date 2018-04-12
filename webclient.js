@@ -268,6 +268,11 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.strokeRect(0, 0, maxx, maxy);
     this.ctx.lineWidth = 1;
     for (let i=0; i<this.engine.fortresses.length; i++) {
+        this.engine.hexagons[this.engine.fortresses[i].radius].draw(this.ctx,
+                                                                    this.engine.fortresses[i].position.x,
+                                                                    this.engine.fortresses[i].position.y,
+                                                                    0,
+                                                                    '#999999');
         if (this.engine.fortresses[i].alive) {
             // this.ctx.beginPath();
             // this.ctx.arc(this.engine.fortresses[i].position.x,
@@ -309,15 +314,8 @@ WebClient.prototype.drawGameState = function () {
             //              0, Math.PI*2);
             // this.ctx.strokeStyle = '#999999';
             // this.ctx.stroke();
-        } else {
-            this.ctx.beginPath();
-            this.ctx.arc(this.engine.fortresses[i].position.x,
-                         this.engine.fortresses[i].position.y,
-                         30,
-                         0, Math.PI*2);
-            this.ctx.fillStyle = '#222222';
-            this.ctx.fill();
         }
+
     }
     for (let id in this.engine.players) {
         if (this.engine.players[id].alive)
