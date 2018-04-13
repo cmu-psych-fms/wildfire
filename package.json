@@ -10,6 +10,7 @@
   "license": "GVPL2",
   "dependencies": {
     "express": "^4.16.3",
+    "pngjs": "^3.3.2",
     "socket.io": "^2.0.4",
     "uuid": "^3.2.1"
   }

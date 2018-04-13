@@ -5,7 +5,7 @@ function Config() {
                    turnRate: 3,
                    // acceleration: 0.02,
                    acceleration: 0.04,
-                   maxSpeed: 3,
+                   maxSpeed: 5,
                    collisionRadius: 10,
                    deathTimer: 120};
     this.fortress = { lockTime: 120,
@@ -22,6 +22,7 @@ function Config() {
                    lifespan: 180};
     this.mapSize = 100;
     this.mapCellSize = 20;
+    this.startFires = 30;
     this.serverUpdateBufferSize = 60;
 }
 

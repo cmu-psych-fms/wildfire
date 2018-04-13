@@ -4,6 +4,19 @@ var KEY_UP = 3;
 var KEY_DOWN = 4;
 var KEY_SPACE = 5;
 
+var MAP_FIRE = 1;
+var MAP_ASH = 2;
+var MAP_RETARDANT = 3;
+var MAP_WATER = 4;
+var MAP_TREE = 5;
+var MAP_HOUSE = 6;
+var MAP_ROCK = 7;
+var MAP_GRASS = 8;
+var MAP_VROAD = 9;
+var MAP_HROAD = 10;
+
+
+
 function angle_diff(angle1, angle2) {
     // It finally works--don't touch it!
     if (angle1 < 90) {
@@ -63,127 +76,37 @@ function V(x,y) {
     return {x:x,y:y};
 }
 
-function Hexagon (radius) {
-    Object.call(this);
-    var x1 = Math.floor(-radius);
-    var x2 = Math.floor(-radius*0.5);
-    var x3 = Math.floor(+radius*0.5);
-    var x4 = Math.floor(+radius);
-    var y1 = 0;
-    var y2 = Math.floor(-radius*Math.sin(Math.PI*2/3));
-    var y3 = Math.floor(+radius*Math.sin(Math.PI*2/3));
-    this.points = [V(x1,y1),
-                   V(x2,y2),
-                   V(x3,y2),
-                   V(x4,y1),
-                   V(x3,y3),
-                   V(x2,y3)];
-    this.radius = radius;
-    return this;
-}
-
-Hexagon.prototype = {};
-
-Hexagon.prototype.inside = function (center, v) {
-    var i;
-    for (i=0; i<this.points.length-1; i++) {
-        var nx, ny, dx, dy;
-        nx = -(this.points[i+1].y - this.points[i].y);
-        ny =   this.points[i+1].x - this.points[i].x;
-        dx = v.x - (this.points[i].x+center.x);
-        dy = v.y - (this.points[i].y+center.y);
-        if (nx * dx + ny * dy < 0) {
-            return false;
-        }
-    }
-    return true;
-};
-
-Hexagon.prototype.path = function (ctx, x, y, angle) {
-    var i;
-    ctx.translate(x,y);
-    ctx.rotate(deg2rad(angle));
-    ctx.beginPath();
-    ctx.moveTo(this.points[0].x, this.points[0].y);
-    for (i=1; i<this.points.length; i++) {
-        ctx.lineTo(this.points[i].x, this.points[i].y);
-    }
-    ctx.closePath();
-};
-
-Hexagon.prototype.fill = function (ctx, x, y, angle, color) {
-    ctx.save();
-    this.path(ctx, x, y, angle);
-    ctx.fillStyle = color || '#000000';
-    ctx.fill();
-    ctx.restore();
-}
-
-Hexagon.prototype.draw = function (ctx, x, y, angle, color) {
-    ctx.save();
-    this.path(ctx, x, y, angle);
-    ctx.strokeStyle = color || '#00FF00';
-    ctx.stroke();
-    ctx.restore();
-};
-
-Hexagon.prototype.drawPartial = function (ctx, x, y, angle, color) {
-    var i;
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.rotate(deg2rad(angle));
-    ctx.beginPath();
-    ctx.strokeStyle = color || '#00FF00';
-    ctx.moveTo(this.points[1].x, this.points[1].y);
-    for (i=2; i<6; i++) {
-        ctx.lineTo(this.points[i].x, this.points[i].y);
-    }
-    ctx.stroke();
-    ctx.restore();
-};
-
 function GameEngine(config) {
     this.config = config;
     this.players = {};
-    this.fortresses = [];
-    this.missiles = [];
-    this.shells = [];
-    this.asteroids = [];
+    this.sparks = [];
+    this.map = new Array(this.config.mapSize * this.config.mapSize);
+    this.mapUpdates = [];
+    this.wind = {x:0, y:0};
     this.ticks = 0;
-
-    this.hexagons = {};
-    this.hexagons[this.config.fortress.bigHex] = new Hexagon(this.config.fortress.bigHex);
-    this.hexagons[this.config.fortress.smallHex] = new Hexagon(this.config.fortress.smallHex);
 }
 
 GameEngine.prototype = {};
 
-GameEngine.prototype.makeAsteroid = function (n) {
-    var asteroid = {position: {x:Math.random()*this.config.mapSize*this.config.mapCellSize,
-                               y:Math.random()*this.config.mapSize*this.config.mapCellSize},
-                    velocity: { x: Math.cos(Math.random()*Math.PI*2) * 0.1,
-                                y: Math.sin(Math.random()*Math.PI*2) * 0.1},
-                    angularVelocity: Math.random()*0.05-0.1,
-                    angle: 0,
-                    bubbles: new Array(n)};
-    asteroid.bubbles[0] = {x:0, y:0, r: Math.random()*60+10};
-    var size = 40;
-    for (let i=1; i<n; i++) {
-        var r = Math.random() * size+10;
-        var a = Math.random()*Math.PI*2;
-        var b = {x: asteroid.bubbles[i-1].x + Math.cos(a) * (r+asteroid.bubbles[i-1].r),
-                 y: asteroid.bubbles[i-1].y + Math.sin(a) * (r+asteroid.bubbles[i-1].r),
-                 r: r};
-        asteroid.bubbles[i] = b;
+GameEngine.prototype.mapAt = function (x,y) {
+    if (x>=0 && x < this.config.mapSize &&
+        y>=0 && y < this.config.mapSize)
+        return this.map[y*this.config.mapSize+x];
+};
+
+GameEngine.prototype.mapSet = function (x,y,r) {
+    if (x>=0 && x < this.config.mapSize &&
+        y>=0 && y < this.config.mapSize) {
+        this.map[y*this.config.mapSize+x] = r;
+        this.mapUpdates.push(y*this.config.mapSize+x);
     }
+};
 
-    return asteroid;
-}
-
-GameEngine.prototype.placeAsteroids = function (n, tries) {
-    this.asteroids = new Array(n);
-    for (let i=0; i<n; i++) {
-        this.asteroids[i] = this.makeAsteroid(6);
+GameEngine.prototype.createMap = function () {
+    for (let y=0; i<this.config.mapSize; i++) {
+        for (let x=0; i<this.config.mapSize; i++) {
+            this.map[y*this.config.mapSize + x] = 0;
+        }
     }
 };
 
@@ -218,15 +141,71 @@ GameEngine.prototype.createMap = function () {
     this.map = new Array(this.config.mapSize * this.config.mapSize);
 };
 
+GameEngine.prototype.startSomeFires = function () {
+    var n = this.config.startFires;
+    for (let i=0; i<n; i++) {
+        var x = Math.round(Math.random()*this.config.mapSize);
+        var y = Math.round(Math.random()*this.config.mapSize);
+        this.ignite(x,y);
+        this.ignite(x+1,y);
+        this.ignite(x,y+1);
+        this.ignite(x-1,y);
+        this.ignite(x,y-1);
+    }
+};
+
 GameEngine.prototype.stepOneTick = function () {
     this.ticks += 1;
     this.updatePlayers();
-    this.updateFortresses();
-    this.updateMissiles();
-    this.updateShells();
-    this.updateAsteroids();
+    this.updateSparks();
+    this.updateFires();
+
+    // this.updateFortresses();
+    // this.updateMissiles();
+    // this.updateShells();
+    // this.updateAsteroids();
     // this.updateEntities();
     // this.handleCollisions();
+};
+
+GameEngine.prototype.ignite = function (x, y) {
+    var m = this.mapAt(x,y);
+    if (m !== MAP_ROCK && m !== MAP_HROAD && m !== MAP_VROAD && m !== MAP_WATER && m !== MAP_ASH && m !== MAP_RETARDANT)
+        this.mapSet(x,y, MAP_FIRE);
+}
+
+GameEngine.prototype.extinguish = function (x, y) {
+    var m = this.mapAt(x,y);
+    if (m === MAP_FIRE) {
+        this.mapSet(x,y, MAP_ASH);
+        return true;
+    }
+}
+
+GameEngine.prototype.updateFires = function () {
+    var n = 2;
+    for (let i=0; i<n; i++) {
+        var x = Math.round(Math.random()*this.config.mapSize);
+        var y = Math.round(Math.random()*this.config.mapSize);
+        var m = this.mapAt(x,y);
+        if (m === MAP_FIRE) {
+            this.mapSet(x,y, MAP_ASH);
+            this.ignite(x+1,y);
+            this.ignite(x,y+1);
+            this.ignite(x-1,y);
+            this.ignite(x,y-1);
+        } if (m === MAP_RETARDANT) {
+            var r1 = this.extinguish(x+1,y);
+            var r2 = this.extinguish(x,y+1);
+            var r3 = this.extinguish(x-1,y);
+            var r4 = this.extinguish(x,y-1);
+            if (r1||r2||r3||r4) this.mapSet(x,y,MAP_GRASS);
+        }
+    }
+};
+
+GameEngine.prototype.updateSparks = function () {
+
 };
 
 GameEngine.prototype.processPlayerKeys = function (p, keys) {
@@ -235,14 +214,24 @@ GameEngine.prototype.processPlayerKeys = function (p, keys) {
         if (keys[i][0] === 1) {
             if (keys[i][1] === KEY_LEFT) p.turnFlag = 'left';
             else if (keys[i][1] === KEY_RIGHT) p.turnFlag = 'right';
-            else if (keys[i][1] === KEY_UP) p.thrustFlag = true;
-            else if (keys[i][1] === KEY_SPACE) this.addMissile(p);
+            else if (keys[i][1] === KEY_UP) p.thrustFlag = 1;
+            else if (keys[i][1] === KEY_DOWN) p.thrustFlag = -1;
+            else if (keys[i][1] === KEY_SPACE) p.dumpFlag = true;
         } else {
             if (keys[i][1] === KEY_LEFT || keys[i][1] === KEY_RIGHT) p.turnFlag = null;
-            else if (keys[i][1] === KEY_UP) p.thrustFlag = false;
-            else if (keys[i][1] === KEY_SPACE) p.missileState = false;
+            else if (keys[i][1] === KEY_UP) p.thrustFlag = 0;
+            else if (keys[i][1] === KEY_DOWN) p.thrustFlag = 0;
+            else if (keys[i][1] === KEY_SPACE) p.dumpFlag = false;
         }
     }
+};
+
+GameEngine.prototype.resetPlayer = function (p) {
+    p.alive = true;
+    p.position.x = this.config.player.startPosition.x;
+    p.position.y = this.config.player.startPosition.y;
+    p.speed = 0;
+    p.angle = this.config.player.startAngle;
 };
 
 GameEngine.prototype.updatePlayer = function (p) {
@@ -254,17 +243,25 @@ GameEngine.prototype.updatePlayer = function (p) {
             p.angle += p.config.turnRate;
             p.angle = stdAngle(p.angle);
         }
-        if (p.thrustFlag) {
-            p.velocity.x += p.config.acceleration * Math.cos(deg2rad(p.angle));
-            p.velocity.y += p.config.acceleration * Math.sin(deg2rad(p.angle));
+        if (p.thrustFlag === 1) {
+            p.speed += 0.1;
+            if (p.speed > this.config.player.maxSpeed) p.speed = this.config.player.maxSpeed;
+        } else if (p.thrustFlag === -1) {
+            p.speed -= 0.1;
+            if (p.speed < 0) p.speed = 0;
         }
-        if (p.velocity.x > p.config.maxSpeed) p.velocity.x = p.config.maxSpeed;
-        if (p.velocity.x < -p.config.maxSpeed) p.velocity.x = -p.config.maxSpeed;
-        if (p.velocity.y > p.config.maxSpeed) p.velocity.y = p.config.maxSpeed;
-        if (p.velocity.y < -p.config.maxSpeed) p.velocity.y = -p.config.maxSpeed;
 
-        p.position.x += p.velocity.x;
-        p.position.y += p.velocity.y;
+        p.position.x += p.speed * Math.cos(deg2rad(p.angle));
+        p.position.y += p.speed * Math.sin(deg2rad(p.angle));
+
+        if (p.dumpFlag) {
+            var mx = Math.round(p.position.x/this.config.mapCellSize),
+                my = Math.round(p.position.y/this.config.mapCellSize),
+                m = this.mapAt(mx, my);
+            if (m !== MAP_WATER) {
+                this.mapSet(mx, my, MAP_RETARDANT);
+            }
+        }
 
         if (p.position.x < 0 ||
             p.position.x > this.config.mapSize * this.config.mapCellSize ||
@@ -272,23 +269,10 @@ GameEngine.prototype.updatePlayer = function (p) {
             p.position.y > this.config.mapSize * this.config.mapCellSize) {
             this.killPlayer(p);
         }
-        for (let i=0; i<this.fortresses.length; i++) {
-            if (this.fortresses[i].alive &&
-                distance(this.fortresses[i].position, p.position) < this.config.player.collisionRadius+this.config.fortress.collisionRadius) {
-                this.killPlayer(p);
-                break;
-            }
-        }
-        // console.log(p);
     } else {
         p.spawnTimer += 1;
         if (p.spawnTimer >= this.config.player.deathTimer) {
-            p.alive = true;
-            p.position.x = this.config.player.startPosition.x;
-            p.position.y = this.config.player.startPosition.y;
-            p.velocity.x = this.config.player.startVelocity.x;
-            p.velocity.y = this.config.player.startVelocity.y;
-            p.angle = this.config.player.startAngle;
+            this.resetPlayer(p);
         }
     }
 };
@@ -519,12 +503,11 @@ GameEngine.prototype.addPlayer = function (id) {
                         angle: this.config.player.startAngle,
                         position: {x: this.config.player.startPosition.x,
                                    y: this.config.player.startPosition.y},
-                        velocity: {x: this.config.player.startVelocity.x,
-                                   y: this.config.player.startVelocity.y},
+                        speed: 0,
                         config: this.config.player,
                         turnFlag: 0,
                         thrustFlag: 0,
-                        missileState: 0,
+                        water: 0,
                         spawnTimer: 0,
                         alive: true
                        };
@@ -532,10 +515,10 @@ GameEngine.prototype.addPlayer = function (id) {
 
 GameEngine.prototype.delPlayer = function (id) {
     delete this.players[id];
-    for (let i=0; i<this.fortresses.length; i++) {
-        if (this.fortresses[i].playerTarget === id)
-            this.fortresses[i].playerTarget = null;
-    }
+    // for (let i=0; i<this.fortresses.length; i++) {
+    //     if (this.fortresses[i].playerTarget === id)
+    //         this.fortresses[i].playerTarget = null;
+    // }
 };
 
 GameEngine.prototype.killPlayer = function (p) {
@@ -545,3 +528,14 @@ GameEngine.prototype.killPlayer = function (p) {
 
 
 exports.GameEngine = GameEngine;
+
+exports.MAP_FIRE = MAP_FIRE;
+exports.MAP_ASH = MAP_ASH;
+exports.MAP_RETARDANT = MAP_RETARDANT;
+exports.MAP_WATER = MAP_WATER;
+exports.MAP_TREE = MAP_TREE;
+exports.MAP_HOUSE = MAP_HOUSE;
+exports.MAP_ROCK = MAP_ROCK;
+exports.MAP_GRASS = MAP_GRASS;
+exports.MAP_HROAD = MAP_HROAD;
+exports.MAP_VROAD = MAP_VROAD;

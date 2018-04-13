@@ -4,6 +4,7 @@
     <meta charset=utf-8>
     <link href="index.css" rel="stylesheet" type="text/css">
     <script src="/socket.io/socket.io.js"></script>
+    <script type="text/javascript" src="imagesloaded.pkgd.min.js"></script>
 
     <script type="text/javascript" src="wireframe.js"></script>
     <script type="text/javascript" src="config.js"></script>
@@ -13,6 +14,20 @@
 
   </head>
   <body>
+    <div style="text-align: center">
     <canvas id="gamecanvas" style="background: #000000"></canvas>
+    <br><button id="reset" onclick="reset_game()">Reset Game</button>
+    <h3>Instructions</h3>
+    <p>
+      <table style="display:inline-table; text-align: left">
+        <tr><td>A or Left<td>Turn CCW</tr>
+        <tr><td>D or Right<td>Turn CW</tr>
+        <tr><td>W or Up<td>Increase Flight Speed</tr>
+        <tr><td>S or Down<td>Decrease Flight Speed</tr>
+        <tr><td>SPACE<td>Dump Fire retardant</tr>
+      </table>
+    <p>Click the reset button to reset the map for all players.
+    <p>Your goal is to put out all the fires by dumping fire retardant on or around the fires. Save the houses!
+    </div>
   </body>
 </html>

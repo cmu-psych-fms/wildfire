@@ -37,6 +37,18 @@ function WebClient (engine) {
                     latency: 0};
     this.id = null;
     this.keyEvents = [];
+
+    this.map_images = new Array(10);
+    this.map_images[MAP_FIRE] = g_images['fire'];
+    this.map_images[MAP_ASH] = g_images['ash'];
+    this.map_images[MAP_RETARDANT] = g_images['retardant'];
+    this.map_images[MAP_WATER] = g_images['water'];
+    this.map_images[MAP_TREE] = g_images['tree'];
+    this.map_images[MAP_HOUSE] = g_images['house'];
+    this.map_images[MAP_ROCK] = g_images['rock'];
+    this.map_images[MAP_VROAD] = g_images['vroad'];
+    this.map_images[MAP_HROAD] = g_images['hroad'];
+    this.map_images[MAP_GRASS] = g_images['grass'];
 }
 
 WebClient.prototype = {};
@@ -50,6 +62,7 @@ WebClient.prototype.connect = function () {
     this.network.socket.on('serverupdate', this.onServerUpdate.bind(this));
     this.network.socket.on('join', this.onPlayerJoin.bind(this));
     this.network.socket.on('part', this.onPlayerPart.bind(this));
+    this.network.socket.on('reset', this.onReset.bind(this));
 };
 
 WebClient.prototype.begin = function () {
@@ -93,6 +106,8 @@ WebClient.prototype.onKeyDown = function (ev) {
     if (k) {
         this.network.hasNewInput = true;
         this.keyEvents.push([1, k]);
+        ev.preventDefault();
+        ev.stopPropagation();
     }
 };
 
@@ -101,7 +116,18 @@ WebClient.prototype.onKeyUp = function (ev) {
     if (k) {
         this.network.hasNewInput = true;
         this.keyEvents.push([0, k]);
+        ev.preventDefault();
+        ev.stopPropagation();
     }
+};
+
+WebClient.prototype.onReset = function (data) {
+    for (let k in data.players) {
+        this.engine.players[k].position.x = data.players[k][0];
+        this.engine.players[k].position.y = data.players[k][1];
+        this.engine.players[k].angle = data.players[k][2];
+    }
+    this.engine.map = data.map;
 };
 
 WebClient.prototype.onConnect = function (data) {
@@ -113,15 +139,16 @@ WebClient.prototype.onConnect = function (data) {
         this.engine.players[k].position.y = data.players[k][1];
         this.engine.players[k].angle = data.players[k][2];
     }
-    this.engine.fortresses = new Array(data.fortresses.length);
-    for (let i=0; i<data.fortresses.length; i++) {
-        this.engine.fortresses[i] = {alive: data.fortresses[i][0],
-                                     position: {x:data.fortresses[i][1],
-                                                y:data.fortresses[i][2]},
-                                     angle: data.fortresses[i][3],
-                                     radius: data.fortresses[i][4]};
-    }
-    this.engine.asteroids = data.asteroids;
+    this.engine.map = data.map;
+    // this.engine.fortresses = new Array(data.fortresses.length);
+    // for (let i=0; i<data.fortresses.length; i++) {
+    //     this.engine.fortresses[i] = {alive: data.fortresses[i][0],
+    //                                  position: {x:data.fortresses[i][1],
+    //                                             y:data.fortresses[i][2]},
+    //                                  angle: data.fortresses[i][3],
+    //                                  radius: data.fortresses[i][4]};
+    // }
+    // this.engine.asteroids = data.asteroids;
 
     game.update( new Date().getTime() );
 };
@@ -133,6 +160,10 @@ WebClient.prototype.onDisconnect = function (data) {
     this.cancelUpdates();
 };
 
+
+WebClient.prototype.sendReset = function () {
+    this.network.socket.send('r0');
+}
 
 WebClient.prototype.sendPing = function () {
     var ts = new Date().getTime();
@@ -195,33 +226,37 @@ WebClient.prototype.processServerUpdates = function () {
                 this.engine.players[k].angle = players[k][3];
             }
         }
-        var fortresses = this.network.serverUpdates[i].f;
-        for (let i=0; i<this.engine.fortresses.length;i++) {
-            this.engine.fortresses[i].alive = fortresses[i][0];
-            this.engine.fortresses[i].position.x = fortresses[i][1];
-            this.engine.fortresses[i].position.y = fortresses[i][2];
-            this.engine.fortresses[i].angle = fortresses[i][3];
+        var mapUpdates = this.network.serverUpdates[i].m;
+        for (let i=0; i<mapUpdates.length;i++) {
+            this.engine.map[mapUpdates[i][0]] = mapUpdates[i][1];
         }
-        var shells = this.network.serverUpdates[i].s;
-        this.engine.shells = new Array(shells.length);
-        for (let i=0; i<this.engine.shells.length; i++) {
-            this.engine.shells[i] = {position: {x: shells[i][0],
-                                                y: shells[i][1]},
-                                     angle: shells[i][2]};
-        }
-        var missiles = this.network.serverUpdates[i].m;
-        this.engine.missiles = new Array(missiles.length);
-        for (let i=0; i<this.engine.missiles.length; i++) {
-            this.engine.missiles[i] = {position: {x: missiles[i][0],
-                                                  y: missiles[i][1]},
-                                       angle: missiles[i][2]};
-        }
-        var asteroids = this.network.serverUpdates[i].a;
-        for (let i=0; i<this.engine.asteroids.length; i++) {
-            this.engine.asteroids[i].position.x = asteroids[i][0];
-            this.engine.asteroids[i].position.y = asteroids[i][1];
-            this.engine.asteroids[i].angle = asteroids[i][2];
-        }
+        // var fortresses = this.network.serverUpdates[i].f;
+        // for (let i=0; i<this.engine.fortresses.length;i++) {
+        //     this.engine.fortresses[i].alive = fortresses[i][0];
+        //     this.engine.fortresses[i].position.x = fortresses[i][1];
+        //     this.engine.fortresses[i].position.y = fortresses[i][2];
+        //     this.engine.fortresses[i].angle = fortresses[i][3];
+        // }
+        // var shells = this.network.serverUpdates[i].s;
+        // this.engine.shells = new Array(shells.length);
+        // for (let i=0; i<this.engine.shells.length; i++) {
+        //     this.engine.shells[i] = {position: {x: shells[i][0],
+        //                                         y: shells[i][1]},
+        //                              angle: shells[i][2]};
+        // }
+        // var missiles = this.network.serverUpdates[i].m;
+        // this.engine.missiles = new Array(missiles.length);
+        // for (let i=0; i<this.engine.missiles.length; i++) {
+        //     this.engine.missiles[i] = {position: {x: missiles[i][0],
+        //                                           y: missiles[i][1]},
+        //                                angle: missiles[i][2]};
+        // }
+        // var asteroids = this.network.serverUpdates[i].a;
+        // for (let i=0; i<this.engine.asteroids.length; i++) {
+        //     this.engine.asteroids[i].position.x = asteroids[i][0];
+        //     this.engine.asteroids[i].position.y = asteroids[i][1];
+        //     this.engine.asteroids[i].angle = asteroids[i][2];
+        // }
     }
     this.network.serverUpdates.length = 0;
 };
@@ -251,133 +286,60 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
     this.ctx.translate(-this.engine.players[this.id].position.x+this.canvas.width/2,
                        -this.engine.players[this.id].position.y+this.canvas.height/2);
-    this.ctx.strokeStyle = '#003300';
+    // this.ctx.strokeStyle = '#003300';
     var maxx = this.engine.config.mapSize * this.engine.config.mapCellSize;
     var maxy = this.engine.config.mapSize * this.engine.config.mapCellSize;
-    for (let x=0; x<this.engine.config.mapSize; x++) {
-        this.ctx.moveTo(x*this.engine.config.mapCellSize, 0);
-        this.ctx.lineTo(x*this.engine.config.mapCellSize, maxy);
-    }
-    for (let y=0; y<this.engine.config.mapSize; y++) {
-        this.ctx.moveTo(0, y*this.engine.config.mapCellSize);
-        this.ctx.lineTo(maxx, y*this.engine.config.mapCellSize);
-    }
-    this.ctx.stroke();
+    // for (let x=0; x<this.engine.config.mapSize; x++) {
+    //     this.ctx.moveTo(x*this.engine.config.mapCellSize, 0);
+    //     this.ctx.lineTo(x*this.engine.config.mapCellSize, maxy);
+    // }
+    // for (let y=0; y<this.engine.config.mapSize; y++) {
+    //     this.ctx.moveTo(0, y*this.engine.config.mapCellSize);
+    //     this.ctx.lineTo(maxx, y*this.engine.config.mapCellSize);
+    // }
+    // this.ctx.stroke();
     this.ctx.lineWidth = 4;
     this.ctx.strokeStyle = '#00AA00';
-    this.ctx.strokeRect(0, 0, maxx, maxy);
+    this.ctx.strokeRect(-2, -2, maxx+4, maxy+4);
     this.ctx.lineWidth = 1;
-    for (let i=0; i<this.engine.fortresses.length; i++) {
-        if (this.engine.fortresses[i].alive) {
-            // this.ctx.beginPath();
-            // this.ctx.arc(this.engine.fortresses[i].position.x,
-            //              this.engine.fortresses[i].position.y,
-            //              30,
-            //              deg2rad(this.engine.fortresses[i].angle)-Math.PI*5/8,
-            //              deg2rad(this.engine.fortresses[i].angle)+Math.PI*5/8);
-            // this.ctx.strokeStyle = '#FFFF00';
-            // this.ctx.stroke();
-            this.engine.hexagons[this.engine.fortresses[i].radius].draw(this.ctx,
-                                                                        this.engine.fortresses[i].position.x,
-                                                                        this.engine.fortresses[i].position.y,
-                                                                        0,
-                                                                        '#999999');
-            this.engine.hexagons[this.engine.config.fortress.smallHex].fill(this.ctx,
-                                                                            this.engine.fortresses[i].position.x,
-                                                                            this.engine.fortresses[i].position.y,
-                                                                            this.engine.fortresses[i].angle,
-                                                                            '#000000');
-            this.ctx.strokeStyle = '#003300';
-            this.ctx.stroke();
-            this.ctx.lineWidth = 1.5;
-            this.engine.hexagons[this.engine.config.fortress.smallHex].drawPartial(this.ctx,
-                                                                                   this.engine.fortresses[i].position.x,
-                                                                                   this.engine.fortresses[i].position.y,
-                                                                                   this.engine.fortresses[i].angle,
-                                                                                   '#00FF00');
-            this.ctx.lineWidth = 1;
 
-            fortressWireframe.draw(this.ctx,
-                                   this.engine.fortresses[i].position.x,
-                                   this.engine.fortresses[i].position.y,
-                                   this.engine.fortresses[i].angle);
+    var startx = Math.round((this.engine.players[this.id].position.x - this.canvas.width/2)/this.engine.config.mapCellSize);
+    var starty = Math.round((this.engine.players[this.id].position.y - this.canvas.height/2)/this.engine.config.mapCellSize);
+    var endx = startx+Math.round(this.canvas.width/this.engine.config.mapCellSize);
+    var endy = starty+Math.round(this.canvas.height/this.engine.config.mapCellSize);
+    if (startx < 0) startx = 0;
+    if (starty < 0) starty = 0;
+    if (endx >= this.engine.config.mapSize) endx = this.engine.config.mapSize-1;
+    if (endy >= this.engine.config.mapSize) endy = this.engine.config.mapSize-1;
 
-            // this.ctx.beginPath();
-            // this.ctx.arc(this.engine.fortresses[i].position.x,
-            //              this.engine.fortresses[i].position.y,
-            //              this.engine.fortresses[i].radius,
-            //              0, Math.PI*2);
-            // this.ctx.strokeStyle = '#999999';
-            // this.ctx.stroke();
-        } else {
-            this.ctx.beginPath();
-            this.ctx.arc(this.engine.fortresses[i].position.x,
-                         this.engine.fortresses[i].position.y,
-                         30,
-                         0, Math.PI*2);
-            this.ctx.fillStyle = '#222222';
-            this.ctx.fill();
+    for (let y=starty; y<=endy; y++) {
+        for (let x=startx; x<=endx; x++) {
+            var m = this.map_images[this.engine.map[y*this.engine.config.mapSize+x]];
+            if (!m) console.log(this.engine.map[y*this.engine.config.mapSize+x]);
+            this.ctx.drawImage(m,
+                               x * this.engine.config.mapCellSize,
+                               y * this.engine.config.mapCellSize);
         }
     }
+
     for (let id in this.engine.players) {
-        if (this.engine.players[id].alive)
-            shipWireframe.draw (this.ctx,
-                                this.engine.players[id].position.x,
-                                this.engine.players[id].position.y,
-                                this.engine.players[id].angle);
+        if (this.engine.players[id].alive) {
+            this.ctx.save();
+            this.ctx.translate(this.engine.players[id].position.x,
+                               this.engine.players[id].position.y);
+            this.ctx.rotate(deg2rad(this.engine.players[id].angle));
+            this.ctx.drawImage(g_images['plane'], -g_images['plane'].width/2-10, -g_images['plane'].height/2);
+            this.ctx.restore();
+        }
+            // shipWireframe.draw (this.ctx,
+            //                     this.engine.players[id].position.x,
+            //                     this.engine.players[id].position.y,
+            //                     this.engine.players[id].angle);
         else
             this.drawExplosion(this.ctx,
                                this.engine.players[id].position.x,
                                this.engine.players[id].position.y);
     }
-
-    // Projectiles
-    for (let i=0; i<this.engine.missiles.length;i++) {
-        missileWireframe.draw(this.ctx,
-                              this.engine.missiles[i].position.x,
-                              this.engine.missiles[i].position.y,
-                              this.engine.missiles[i].angle);
-    }
-    for (let i=0; i<this.engine.shells.length;i++) {
-        shellWireframe.draw(this.ctx,
-                            this.engine.shells[i].position.x,
-                            this.engine.shells[i].position.y,
-                            this.engine.shells[i].angle);
-    }
-    // asteroids
-    this.ctx.strokeStyle = '#FF3333';
-    this.ctx.fillStyle = '#3333FF';
-    for (let i=0; i<this.engine.asteroids.length;i++) {
-        this.ctx.save();
-        this.ctx.translate(this.engine.asteroids[i].position.x,
-                           this.engine.asteroids[i].position.y);
-        this.ctx.rotate(deg2rad(this.engine.asteroids[i].angle));
-        for (let j=0; j<this.engine.asteroids[i].bubbles.length; j++) {
-            this.ctx.beginPath();
-            this.ctx.arc(this.engine.asteroids[i].bubbles[j].x,
-                         this.engine.asteroids[i].bubbles[j].y,
-                         this.engine.asteroids[i].bubbles[j].r,
-                         0, Math.PI*2);
-            this.ctx.fill();
-            // this.ctx.stroke();
-        }
-        this.ctx.restore();
-    }
-
-    // for (let i=0; i<this.engine.asteroids.length;i++) {
-    //     for (let j=0; j<this.engine.asteroids[i].bubbles.length; j++) {
-    //         var pos = rotate_translate(this.engine.asteroids[i].position.x,
-    //                                    this.engine.asteroids[i].position.y,
-    //                                    this.engine.asteroids[i].bubbles[j].x,
-    //                                    this.engine.asteroids[i].bubbles[j].y,
-    //                                    this.engine.asteroids[i].angle);
-    //         this.ctx.beginPath();
-    //         this.ctx.arc(pos.x, pos.y,
-    //                      this.engine.asteroids[i].bubbles[j].r,
-    //                      0, Math.PI*2);
-    //         this.ctx.stroke();
-    //     }
-    // }
 
     this.ctx.restore();
 };
