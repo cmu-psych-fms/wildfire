@@ -53,7 +53,8 @@ GameServer.prototype.getConnectPayload = function (client) {
         payload.players[k] = [this.engine.players[k].alive?1:0,
                               this.engine.players[k].position.x,
                               this.engine.players[k].position.y,
-                              this.engine.players[k].angle];
+                              this.engine.players[k].angle,
+                              this.engine.players[k].speed];
     }
     return payload;
 };
@@ -151,7 +152,9 @@ GameServer.prototype.sendServerUpdate = function () {
         full.p[k] = [this.engine.players[k].alive?1:0,
                      this.engine.players[k].position.x,
                      this.engine.players[k].position.y,
-                     this.engine.players[k].angle];
+                     this.engine.players[k].angle,
+                     this.engine.players[k].speed,
+                     this.engine.players[k].turnFlag];
     }
     full.m = new Array(this.engine.mapUpdates.length);
     for (let i=0; i<this.engine.mapUpdates.length; i++) {
