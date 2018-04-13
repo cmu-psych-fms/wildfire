@@ -93,6 +93,8 @@ WebClient.prototype.onKeyDown = function (ev) {
     if (k) {
         this.network.hasNewInput = true;
         this.keyEvents.push([1, k]);
+        ev.preventDefault();
+        ev.stopPropagation();
     }
 };
 
@@ -101,6 +103,8 @@ WebClient.prototype.onKeyUp = function (ev) {
     if (k) {
         this.network.hasNewInput = true;
         this.keyEvents.push([0, k]);
+        ev.preventDefault();
+        ev.stopPropagation();
     }
 };
 

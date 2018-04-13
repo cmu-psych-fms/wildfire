@@ -207,7 +207,8 @@ GameEngine.prototype.placeFortresses = function (n, tries) {
                                   playerTarget: null,
                                   missileTarget: null,
                                   radius: this.config.fortress.bigHex,
-                                  config: this.config.fortress
+                                  config: this.config.fortress,
+                                  respawnTimer: 0
                                  });
         if (this.fortresses.length >= n) break;
     }
@@ -470,6 +471,10 @@ GameEngine.prototype.updateFortress = function (f) {
         } else {
             f.angle = stdAngle(f.angle+0.25);
         }
+    } else {
+        f.respawnTimer += 1;
+        if (f.respawnTimer >= this.config.fortress.respawnTime)
+            f.alive = true;
     }
 };
 

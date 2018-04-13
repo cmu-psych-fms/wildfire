@@ -13,7 +13,8 @@ function Config() {
                       bigHex: 170,
                       collisionRadius: 18,
                       speed: 0.25,
-                      lockSpeed: 5};
+                      lockSpeed: 5,
+                      respawnTime: 30*60};
     this.missile = { collisionRadius: 5,
                      speed: 3,
                      lifespan: 90};
