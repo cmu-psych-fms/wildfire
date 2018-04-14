@@ -127,6 +127,8 @@ GameServer.prototype.sendServerUpdate = function () {
     for (let i =0;i<this.engine.missiles.length; i++) {
         full.m[i] = [this.engine.missiles[i].position.x,
                      this.engine.missiles[i].position.y,
+                     this.engine.missiles[i].velocity.x,
+                     this.engine.missiles[i].velocity.y,
                      this.engine.missiles[i].angle];
     }
     full.s = new Array(this.engine.shells.length);

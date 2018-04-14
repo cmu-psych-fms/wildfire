@@ -206,8 +206,8 @@ WebClient.prototype.predictPlayer = function (p) {
 };
 
 WebClient.prototype.predictMissile = function (m) {
-    m.position.x += this.engine.config.missile.speed * Math.cos(deg2rad(m.angle));
-    m.position.y += this.engine.config.missile.speed * Math.sin(deg2rad(m.angle));
+    m.position.x += m.velocity.x;
+    m.position.y += m.velocity.y;
 };
 
 WebClient.prototype.predictShell = function (s) {
@@ -259,7 +259,9 @@ WebClient.prototype.processServerUpdates = function () {
             for (let i=0; i<this.engine.missiles.length; i++) {
                 this.engine.missiles[i] = {position: {x: missiles[i][0],
                                                       y: missiles[i][1]},
-                                           angle: missiles[i][2]};
+                                           velocity: {x: missiles[i][2],
+                                                      y: missiles[i][3]},
+                                           angle: missiles[i][4]};
             }
             var asteroids = this.network.serverUpdates[i].a;
             for (let i=0; i<this.engine.asteroids.length; i++) {
