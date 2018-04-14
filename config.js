@@ -1,7 +1,10 @@
 function Config() {
-    this.player = {startPosition: {x: 500.0, y: 500.0},
+    this.network = { maxDist: 10,
+                     maxAngle: 10
+                   };
+    this.player = {startPosition: {x: 1500.0, y: 1500.0},
                    startVelocity: {x:0.0, y:0.0},
-                   startAngle: 0,
+                   startAngle: 100,
                    turnRate: 3,
                    // acceleration: 0.02,
                    acceleration: 0.04,

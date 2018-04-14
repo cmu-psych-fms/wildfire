@@ -132,14 +132,20 @@ WebClient.prototype.onReset = function (data) {
 };
 
 WebClient.prototype.onConnect = function (data) {
-    console.log('connect', data);
+    // console.log('connect', data);
     this.id = data.id;
     for (let k in data.players) {
         this.engine.addPlayer(k);
-        this.engine.players[k].position.x = data.players[k][0];
-        this.engine.players[k].position.y = data.players[k][1];
-        this.engine.players[k].angle = data.players[k][2];
-        this.engine.players[k].speed = data.players[k][3];
+        console.log('before', this.engine.players[k]);
+        this.engine.players[k].alive = data.players[k][0];
+        this.engine.players[k].position.x = data.players[k][1];
+        this.engine.players[k].position.y = data.players[k][2];
+        this.engine.players[k].angle = data.players[k][3];
+        this.engine.players[k].speed = data.players[k][4];
+
+        // console.log(data.players[k][1], data.players[k][2], data.players[k][3]);
+
+        // console.log(this.engine.players[k]);
     }
     this.engine.map = data.map;
     // this.engine.fortresses = new Array(data.fortresses.length);
@@ -153,6 +159,7 @@ WebClient.prototype.onConnect = function (data) {
     // this.engine.asteroids = data.asteroids;
 
     game.update( new Date().getTime() );
+
 };
 
 WebClient.prototype.onDisconnect = function (data) {
@@ -216,69 +223,79 @@ WebClient.prototype.processKbdInput = function () {
     }
 };
 
-WebClient.prototype.predictPlayerMovement = function () {
-    for (let k in this.engine.players) {
-        var p = this.engine.players[k];
-        if (p.alive) {
-            if (p.turnFlag === 'left') p.angle -= this.engine.config.player.turnRate;
-            else if (p.turnFlag === 'right') p.angle += this.engine.config.player.turnRate;
-            p.angle = stdAngle(p.angle);
+WebClient.prototype.predictPlayerMovement = function (p) {
+    if (p.alive) {
+        if (p.turnFlag === 'left') p.angle -= this.engine.config.player.turnRate;
+        else if (p.turnFlag === 'right') p.angle += this.engine.config.player.turnRate;
+        p.angle = stdAngle(p.angle);
 
-            p.position.x += p.speed * Math.cos(deg2rad(p.angle));
-            p.position.y += p.speed * Math.sin(deg2rad(p.angle));
+        p.position.x += p.speed * Math.cos(deg2rad(p.angle));
+        p.position.y += p.speed * Math.sin(deg2rad(p.angle));
 
-        }
+    }
+};
+
+WebClient.prototype.interpolatePlayer = function (p) {
+    // console.log('lerp', p.lerp.step, p.lerp.lastKnown.a, p.lerp.target.a, p.angle);
+    p.lerp.step += 1;
+    if (p.lerp.step >= p.lerp.steps) {
+        p.position.x = p.lerp.target.x;
+        p.position.y = p.lerp.target.y;
+        p.angle = p.lerp.target.a;
+        p.lerp = null;
+    } else {
+        p.position.x = p.lerp.lastKnown.x + (p.lerp.target.x-p.lerp.lastKnown.x)/p.lerp.steps*p.lerp.step;
+        p.position.y = p.lerp.lastKnown.y + (p.lerp.target.y-p.lerp.lastKnown.y)/p.lerp.steps*p.lerp.step;
+        p.angle = stdAngle(p.lerp.lastKnown.a + angle_diff(p.lerp.target.a,p.lerp.lastKnown.a)/p.lerp.steps*p.lerp.step);
     }
 };
 
 WebClient.prototype.processServerUpdates = function () {
     if (this.network.serverUpdates.length === 0) {
-        this.predictPlayerMovement();
+        for (let k in this.engine.players) {
+            var p = this.engine.players[k];
+            if (p.lerp)
+                this.interpolatePlayer(p);
+            else
+                this.predictPlayerMovement(p);
+        }
     } else {
+        // Need to run through all updates for map changes
         for (let i=0; i<this.network.serverUpdates.length; i++) {
-            var players = this.network.serverUpdates[i].p;
-            for (let k in players) {
-                // console.log('update', k, players[k], this.engine.players[k])
-                if (this.engine.players[k]) {
-                    this.engine.players[k].alive = players[k][0],
-                    this.engine.players[k].position.x = players[k][1];
-                    this.engine.players[k].position.y = players[k][2];
-                    this.engine.players[k].angle = players[k][3];
-                    this.engine.players[k].speed = players[k][4];
-                    this.engine.players[k].turnFlag = players[k][5];
-                }
-            }
             var mapUpdates = this.network.serverUpdates[i].m;
             for (let i=0; i<mapUpdates.length;i++) {
                 this.engine.map[mapUpdates[i][0]] = mapUpdates[i][1];
             }
-            // var fortresses = this.network.serverUpdates[i].f;
-            // for (let i=0; i<this.engine.fortresses.length;i++) {
-            //     this.engine.fortresses[i].alive = fortresses[i][0];
-            //     this.engine.fortresses[i].position.x = fortresses[i][1];
-            //     this.engine.fortresses[i].position.y = fortresses[i][2];
-            //     this.engine.fortresses[i].angle = fortresses[i][3];
-            // }
-            // var shells = this.network.serverUpdates[i].s;
-            // this.engine.shells = new Array(shells.length);
-            // for (let i=0; i<this.engine.shells.length; i++) {
-            //     this.engine.shells[i] = {position: {x: shells[i][0],
-            //                                         y: shells[i][1]},
-            //                              angle: shells[i][2]};
-            // }
-            // var missiles = this.network.serverUpdates[i].m;
-            // this.engine.missiles = new Array(missiles.length);
-            // for (let i=0; i<this.engine.missiles.length; i++) {
-            //     this.engine.missiles[i] = {position: {x: missiles[i][0],
-            //                                           y: missiles[i][1]},
-            //                                angle: missiles[i][2]};
-            // }
-            // var asteroids = this.network.serverUpdates[i].a;
-            // for (let i=0; i<this.engine.asteroids.length; i++) {
-            //     this.engine.asteroids[i].position.x = asteroids[i][0];
-            //     this.engine.asteroids[i].position.y = asteroids[i][1];
-            //     this.engine.asteroids[i].angle = asteroids[i][2];
-            // }
+        }
+        // Keep track of game ticks on client and server. When we get
+        // a server tick. Predict it up to the client's tick then use
+        // interpolation if necessary.
+        //
+        // This fixes the jerking back in time whenever we get a laggy
+        // packet from the server.
+
+        // But we only need the latest update for player positions
+        var p_u = this.network.serverUpdates[this.network.serverUpdates.length-1].p;
+        for (let k in p_u) {
+            var p = this.engine.players[k];
+            if (p) {
+                p.alive = p_u[k][0],
+                p.speed = p_u[k][4];
+                p.turnFlag = p_u[k][5];
+                if (p.alive &&
+                    (Math.abs(p.position.x - p_u[k][1]) > this.engine.config.network.maxDist ||
+                     Math.abs(p.position.y - p_u[k][2]) > this.engine.config.network.maxDist ||
+                     Math.abs(angle_diff(p.angle - p_u[k][3])) > this.engine.config.network.maxAngle)) {
+                    p.lerp = { steps: 4,
+                               step: 0,
+                               lastKnown: {x:p.position.x, y:p.position.y, a:p.angle},
+                               target: {x:p_u[k][1], y:p_u[k][2], a:p_u[k][3]}}
+                } else {
+                    p.position.x = p_u[k][1];
+                    p.position.y = p_u[k][2];
+                    p.angle = p_u[k][3];
+                }
+            }
         }
         this.network.serverUpdates.length = 0;
     }
