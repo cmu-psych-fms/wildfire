@@ -113,9 +113,13 @@ WebClient.prototype.onConnect = function (data) {
     this.id = data.id;
     for (let k in data.players) {
         this.engine.addPlayer(k);
-        this.engine.players[k].position.x = data.players[k][0];
-        this.engine.players[k].position.y = data.players[k][1];
-        this.engine.players[k].angle = data.players[k][2];
+        this.engine.players[k].alive = data.players[k][0];
+        this.engine.players[k].position.x = data.players[k][1];
+        this.engine.players[k].position.y = data.players[k][2];
+        this.engine.players[k].angle = data.players[k][3];
+        this.engine.players[k].velocity.x = data.players[k][4];
+        this.engine.players[k].velocity.y = data.players[k][5];
+        this.engine.players[k].turnFlag = data.players[k][6];
     }
     this.engine.fortresses = new Array(data.fortresses.length);
     for (let i=0; i<data.fortresses.length; i++) {
@@ -187,47 +191,85 @@ WebClient.prototype.processKbdInput = function () {
     }
 };
 
+WebClient.prototype.predictPlayer = function (p) {
+    if (p.alive) {
+        if (p.turnFlag === 'left') {
+            p.angle -= p.config.turnRate;
+        } else if (p.turnFlag === 'right') {
+            p.angle += p.config.turnRate;
+        }
+        p.angle = stdAngle(p.angle);
+
+        p.position.x += p.velocity.x;
+        p.position.y += p.velocity.y;
+    }
+};
+
+WebClient.prototype.predictMissile = function (m) {
+    m.position.x += this.engine.config.missile.speed * Math.cos(deg2rad(m.angle));
+    m.position.y += this.engine.config.missile.speed * Math.sin(deg2rad(m.angle));
+};
+
+WebClient.prototype.predictShell = function (s) {
+    s.position.x += this.engine.config.missile.speed * Math.cos(deg2rad(s.angle));
+    s.position.y += this.engine.config.missile.speed * Math.sin(deg2rad(s.angle));
+};
+
 WebClient.prototype.processServerUpdates = function () {
-    for (let i=0; i<this.network.serverUpdates.length; i++) {
-        var players = this.network.serverUpdates[i].p;
-        for (let k in players) {
-            // console.log('update', k, players[k], this.engine.players[k])
-            if (this.engine.players[k]) {
-                this.engine.players[k].alive = players[k][0],
-                this.engine.players[k].position.x = players[k][1];
-                this.engine.players[k].position.y = players[k][2];
-                this.engine.players[k].angle = players[k][3];
+    if (this.network.serverUpdates.length === 0) {
+        for (let k in this.engine.players) {
+            this.predictPlayer(this.engine.players[k]);
+        }
+        for (let i=0; i<this.engine.missiles.length;i++)
+            this.predictMissile(this.engine.missiles[i]);
+        for (let i=0; i<this.engine.shells.length;i++)
+            this.predictShell(this.engine.shells[i]);
+
+    } else {
+        for (let i=0; i<this.network.serverUpdates.length; i++) {
+            var players = this.network.serverUpdates[i].p;
+            for (let k in players) {
+                // console.log('update', k, players[k], this.engine.players[k])
+                if (this.engine.players[k]) {
+                    this.engine.players[k].alive = players[k][0],
+                    this.engine.players[k].position.x = players[k][1];
+                    this.engine.players[k].position.y = players[k][2];
+                    this.engine.players[k].angle = players[k][3];
+                    this.engine.players[k].velocity.x = players[k][4];
+                    this.engine.players[k].velocity.y = players[k][5];
+                    this.engine.players[k].turnFlag = players[k][6];
+                }
+            }
+            var fortresses = this.network.serverUpdates[i].f;
+            for (let i=0; i<this.engine.fortresses.length;i++) {
+                this.engine.fortresses[i].alive = fortresses[i][0];
+                this.engine.fortresses[i].position.x = fortresses[i][1];
+                this.engine.fortresses[i].position.y = fortresses[i][2];
+                this.engine.fortresses[i].angle = fortresses[i][3];
+            }
+            var shells = this.network.serverUpdates[i].s;
+            this.engine.shells = new Array(shells.length);
+            for (let i=0; i<this.engine.shells.length; i++) {
+                this.engine.shells[i] = {position: {x: shells[i][0],
+                                                    y: shells[i][1]},
+                                         angle: shells[i][2]};
+            }
+            var missiles = this.network.serverUpdates[i].m;
+            this.engine.missiles = new Array(missiles.length);
+            for (let i=0; i<this.engine.missiles.length; i++) {
+                this.engine.missiles[i] = {position: {x: missiles[i][0],
+                                                      y: missiles[i][1]},
+                                           angle: missiles[i][2]};
+            }
+            var asteroids = this.network.serverUpdates[i].a;
+            for (let i=0; i<this.engine.asteroids.length; i++) {
+                this.engine.asteroids[i].position.x = asteroids[i][0];
+                this.engine.asteroids[i].position.y = asteroids[i][1];
+                this.engine.asteroids[i].angle = asteroids[i][2];
             }
         }
-        var fortresses = this.network.serverUpdates[i].f;
-        for (let i=0; i<this.engine.fortresses.length;i++) {
-            this.engine.fortresses[i].alive = fortresses[i][0];
-            this.engine.fortresses[i].position.x = fortresses[i][1];
-            this.engine.fortresses[i].position.y = fortresses[i][2];
-            this.engine.fortresses[i].angle = fortresses[i][3];
-        }
-        var shells = this.network.serverUpdates[i].s;
-        this.engine.shells = new Array(shells.length);
-        for (let i=0; i<this.engine.shells.length; i++) {
-            this.engine.shells[i] = {position: {x: shells[i][0],
-                                                y: shells[i][1]},
-                                     angle: shells[i][2]};
-        }
-        var missiles = this.network.serverUpdates[i].m;
-        this.engine.missiles = new Array(missiles.length);
-        for (let i=0; i<this.engine.missiles.length; i++) {
-            this.engine.missiles[i] = {position: {x: missiles[i][0],
-                                                  y: missiles[i][1]},
-                                       angle: missiles[i][2]};
-        }
-        var asteroids = this.network.serverUpdates[i].a;
-        for (let i=0; i<this.engine.asteroids.length; i++) {
-            this.engine.asteroids[i].position.x = asteroids[i][0];
-            this.engine.asteroids[i].position.y = asteroids[i][1];
-            this.engine.asteroids[i].angle = asteroids[i][2];
-        }
+        this.network.serverUpdates.length = 0;
     }
-    this.network.serverUpdates.length = 0;
 };
 
 WebClient.prototype.drawExplosion = function(ctx, x, y) {

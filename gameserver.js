@@ -29,7 +29,10 @@ GameServer.prototype.addPlayer = function (client) {
         payload[k] = [this.engine.players[k].alive?1:0,
                       this.engine.players[k].position.x,
                       this.engine.players[k].position.y,
-                      this.engine.players[k].angle];
+                      this.engine.players[k].angle,
+                      this.engine.players[k].velocity.x,
+                      this.engine.players[k].velocity.y,
+                      this.engine.players[k].turnFlag];
     }
     var fpayload = new Array(this.engine.fortresses.length);
     for (let i =0;i<this.engine.fortresses.length; i++) {
@@ -108,7 +111,10 @@ GameServer.prototype.sendServerUpdate = function () {
         full.p[k] = [this.engine.players[k].alive?1:0,
                      this.engine.players[k].position.x,
                      this.engine.players[k].position.y,
-                     this.engine.players[k].angle];
+                     this.engine.players[k].angle,
+                     this.engine.players[k].velocity.x,
+                     this.engine.players[k].velocity.y,
+                     this.engine.players[k].turnFlag];
     }
     full.f = new Array(this.engine.fortresses.length);
     for (let i =0;i<this.engine.fortresses.length; i++) {
