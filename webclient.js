@@ -37,6 +37,12 @@ function WebClient (engine) {
                     latency: 0};
     this.id = null;
     this.keyEvents = [];
+
+    this.messageText = ["Impossible",
+                        "I need help. Come to my position.",
+                        "Split up to cover more ground.",
+                        "Follow me.",
+                        "10-4. In transit."];
 }
 
 WebClient.prototype = {};
@@ -77,6 +83,14 @@ WebClient.prototype.decodeKeyCode = function(which) {
         return KEY_DOWN;
     else if (which === 32)
         return KEY_SPACE;
+    else if (which === 49)
+        return KEY_1;
+    else if (which === 50)
+        return KEY_2;
+    else if (which === 51)
+        return KEY_3;
+    else if (which === 52)
+        return KEY_4;
     else
         return undefined;
 };
@@ -120,6 +134,7 @@ WebClient.prototype.onConnect = function (data) {
         this.engine.players[k].velocity.x = data.players[k][4];
         this.engine.players[k].velocity.y = data.players[k][5];
         this.engine.players[k].turnFlag = data.players[k][6];
+        this.engine.players[k].color = data.players[k][7];
     }
     this.engine.fortresses = new Array(data.fortresses.length);
     for (let i=0; i<data.fortresses.length; i++) {
@@ -269,6 +284,11 @@ WebClient.prototype.processServerUpdates = function () {
                 this.engine.asteroids[i].position.y = asteroids[i][1];
                 this.engine.asteroids[i].angle = asteroids[i][2];
             }
+            var msg = this.network.serverUpdates[i].msg;
+            for (let i=0; i<msg.length;i++) {
+                this.engine.messages.push({player: msg[i][0], msg: msg[i][1], tick: this.engine.ticks});
+                g_sounds[msg[i][1]].play();
+            }
         }
         this.network.serverUpdates.length = 0;
     }
@@ -292,6 +312,29 @@ WebClient.prototype.drawExplosion = function(ctx, x, y) {
     ctx.beginPath();
     ctx.arc(x, y, 7, 0, Math.PI*2, false);
     ctx.stroke();
+};
+
+WebClient.prototype.roundRect = function (ctx, x, y, width, height, radius) {
+    radius = radius || 5;
+    if (typeof radius === 'number') {
+        radius = {tl: radius, tr: radius, br: radius, bl: radius};
+    } else {
+        var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
+        for (var side in defaultRadius) {
+            radius[side] = radius[side] || defaultRadius[side];
+        }
+    }
+    ctx.beginPath();
+    ctx.moveTo(x + radius.tl, y);
+    ctx.lineTo(x + width - radius.tr, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+    ctx.lineTo(x + width, y + height - radius.br);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+    ctx.lineTo(x + radius.bl, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+    ctx.lineTo(x, y + radius.tl);
+    ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+    ctx.closePath();
 };
 
 WebClient.prototype.drawGameState = function () {
@@ -370,7 +413,8 @@ WebClient.prototype.drawGameState = function () {
             shipWireframe.draw (this.ctx,
                                 this.engine.players[id].position.x,
                                 this.engine.players[id].position.y,
-                                this.engine.players[id].angle);
+                                this.engine.players[id].angle,
+                                this.engine.players[id].color);
         else
             this.drawExplosion(this.ctx,
                                this.engine.players[id].position.x,
@@ -410,31 +454,61 @@ WebClient.prototype.drawGameState = function () {
         this.ctx.restore();
     }
 
-    // for (let i=0; i<this.engine.asteroids.length;i++) {
-    //     for (let j=0; j<this.engine.asteroids[i].bubbles.length; j++) {
-    //         var pos = rotate_translate(this.engine.asteroids[i].position.x,
-    //                                    this.engine.asteroids[i].position.y,
-    //                                    this.engine.asteroids[i].bubbles[j].x,
-    //                                    this.engine.asteroids[i].bubbles[j].y,
-    //                                    this.engine.asteroids[i].angle);
-    //         this.ctx.beginPath();
-    //         this.ctx.arc(pos.x, pos.y,
-    //                      this.engine.asteroids[i].bubbles[j].r,
-    //                      0, Math.PI*2);
-    //         this.ctx.stroke();
-    //     }
-    // }
-
     this.ctx.restore();
+
+    // Messages
+    this.ctx.save();
+    this.ctx.font = '14px sans-serif';
+    var y = 10;
+    var fadeThreshold = 30;
+    var height = 40;
+    for (let i=0; i<this.engine.messages.length; i++) {
+        // console.log('msg', this.engine.messages[i]);
+        var txt = this.messageText[this.engine.messages[i].msg];
+        var w = this.ctx.measureText(txt).width + 20;
+        var diff = (this.engine.messages[i].tick + this.engine.config.message.duration) - this.engine.ticks;
+        this.roundRect(this.ctx, 10, y, Math.max(100, w), 35);
+        this.ctx.strokeStyle = this.engine.players[this.engine.messages[i].player].color;
+        this.ctx.fillStyle = '#000000';
+
+        if (diff < fadeThreshold) this.ctx.globalAlpha = diff/fadeThreshold * 0.7;
+        else this.ctx.globalAlpha = 1;
+
+        this.ctx.fill();
+        this.ctx.stroke();
+        this.ctx.fillStyle = this.engine.players[this.engine.messages[i].player].color;
+        // this.ctx.fillStyle = '#000000';
+        this.ctx.fillText(txt, 20, y + 5+16);
+        this.ctx.globalAlpha = 1;
+
+        if (diff < fadeThreshold) y -= height - height * (diff*1.0)/fadeThreshold;
+        y += height;
+    }
+    this.ctx.restore();
+
+
+
+};
+
+WebClient.prototype.updateMessages = function () {
+    for (let i=this.engine.messages.length-1; i>=0; i--) {
+        if (this.engine.messages[i].tick + this.engine.config.message.duration <= this.engine.ticks ) {
+            this.engine.messages.splice(i, 1);
+        }
+    }
 };
 
 WebClient.prototype.update = function (t) {
     this.dt = this.lastUpdateTime ? (t - this.lastUpdateTime) : 1000/60.0;
     this.lastUpdateTime = t;
 
+    this.engine.ticks += 1;
+
     this.processKbdInput();
     this.processServerUpdates();
     this.drawGameState();
+    this.updateMessages();
+
 
     this.updateid = window.requestAnimationFrame( this.update.bind(this), this.canvas );
 };

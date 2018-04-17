@@ -3,6 +3,15 @@ var KEY_RIGHT = 2;
 var KEY_UP = 3;
 var KEY_DOWN = 4;
 var KEY_SPACE = 5;
+var KEY_1 = 6;
+var KEY_2 = 7;
+var KEY_3 = 8;
+var KEY_4 = 9;
+
+var MESSAGE_1 = 1;
+var MESSAGE_2 = 2;
+var MESSAGE_3 = 3;
+var MESSAGE_4 = 4;
 
 function angle_diff(angle1, angle2) {
     // It finally works--don't touch it!
@@ -151,6 +160,8 @@ function GameEngine(config) {
     this.asteroids = [];
     this.ticks = 0;
 
+    this.messages = [];
+
     this.hexagons = {};
     this.hexagons[this.config.fortress.bigHex] = new Hexagon(this.config.fortress.bigHex);
     this.hexagons[this.config.fortress.smallHex] = new Hexagon(this.config.fortress.smallHex);
@@ -232,12 +243,15 @@ GameEngine.prototype.stepOneTick = function () {
 
 GameEngine.prototype.processPlayerKeys = function (p, keys) {
     for (var i=0; i<keys.length; i++) {
-        // console.log(keys[i][0] ? 'pressed':'released', keys[i][1]);
         if (keys[i][0] === 1) {
             if (keys[i][1] === KEY_LEFT) p.turnFlag = 'left';
             else if (keys[i][1] === KEY_RIGHT) p.turnFlag = 'right';
             else if (keys[i][1] === KEY_UP) p.thrustFlag = true;
             else if (keys[i][1] === KEY_SPACE) this.addMissile(p);
+            else if (keys[i][1] === KEY_1) this.say(p, MESSAGE_1);
+            else if (keys[i][1] === KEY_2) this.say(p, MESSAGE_2);
+            else if (keys[i][1] === KEY_3) this.say(p, MESSAGE_3);
+            else if (keys[i][1] === KEY_4) this.say(p, MESSAGE_4);
         } else {
             if (keys[i][1] === KEY_LEFT || keys[i][1] === KEY_RIGHT) p.turnFlag = null;
             else if (keys[i][1] === KEY_UP) p.thrustFlag = false;
@@ -245,6 +259,10 @@ GameEngine.prototype.processPlayerKeys = function (p, keys) {
         }
     }
 };
+
+GameEngine.prototype.say = function (p, msg) {
+    this.messages.push([p.id, msg]);
+}
 
 GameEngine.prototype.updatePlayer = function (p) {
     if (p.alive) {
@@ -355,6 +373,7 @@ GameEngine.prototype.updateMissiles = function () {
                     var a = angle_diff(f.angle, to);
                     if (a > 120 || a < -120) {
                         f.alive = false;
+                        f.respawnTimer = 0;
                         // console.log(Math.round(f.angle), Math.round(to), a);
                     }
                     break;
@@ -520,6 +539,7 @@ GameEngine.prototype.updateAsteroids = function () {
 };
 
 GameEngine.prototype.addPlayer = function (id) {
+    var n = Object.keys(this.players).length;
     this.players[id] = {id: id,
                         angle: this.config.player.startAngle,
                         position: {x: this.config.player.startPosition.x,
@@ -531,7 +551,8 @@ GameEngine.prototype.addPlayer = function (id) {
                         thrustFlag: 0,
                         missileState: 0,
                         spawnTimer: 0,
-                        alive: true
+                        alive: true,
+                        color: this.config.player.colors[n%this.config.player.colors.length]
                        };
 };
 

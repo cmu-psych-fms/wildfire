@@ -20,10 +20,10 @@ Wireframe.prototype = {};
 //     }
 // };
 
-Wireframe.prototype.draw = function (canvas, x, y, angle) {
+Wireframe.prototype.draw = function (canvas, x, y, angle, color) {
     var r, i;
     canvas.save();
-    canvas.strokeStyle = this.color;
+    canvas.strokeStyle = color||this.color;
     canvas.translate(x,y);
     canvas.rotate(angle * Math.PI / 180);
     for (r=0; r<this.runs.length; r++) {

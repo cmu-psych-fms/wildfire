@@ -32,7 +32,8 @@ GameServer.prototype.addPlayer = function (client) {
                       this.engine.players[k].angle,
                       this.engine.players[k].velocity.x,
                       this.engine.players[k].velocity.y,
-                      this.engine.players[k].turnFlag];
+                      this.engine.players[k].turnFlag,
+                      this.engine.players[k].color];
     }
     var fpayload = new Array(this.engine.fortresses.length);
     for (let i =0;i<this.engine.fortresses.length; i++) {
@@ -143,9 +144,11 @@ GameServer.prototype.sendServerUpdate = function () {
                      this.engine.asteroids[i].position.y,
                      this.engine.asteroids[i].angle];
     }
+    full.msg = this.engine.messages;
     for (let k in this.players) {
         this.players[k].emit('serverupdate', full);
     }
+    this.engine.messages.length = 0;
 };
 
 exports.GameServer = GameServer;

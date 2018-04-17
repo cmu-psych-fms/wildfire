@@ -4,6 +4,7 @@
     <meta charset=utf-8>
     <link href="index.css" rel="stylesheet" type="text/css">
     <script src="/socket.io/socket.io.js"></script>
+    <script type="text/javascript" src="howler.min.js"></script>
 
     <script type="text/javascript" src="wireframe.js"></script>
     <script type="text/javascript" src="config.js"></script>
@@ -15,6 +16,13 @@
   <body>
     <div style="text-align: center">
     <canvas id="gamecanvas" style="background: #000000"></canvas>
+    <div style="position: absolute; top: 10px; right: 10px">
+      <table>
+        <tr><td>1<td>I need help. Come to my position</tr>
+        <tr><td>2<td>Split up to cover more ground</tr>
+        <tr><td>3<td>Follow me</tr>
+        <tr><td>4<td>10-4. In transit.</tr>
+    </table></div>
     <!-- <br><button id="reset" onclick="reset_game()">Reset Game</button> -->
     <h3>Instructions</h3>
     <p>
