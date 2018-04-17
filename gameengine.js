@@ -13,6 +13,52 @@ var MESSAGE_2 = 2;
 var MESSAGE_3 = 3;
 var MESSAGE_4 = 4;
 
+// http://paulbourke.net/geometry/lineline2d/
+var LINES_PARALLEL = 0;
+var INTERSECTION_INSIDE = 1;
+var LINES_COINCIDE = 2;
+var INTERSECTION_OUTSIDE_SEG1 = 3;
+var INTERSECTION_OUTSIDE_SEG2 = 4;
+var INTERSECTION_OUTSIDE_BOTH = 5;
+function lines_intersection_point(p1, p2, p3, p4) {
+    var out;
+    var eps = 0.000000000001;
+
+    var denom  = (p4.y-p3.y) * (p2.x-p1.x) - (p4.x-p3.x) * (p2.y-p1.y);
+    var numera = (p4.x-p3.x) * (p1.y-p3.y) - (p4.y-p3.y) * (p1.x-p3.x);
+    var numerb = (p2.x-p1.x) * (p1.y-p3.y) - (p2.y-p1.y) * (p1.x-p3.x);
+
+    if ( (-eps < numera && numera < eps) &&
+         (-eps < numerb && numerb < eps) &&
+         (-eps < denom  && denom  < eps) ) {
+        out = {x:(p1.x + p2.x) * 0.5, y:(p1.y + p2.y) * 0.5};
+        return [LINES_COINCIDE, out];
+    }
+
+    if (-eps < denom  && denom  < eps) {
+	return [LINES_PARALLEL, null];
+    }
+
+    var mua = numera / denom;
+    var mub = numerb / denom;
+
+    out = {x:p1.x + mua * (p2.x - p1.x),
+           y: p1.y + mua * (p2.y - p1.y)};
+    var out1 = mua < 0 || mua > 1;
+    var out2 = mub < 0 || mub > 1;
+
+    if ( out1 & out2) {
+	return [INTERSECTION_OUTSIDE_BOTH, out];
+    } else if ( out1) {
+	return [INTERSECTION_OUTSIDE_SEG1, out];
+    } else if ( out2) {
+	return [INTERSECTION_OUTSIDE_SEG2, out];
+    } else {
+	return [INTERSECTION_INSIDE, out];
+    }
+}
+
+
 function angle_diff(angle1, angle2) {
     // It finally works--don't touch it!
     if (angle1 < 90) {

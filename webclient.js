@@ -337,6 +337,49 @@ WebClient.prototype.roundRect = function (ctx, x, y, width, height, radius) {
     ctx.closePath();
 };
 
+WebClient.prototype.HUDDirection2 = function (from, to) {
+    var a = stdAngle(angleTo(from, to));
+    return {x:this.canvas.width/2+Math.cos(deg2rad(a)) * 245,
+            y:this.canvas.height/2+Math.sin(deg2rad(a)) * 245};
+};
+
+WebClient.prototype.HUDDirection = function (from, to) {
+    var a = stdAngle(angleTo(from, to));
+    var p1 = {x:this.canvas.width/2, y:this.canvas.height/2};
+    var p2 = {x:p1.x + Math.cos(deg2rad(a)),
+              y:p1.y + Math.sin(deg2rad(a))};
+    var p3, p4;
+
+    var corners = [rad2deg(Math.atan2(this.canvas.height/2,this.canvas.width/2)),
+                   rad2deg(Math.atan2(this.canvas.height/2,-this.canvas.width/2)),
+                   stdAngle(rad2deg(Math.atan2(-this.canvas.height/2,-this.canvas.width/2))),
+                   stdAngle(rad2deg(Math.atan2(-this.canvas.height/2,this.canvas.width/2)))];
+
+    // console.log(corners);
+
+    // start_a = 45;
+
+    var x,y;
+    // console.log(a);
+    if (a <= corners[0]) {
+        p3 = {x:this.canvas.width-5, y: 5};
+        p4 = {x:this.canvas.width-5, y: this.canvas.height-5};
+    } else if (a <= corners[1]) {
+        p3 = {x:5, y: this.canvas.height-5};
+        p4 = {x:this.canvas.width-5, y: this.canvas.height-5};
+    } else if (a <= corners[2]) {
+        p3 = {x:5, y: 5};
+        p4 = {x:5, y: this.canvas.height-5};
+    } else if (a <= corners[3]) {
+        p3 = {x:5, y:5};
+        p4 = {x:this.canvas.width-5, y:5};
+    } else {
+        p3 = {x:this.canvas.width-5, y:5};
+        p4 = {x:this.canvas.width-5, y:this.canvas.height-5};
+    }
+    return lines_intersection_point(p1,p2,p3,p4)[1];
+}
+
 WebClient.prototype.drawGameState = function () {
     this.ctx.save();
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
@@ -455,6 +498,29 @@ WebClient.prototype.drawGameState = function () {
     }
 
     this.ctx.restore();
+
+    // Way points
+    for (let k in this.engine.players) {
+        if (this.engine.players[k].id === this.id) continue;
+        if (Math.abs(this.engine.players[this.id].position.x - this.engine.players[k].position.x) < this.canvas.width/2 &&
+            Math.abs(this.engine.players[this.id].position.y - this.engine.players[k].position.y) < this.canvas.height/2)
+            continue;
+        var pos = this.HUDDirection(this.engine.players[this.id].position, this.engine.players[k].position);
+        this.ctx.fillStyle = this.engine.players[k].color;
+        this.ctx.beginPath();
+        this.ctx.arc(pos.x, pos.y, 5, 0, Math.PI*2);
+        this.ctx.fill();
+
+        // var pos2 = this.HUDDirection2(this.engine.players[this.id].position, this.engine.players[k].position);
+        // this.ctx.fillStyle = this.engine.players[k].color;
+        // this.ctx.beginPath();
+        // this.ctx.arc(pos2.x, pos2.y, 5, 0, Math.PI*2);
+        // this.ctx.fill();
+        // this.ctx.beginPath();
+        // this.ctx.arc(this.canvas.width/2, this.canvas.height/2, 245, 0, Math.PI*2);
+        // this.ctx.strokeStyle = "#EEEEEE";
+        // this.ctx.stroke();
+    }
 
     // Messages
     this.ctx.save();
