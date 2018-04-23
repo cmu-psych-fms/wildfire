@@ -30,6 +30,7 @@ window.onload = function(){
     load_image('vroad');
     load_image('plane');
     load_image('grass');
+    load_image('smoke');
 
     imagesLoaded(g_jq, {}, start_game);
 };

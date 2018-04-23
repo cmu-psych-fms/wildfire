@@ -10,7 +10,8 @@ function Config() {
                    acceleration: 0.04,
                    maxSpeed: 5,
                    collisionRadius: 10,
-                   deathTimer: 120};
+                   deathTimer: 120,
+                   health: 500};
     this.fortress = { lockTime: 120,
                       smallHex: 40,
                       bigHex: 170,
@@ -23,6 +24,8 @@ function Config() {
     this.shell = { collisionRadius: 3,
                    speed: 1.5,
                    lifespan: 180};
+    this.smoke = { duration: 1200 }; // 800
+
     this.mapSize = 100;
     this.mapCellSize = 20;
     this.startFires = 30;

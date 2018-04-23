@@ -36,7 +36,15 @@ function WebClient (engine) {
     this.network = {serverUpdates: [],
                     latency: 0};
     this.id = null;
+
+    this.ticks = 0;
+
     this.keyEvents = [];
+
+    this.movementRequests = [];
+    this.curMovementRequestSeq = 0;
+
+    this.mapChangePredictions = [];
 
     this.map_images = new Array(10);
     this.map_images[MAP_FIRE] = g_images['fire'];
@@ -49,6 +57,11 @@ function WebClient (engine) {
     this.map_images[MAP_VROAD] = g_images['vroad'];
     this.map_images[MAP_HROAD] = g_images['hroad'];
     this.map_images[MAP_GRASS] = g_images['grass'];
+
+    this.players = {};
+
+    this.lastServerUpdate = null;
+    this.currentServerUpdate = null;
 }
 
 WebClient.prototype = {};
@@ -97,6 +110,7 @@ WebClient.prototype.decodeKeyCode = function(which) {
 WebClient.prototype.cancelUpdates = function () {
     console.log("cancel animation");
     window.cancelAnimationFrame(this.updateid);
+    this.stopGameTickTimer();
     this.network.socket.close();
 };
 
@@ -131,35 +145,117 @@ WebClient.prototype.onReset = function (data) {
     this.engine.map = data.map;
 };
 
+WebClient.prototype.startGameTickTimer = function () {
+    this.gameTickTimer = setInterval(this.gameLogicUpdate.bind(this), 15);
+};
+
+WebClient.prototype.stopGameTickTimer = function () {
+    clearInterval(this.gameTickTimer);
+};
+
+WebClient.prototype.initPlayer = function (k) {
+    this.players[k] = { last: {position: {x:0,y:0},
+                               angle: 0,
+                               turnFlag: null,
+                               speed: 0,
+                               alive: true,
+                               water: 0,
+                               ts: 0,
+                               s_tick: 0,
+                               c_tick: 0,
+                              },
+                        latest: {position: {x:0,y:0},
+                                 angle: 0,
+                                 turnFlag: null,
+                                 speed: 0,
+                                 alive: true,
+                                 water: 0,
+                                 ts: 0,
+                                 s_tick: 0,
+                                 c_tick: 0},
+                        lerp: 0,
+                        position: {x:0,y:0},
+                        speed: 0,
+                        angle: 0,
+                        water: 0,
+                        alive: true,
+                        turnFlag: 0,
+                        thrustFlag: 0,
+                        dumpFlag: 0,
+                        config: this.engine.config.player
+                      };
+};
+
+WebClient.prototype.updatePlayerLatest = function (p, serverTick, clientTick, update) {
+    p.last.position.x = p.latest.position.x;
+    p.last.position.y = p.latest.position.y;
+    p.last.angle = p.latest.angle;
+    p.last.turnFlag = p.latest.turnFlag;
+    p.last.speed = p.latest.speed;
+    p.last.alive = p.latest.alive;
+    p.last.water = p.latest.water;
+    p.last.ts = p.latest.ts;
+    p.last.s_tick = p.latest.s_tick;
+    p.last.c_tick = p.latest.c_tick;
+
+    p.latest.ts = null;
+    p.latest.position.x = update[1];
+    p.latest.position.y = update[2];
+    p.latest.angle = update[3];
+    p.latest.speed = update[4];
+    p.latest.turnFlag = update[5];
+    p.latest.water = update[6];
+    p.latest.s_tick = serverTick;
+    p.latest.c_tick = clientTick;
+};
+
+WebClient.prototype.setPlayerCurrent = function (p) {
+    p.position.x = p.latest.position.x;
+    p.position.y = p.latest.position.y;
+    p.angle = p.latest.angle;
+    // p.turnFlag = p.latest.turnFlag;
+    p.speed = p.latest.speed;
+    p.water = p.latest.water;
+};
+
 WebClient.prototype.onConnect = function (data) {
     // console.log('connect', data);
+
     this.id = data.id;
     for (let k in data.players) {
-        this.engine.addPlayer(k);
-        console.log('before', this.engine.players[k]);
-        this.engine.players[k].alive = data.players[k][0];
-        this.engine.players[k].position.x = data.players[k][1];
-        this.engine.players[k].position.y = data.players[k][2];
-        this.engine.players[k].angle = data.players[k][3];
-        this.engine.players[k].speed = data.players[k][4];
+        this.initPlayer(k);
+        var p = this.players[k];
+
+        console.log('before', p);
+        p.alive = data.players[k][0];
+        p.position.x = data.players[k][1];
+        p.position.y = data.players[k][2];
+        p.angle = data.players[k][3];
+        p.speed = data.players[k][4];
+        p.water = data.players[k][5];
+
+        p.last.position.x = p.position.x;
+        p.last.position.y = p.position.y;
+        p.last.angle = p.angle;
+        p.last.ts = 0;
+        p.last.tick = 0;
+
+        p.latest.position.x = p.position.x;
+        p.latest.position.y = p.position.y;
+        p.latest.angle = p.angle;
+        p.latest.ts = 0;
+        p.latest.tick = 0;
 
         // console.log(data.players[k][1], data.players[k][2], data.players[k][3]);
 
         // console.log(this.engine.players[k]);
     }
+    // this.engine.smoke = data.smoke;
     this.engine.map = data.map;
-    // this.engine.fortresses = new Array(data.fortresses.length);
-    // for (let i=0; i<data.fortresses.length; i++) {
-    //     this.engine.fortresses[i] = {alive: data.fortresses[i][0],
-    //                                  position: {x:data.fortresses[i][1],
-    //                                             y:data.fortresses[i][2]},
-    //                                  angle: data.fortresses[i][3],
-    //                                  radius: data.fortresses[i][4]};
-    // }
-    // this.engine.asteroids = data.asteroids;
 
-    game.update( new Date().getTime() );
+    this.startGameTickTimer();
 
+    this.updateDisplay( new Date().getTime() );
 };
 
 WebClient.prototype.onDisconnect = function (data) {
@@ -196,12 +292,12 @@ WebClient.prototype.onMessage = function (msg) {
 
 WebClient.prototype.onPlayerJoin = function (data) {
     console.log('join', data);
-    this.engine.addPlayer(data.id);
+    this.initPlayer(data.id);
 };
 
 WebClient.prototype.onPlayerPart = function (data) {
     console.log('part', data);
-    this.engine.delPlayer(data.id);
+    delete this.players[data.id];
 };
 
 
@@ -213,25 +309,55 @@ WebClient.prototype.onServerUpdate = function (data) {
 };
 
 WebClient.prototype.processKbdInput = function () {
-    // for (let i=0; i<this.keyEvents.length; i++) {
-    // }
-    if (this.network.hasNewInput) {
-        var packet = 'k' + JSON.stringify(this.keyEvents);
-        this.network.socket.send (packet);
+    var p = this.players[this.id];
+
+    if (this.keyEvents.length > 0) {
+        this.engine.processPlayerKeysHelper(this.players[this.id], this.keyEvents);
         this.keyEvents = [];
-        this.network.hasNewInput = false;
     }
 };
 
-WebClient.prototype.predictPlayerMovement = function (p) {
-    if (p.alive) {
-        if (p.turnFlag === 'left') p.angle -= this.engine.config.player.turnRate;
-        else if (p.turnFlag === 'right') p.angle += this.engine.config.player.turnRate;
-        p.angle = stdAngle(p.angle);
+WebClient.prototype.lerpOtherPlayers = function () {
+    for (let k in this.players) {
+        if (k === this.id) continue;
+        var p = this.players[k];
 
-        p.position.x += p.speed * Math.cos(deg2rad(p.angle));
-        p.position.y += p.speed * Math.sin(deg2rad(p.angle));
+        var ofs = this.ticks - p.latest.c_tick;
+        var dist = p.latest.s_tick-p.last.s_tick;
 
+        // console.log(ofs, dist);
+        if (ofs > dist) {
+            this.setPlayerCurrent(p);
+        } else {
+            p.position.x = p.last.position.x + (p.latest.position.x - p.last.position.x) * ofs / dist;
+            p.position.y = p.last.position.y + (p.latest.position.y - p.last.position.y) * ofs / dist;
+            p.angle = stdAngle(p.last.angle + angle_diff(p.latest.angle,p.last.angle) * ofs / dist);
+        }
+    }
+};
+
+WebClient.prototype.somethingChanged = function (p) {
+    // var last = this.movementRequests[this.movementRequests.length-1];
+    // return (p.turnFlag || p.thrustFlag || p.dumpFlag ||
+    //         p.speed > 0 ||
+    //         (this.movementRequests.length > 0 &&
+    //          (p.turnFlag !== last[1] ||
+    //           p.thrustFlag !== last[2] ||
+    //           p.dumpFlag !== last[3])));
+    return true;
+};
+
+WebClient.prototype.placeMovementRequest = function () {
+    var p = this.players[this.id];
+    if (this.somethingChanged(p)) {
+        this.curMovementRequestSeq += 1;
+        // this.keyEventsTick = this.ticks;
+        // var k = {seq:this.keyEventsSeq, tick: this.ticks, events:this.keyEvents};
+        var k = [ this.curMovementRequestSeq, p.turnFlag, p.thrustFlag, p.dumpFlag ]
+        // console.log(k);
+        this.movementRequests.push(k);
+        var packet = 'k' + JSON.stringify(k);
+        this.network.socket.send (packet);
     }
 };
 
@@ -250,16 +376,54 @@ WebClient.prototype.interpolatePlayer = function (p) {
     }
 };
 
-WebClient.prototype.processServerUpdates = function () {
-    if (this.network.serverUpdates.length === 0) {
-        for (let k in this.engine.players) {
-            var p = this.engine.players[k];
-            if (p.lerp)
-                this.interpolatePlayer(p);
-            else
-                this.predictPlayerMovement(p);
+WebClient.prototype.mapAtUnsafe = function (x, y) {
+    var r = this.engine.map[y*this.engine.config.mapSize+x];
+    for (let i=0; i<this.mapChangePredictions.length; i++) {
+        if (this.mapChangePredictions[i][0] === x &&
+            this.mapChangePredictions[i][1] === y)
+            r = this.mapChangePredictions[i][2];
+    }
+    return r;
+};
+
+WebClient.prototype.addMapChange = function (x, y, r) {
+    if (x>=0 && x < this.engine.config.mapSize &&
+        y>=0 && y < this.engine.config.mapSize &&
+        this.mapAtUnsafe(x,y) !== r) {
+        this.mapChangePredictions.push([x, y, r]);
+    }
+};
+
+WebClient.prototype.stepPlayer = function (p) {
+    if (p.alive) {
+        this.engine.playerApplyMovement(p);
+
+        if (p.dumpFlag) {
+            var mx = Math.round(p.position.x/this.engine.config.mapCellSize),
+                my = Math.round(p.position.y/this.engine.config.mapCellSize),
+                m = this.engine.mapAt(mx, my);
+            if (m !== MAP_WATER && m !== MAP_ROCK) {
+                this.addMapChange(mx, my, MAP_RETARDANT);
+            }
         }
-    } else {
+    }
+}
+
+WebClient.prototype.replayPlayerKeys = function () {
+    var p = this.players[this.id];
+    for (let i=0; i<this.movementRequests.length; i++) {
+        p.turnFlag = this.movementRequests[i][1];
+        p.thrustFlag = this.movementRequests[i][2];
+        p.dumpFlag = this.movementRequests[i][3];
+        this.stepPlayer(p);
+    }
+    if (p.angle !== p.backup_a) {
+        console.log('backup differs', p.angle, p.backup_a);
+    }
+};
+
+WebClient.prototype.processServerUpdates = function () {
+    if (this.network.serverUpdates.length > 0) {
         // Need to run through all updates for map changes
         for (let i=0; i<this.network.serverUpdates.length; i++) {
             var mapUpdates = this.network.serverUpdates[i].m;
@@ -267,36 +431,39 @@ WebClient.prototype.processServerUpdates = function () {
                 this.engine.map[mapUpdates[i][0]] = mapUpdates[i][1];
             }
         }
-        // Keep track of game ticks on client and server. When we get
-        // a server tick. Predict it up to the client's tick then use
-        // interpolation if necessary.
-        //
-        // This fixes the jerking back in time whenever we get a laggy
-        // packet from the server.
+        var last = this.network.serverUpdates[this.network.serverUpdates.length-1];
+        this.engine.ticks = last.t;
 
-        // But we only need the latest update for player positions
-        var p_u = this.network.serverUpdates[this.network.serverUpdates.length-1].p;
+        this.lastServerUpdate = this.currentServerUpdate;
+        this.currentServerUpdate = last;
+        this.currentServerUpdate.localTimeStamp = this.lastUpdateTime;
+
+        // But we only need the last update for player positions
+        var p_u = last.p;
         for (let k in p_u) {
-            var p = this.engine.players[k];
+            var p = this.players[k];
             if (p) {
-                p.alive = p_u[k][0],
-                p.speed = p_u[k][4];
-                p.turnFlag = p_u[k][5];
-                if (p.alive &&
-                    (Math.abs(p.position.x - p_u[k][1]) > this.engine.config.network.maxDist ||
-                     Math.abs(p.position.y - p_u[k][2]) > this.engine.config.network.maxDist ||
-                     Math.abs(angle_diff(p.angle - p_u[k][3])) > this.engine.config.network.maxAngle)) {
-                    p.lerp = { steps: 4,
-                               step: 0,
-                               lastKnown: {x:p.position.x, y:p.position.y, a:p.angle},
-                               target: {x:p_u[k][1], y:p_u[k][2], a:p_u[k][3]}}
-                } else {
-                    p.position.x = p_u[k][1];
-                    p.position.y = p_u[k][2];
-                    p.angle = p_u[k][3];
-                }
+                this.updatePlayerLatest(p, last.t, this.ticks, p_u[k]);
             }
         }
+        // Erase uneeded key events
+        for (let i=0; i<this.movementRequests.length; i++) {
+            if (this.movementRequests[i][0] === this.currentServerUpdate.lk.seq) {
+                this.movementRequests.splice(0,i+1);
+                break;
+            }
+        }
+        this.mapChangePredictions.length = 0;
+
+        this.players[this.id].backup_x = this.players[this.id].position.x;
+        this.players[this.id].backup_y = this.players[this.id].position.y;
+        this.players[this.id].backup_a = this.players[this.id].angle;
+        this.players[this.id].backup_speed = this.players[this.id].speed;
+
+        this.setPlayerCurrent(this.players[this.id]);
+        // replay our key events from the last authoritative game state.
+        this.replayPlayerKeys();
+
         this.network.serverUpdates.length = 0;
     }
 };
@@ -324,8 +491,8 @@ WebClient.prototype.drawExplosion = function(ctx, x, y) {
 WebClient.prototype.drawGameState = function () {
     this.ctx.save();
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-    this.ctx.translate(-this.engine.players[this.id].position.x+this.canvas.width/2,
-                       -this.engine.players[this.id].position.y+this.canvas.height/2);
+    this.ctx.translate(-this.players[this.id].position.x+this.canvas.width/2,
+                       -this.players[this.id].position.y+this.canvas.height/2);
     // this.ctx.strokeStyle = '#003300';
     var maxx = this.engine.config.mapSize * this.engine.config.mapCellSize;
     var maxy = this.engine.config.mapSize * this.engine.config.mapCellSize;
@@ -343,8 +510,8 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.strokeRect(-2, -2, maxx+4, maxy+4);
     this.ctx.lineWidth = 1;
 
-    var startx = Math.round((this.engine.players[this.id].position.x - this.canvas.width/2)/this.engine.config.mapCellSize);
-    var starty = Math.round((this.engine.players[this.id].position.y - this.canvas.height/2)/this.engine.config.mapCellSize);
+    var startx = Math.round((this.players[this.id].position.x - this.canvas.width/2)/this.engine.config.mapCellSize);
+    var starty = Math.round((this.players[this.id].position.y - this.canvas.height/2)/this.engine.config.mapCellSize);
     var endx = startx+Math.round(this.canvas.width/this.engine.config.mapCellSize);
     var endy = starty+Math.round(this.canvas.height/this.engine.config.mapCellSize);
     if (startx < 0) startx = 0;
@@ -361,36 +528,110 @@ WebClient.prototype.drawGameState = function () {
                                y * this.engine.config.mapCellSize);
         }
     }
+    for (let i=0; i<this.mapChangePredictions.length; i++) {
+        if (this.mapChangePredictions[i][0] >= startx &&
+            this.mapChangePredictions[i][0] <= endx &&
+            this.mapChangePredictions[i][1] >= starty &&
+            this.mapChangePredictions[i][1] <= endy) {
+            var m = this.map_images[this.mapChangePredictions[i][2]];
+            this.ctx.drawImage(m,
+                               this.mapChangePredictions[i][0] * this.engine.config.mapCellSize,
+                               this.mapChangePredictions[i][1] * this.engine.config.mapCellSize);
+        }
+    }
 
-    for (let id in this.engine.players) {
-        if (this.engine.players[id].alive) {
+
+    for (let id in this.players) {
+        if (this.players[id].alive) {
             this.ctx.save();
-            this.ctx.translate(this.engine.players[id].position.x,
-                               this.engine.players[id].position.y);
-            this.ctx.rotate(deg2rad(this.engine.players[id].angle));
+            this.ctx.translate(this.players[id].position.x,
+                               this.players[id].position.y);
+            this.ctx.rotate(deg2rad(this.players[id].angle));
             this.ctx.drawImage(g_images['plane'], -g_images['plane'].width/2-10, -g_images['plane'].height/2);
+            var engine_flames = 0;
+            if (this.players[id].health < 50) {
+                engine_flames = 4;
+            } else if (this.players[id].health < 100) {
+                engine_flames = 3;
+            } else if (this.players[id].health < 150) {
+                engine_flames = 2;
+            } else if (this.players[id].health < 250) {
+                engine_flames = 1;
+            }
+            this.ctx.beginPath();
+            var r = Math.round(150+Math.random() * 55);
+            this.ctx.strokeStyle = 'rgb('+r+','+r+',0)';
+            // engine_flames = 4;
+            var y_lookup = [30, 15, -15, -30];
+            for (let f=0;f<engine_flames;f++){
+                for (let l=0;l<5; l++) {
+                    this.ctx.moveTo(-40 + Math.random()*8-4,
+                                    y_lookup[f] + Math.random()*10-5);
+                    this.ctx.lineTo(-19 + Math.random()*8-4,
+                                    y_lookup[f]+ Math.random()*4-2);
+                }
+            }
+            this.ctx.stroke();
+
             this.ctx.restore();
         }
             // shipWireframe.draw (this.ctx,
-            //                     this.engine.players[id].position.x,
-            //                     this.engine.players[id].position.y,
-            //                     this.engine.players[id].angle);
+            //                     this.players[id].position.x,
+            //                     this.players[id].position.y,
+            //                     this.players[id].angle);
         else
             this.drawExplosion(this.ctx,
-                               this.engine.players[id].position.x,
-                               this.engine.players[id].position.y);
+                               this.players[id].position.x,
+                               this.players[id].position.y);
     }
+
+    // var alpha = 0.90;
+    // var fadein = 20.0;
+    // var fadeout = 50.0;
+    // for (let i=0; i<this.engine.smoke.length; i++) {
+    //     var s = this.engine.smoke[i];
+    //     var dur = this.engine.config.smoke.duration + this.engine.smoke[i].tick - this.engine.ticks;
+    //     if (dur < 0) continue;
+    //     else if (dur < fadeout)
+    //         this.ctx.globalAlpha = dur / fadeout * alpha;
+    //     else if (dur > this.engine.config.smoke.duration - fadein) {
+    //         this.ctx.globalAlpha =  alpha * (this.engine.config.smoke.duration-dur) / fadein;
+    //         // this.ctx.globalAlpha = alpha - (this.engine.config.smoke.duration - dur) / fadein * alpha;
+    //     } else
+    //             this.ctx.globalAlpha = alpha;
+    //     this.ctx.save();
+    //     this.ctx.translate(s.position.x, s.position.y);
+    //     this.ctx.rotate(dur/300);
+    //     this.ctx.translate(-g_images.smoke.width/2, -g_images.smoke.height/2);
+    //     this.ctx.drawImage(g_images.smoke,
+    //                        // -g_images.smoke.width/2 + s.position.x + s.velocity.x * (s.ticks-this.engine.ticks),
+    //                        // g_images.smoke.height/2 + s.position.y + s.velocity.y * (s.ticks-this.engine.ticks));
+    //                        0,
+    //                        0);
+    //     this.ctx.restore();
+
+    // }
+    // this.ctx.globalAlpha = 1;
 
     this.ctx.restore();
 };
 
-WebClient.prototype.update = function (t) {
+WebClient.prototype.gameLogicUpdate = function () {
+    var t = new Date().getTime();
     this.dt = this.lastUpdateTime ? (t - this.lastUpdateTime) : 1000/60.0;
     this.lastUpdateTime = t;
+    this.ticks += 1;
 
-    this.processKbdInput();
     this.processServerUpdates();
-    this.drawGameState();
+    this.processKbdInput();
 
-    this.updateid = window.requestAnimationFrame( this.update.bind(this), this.canvas );
+    this.placeMovementRequest();
+    this.stepPlayer(this.players[this.id]);
+
+    this.lerpOtherPlayers();
+};
+
+WebClient.prototype.updateDisplay = function (t) {
+    this.drawGameState();
+    this.updateid = window.requestAnimationFrame( this.updateDisplay.bind(this), this.canvas );
 };

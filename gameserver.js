@@ -54,7 +54,8 @@ GameServer.prototype.getConnectPayload = function (client) {
                               this.engine.players[k].position.x,
                               this.engine.players[k].position.y,
                               this.engine.players[k].angle,
-                              this.engine.players[k].speed];
+                              this.engine.players[k].speed,
+                              this.engine.players[k].water];
     }
     return payload;
 };
@@ -138,7 +139,7 @@ GameServer.prototype.stopGameTickTimer = function () {
 }
 
 GameServer.prototype.startServerUpdates = function () {
-    this.serverUpdateTimer = setInterval(this.sendServerUpdate.bind(this), 45);
+    this.serverUpdateTimer = setInterval(this.sendServerUpdate.bind(this), 100); // 45
 };
 
 GameServer.prototype.stopServerUpdates = function () {
@@ -147,6 +148,7 @@ GameServer.prototype.stopServerUpdates = function () {
 
 GameServer.prototype.sendServerUpdate = function () {
     var full = {};
+    full.t = this.engine.ticks;
     full.p = {};
     for (let k in this.players) {
         full.p[k] = [this.engine.players[k].alive?1:0,
@@ -154,40 +156,20 @@ GameServer.prototype.sendServerUpdate = function () {
                      this.engine.players[k].position.y,
                      this.engine.players[k].angle,
                      this.engine.players[k].speed,
-                     this.engine.players[k].turnFlag];
+                     this.engine.players[k].turnFlag,
+                     this.engine.players[k].water];
     }
     full.m = new Array(this.engine.mapUpdates.length);
     for (let i=0; i<this.engine.mapUpdates.length; i++) {
         full.m[i] = [this.engine.mapUpdates[i], this.engine.map[this.engine.mapUpdates[i]]];
     }
-    // full.f = new Array(this.engine.fortresses.length);
-    // for (let i =0;i<this.engine.fortresses.length; i++) {
-    //     full.f[i] = [this.engine.fortresses[i].alive?1:0,
-    //                    this.engine.fortresses[i].position.x,
-    //                    this.engine.fortresses[i].position.y,
-    //                    this.engine.fortresses[i].angle];
-    // }
-    // full.m = new Array(this.engine.missiles.length);
-    // for (let i =0;i<this.engine.missiles.length; i++) {
-    //     full.m[i] = [this.engine.missiles[i].position.x,
-    //                  this.engine.missiles[i].position.y,
-    //                  this.engine.missiles[i].angle];
-    // }
-    // full.s = new Array(this.engine.shells.length);
-    // for (let i =0;i<this.engine.shells.length; i++) {
-    //     full.s[i] = [this.engine.shells[i].position.x,
-    //                  this.engine.shells[i].position.y,
-    //                  this.engine.shells[i].angle];
-    // }
-    // full.a = new Array(this.engine.asteroids.length);
-    // for (let i =0;i<this.engine.asteroids.length; i++) {
-    //     full.a[i] = [this.engine.asteroids[i].position.x,
-    //                  this.engine.asteroids[i].position.y,
-    //                  this.engine.asteroids[i].angle];
-    // }
+
     for (let k in this.players) {
+        full.lk = this.engine.players[k].lastKey;
         this.players[k].emit('serverupdate', full);
     }
+
+    this.engine.mapUpdates.length = 0;
 };
 
 exports.GameServer = GameServer;
