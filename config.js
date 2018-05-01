@@ -11,7 +11,9 @@ function Config() {
                    maxSpeed: 5,
                    collisionRadius: 10,
                    deathTimer: 120,
-                   health: 500};
+                   health: 500,
+                   maxWater: 50,
+                   waterFillRate: 7};
     this.fortress = { lockTime: 120,
                       smallHex: 40,
                       bigHex: 170,
@@ -25,10 +27,13 @@ function Config() {
                    speed: 1.5,
                    lifespan: 180};
     this.smoke = { duration: 1200 }; // 800
+    this.retardant = { duration: 70,
+                       durJitter: 40};
 
-    this.mapSize = 100;
-    this.mapCellSize = 20;
-    this.startFires = 30;
+    this.map = { resizeDuration: 30 * 60,
+                 cellSize: 20,
+                 startFires: 30 };
+
     this.serverUpdateBufferSize = 60;
 }
 

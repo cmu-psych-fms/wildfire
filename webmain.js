@@ -31,6 +31,10 @@ window.onload = function(){
     load_image('plane');
     load_image('grass');
     load_image('smoke');
+    load_image('watertankfull');
+    load_image('watertankempty');
+    load_image('flame');
+    load_image('flame2');
 
     imagesLoaded(g_jq, {}, start_game);
 };

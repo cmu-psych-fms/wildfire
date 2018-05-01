@@ -19,28 +19,33 @@ GameServer.prototype.readMap = function (file) {
     var data = fs.readFileSync(file);
     var png = PNG.sync.read(data);
 
+    this.engine.map.width = png.width;
+    this.engine.map.height = png.height;
+    this.engine.map.data = new Array(png.width * png.height);
+    this.engine.map.viewPort = {x: 100, y:100, w:100, h:100};
+
     for (let x=0; x<png.width; x++) {
         for (let y=0; y<png.height; y++) {
             var m = y*png.height+x;
             var idx = m << 2;
             if (png.data[idx] === 0 && png.data[idx+1] === 255 && png.data[idx+2] === 0) {
-                this.engine.map[m] = engine.MAP_TREE;
+                this.engine.map.data[m] = engine.MAP_TREE;
             } else if (png.data[idx] === 0 && png.data[idx+1] === 0 && png.data[idx+2] === 0) {
-                this.engine.map[m] = engine.MAP_GRASS;
+                this.engine.map.data[m] = engine.MAP_GRASS;
             } else if (png.data[idx] === 255 && png.data[idx+1] === 255 && png.data[idx+2] === 0) {
-                this.engine.map[m] = engine.MAP_HOUSE;
+                this.engine.map.data[m] = engine.MAP_HOUSE;
             } else if (png.data[idx] === 100 && png.data[idx+1] === 100 && png.data[idx+2] === 100) {
-                this.engine.map[m] = engine.MAP_HROAD;
+                this.engine.map.data[m] = engine.MAP_HROAD;
             } else if (png.data[idx] === 101 && png.data[idx+1] === 101 && png.data[idx+2] === 101) {
-                this.engine.map[m] = engine.MAP_VROAD;
+                this.engine.map.data[m] = engine.MAP_VROAD;
             } else if (png.data[idx] === 0 && png.data[idx+1] === 0 && png.data[idx+2] === 255) {
-                this.engine.map[m] = engine.MAP_WATER;
+                this.engine.map.data[m] = engine.MAP_WATER;
             } else if (png.data[idx] === 255 && png.data[idx+1] === 255 && png.data[idx+2] === 255) {
-                this.engine.map[m] = engine.MAP_ROCK;
+                this.engine.map.data[m] = engine.MAP_ROCK;
             } else if (png.data[idx] === 255 && png.data[idx+1] === 255 && png.data[idx+2] === 0) {
-                this.engine.map[m] = engine.MAP_HOUSE;
+                this.engine.map.data[m] = engine.MAP_HOUSE;
             } else {
-                this.engine.map[m] = engine.MAP_GRASS;
+                this.engine.map.data[m] = engine.MAP_GRASS;
             }
         }
     }
@@ -48,7 +53,9 @@ GameServer.prototype.readMap = function (file) {
 }
 
 GameServer.prototype.getConnectPayload = function (client) {
-    var payload = { id: client.userid, map: this.engine.map, players:{} };
+    var payload = { id: client.userid,
+                    map: this.engine.map,
+                    players:{} };
     for (let k in this.players) {
         payload.players[k] = [this.engine.players[k].alive?1:0,
                               this.engine.players[k].position.x,
@@ -159,9 +166,17 @@ GameServer.prototype.sendServerUpdate = function () {
                      this.engine.players[k].turnFlag,
                      this.engine.players[k].water];
     }
-    full.m = new Array(this.engine.mapUpdates.length);
-    for (let i=0; i<this.engine.mapUpdates.length; i++) {
-        full.m[i] = [this.engine.mapUpdates[i], this.engine.map[this.engine.mapUpdates[i]]];
+    full.m = new Array(this.engine.map.updates.length);
+    for (let i=0; i<this.engine.map.updates.length; i++) {
+        full.m[i] = [this.engine.map.updates[i], this.engine.map.data[this.engine.map.updates[i]]];
+    }
+
+    full.f = this.engine.map.fireUpdates;
+    full.r = this.engine.map.retardantUpdates;
+
+    if( this.engine.map.viewPortUpdated ) {
+        full.vp = this.engine.map.viewPort;
+        this.engine.map.viewPortUpdated = false;
     }
 
     for (let k in this.players) {
@@ -169,7 +184,9 @@ GameServer.prototype.sendServerUpdate = function () {
         this.players[k].emit('serverupdate', full);
     }
 
-    this.engine.mapUpdates.length = 0;
+    this.engine.map.updates.length = 0;
+    this.engine.map.fireUpdates.length = 0;
+    this.engine.map.retardantUpdates.length = 0;
 };
 
 exports.GameServer = GameServer;

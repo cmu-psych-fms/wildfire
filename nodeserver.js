@@ -45,7 +45,8 @@ var game_server = require('./gameserver.js');
 
 var server = new game_server.GameServer();
 
-server.readMap('sprites/map.png');
+// server.readMap('sprites/map.png');
+server.readMap('sprites/bigmap.png');
 
 sio.sockets.on('connection', function (client) {
     //Generate a new UUID, looks something like

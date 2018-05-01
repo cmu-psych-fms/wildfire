@@ -14,6 +14,11 @@ var MAP_ROCK = 7;
 var MAP_GRASS = 8;
 var MAP_VROAD = 9;
 var MAP_HROAD = 10;
+var MAP_RUNWAY = 11;
+
+var UPDATE_UPDATE = 0;
+var UPDATE_ADD = 1;
+var UPDATE_DEL = 2;
 
 var PLAYER_SERVER_UPDATE_KEYS = ['alive', ['position', 'x'], ['position', 'y'], 'speed', 'turnFlag'];
 
@@ -80,8 +85,17 @@ function GameEngine(config) {
     this.config = config;
     this.players = {};
     this.sparks = [];
-    this.map = new Array(this.config.mapSize * this.config.mapSize);
-    this.mapUpdates = [];
+    this.map = {width: 10,
+                height: 10,
+                viewPort: {x:0,y:0,w:10,h:10},
+                updates: [],
+                retardant: [],
+                retardantUpdates: [],
+                fire: [],
+                fireUpdates: [],
+                timeout: this.config.map.resizeDuration,
+                viewPortUpdated: false};
+    this.map.data = new Array(this.map.width * this.map.height);
     this.wind = {x:0, y:0};
     this.ticks = 0;
 }
@@ -89,112 +103,212 @@ function GameEngine(config) {
 GameEngine.prototype = {};
 
 GameEngine.prototype.mapAt = function (x,y) {
-    if (x>=0 && x < this.config.mapSize &&
-        y>=0 && y < this.config.mapSize)
-        return this.map[y*this.config.mapSize+x];
+    if (x>=0 && x < this.map.width &&
+        y>=0 && y < this.map.height)
+        return this.map.data[y*this.map.width+x];
 };
 
 GameEngine.prototype.mapSet = function (x,y,r) {
-    if (x>=0 && x < this.config.mapSize &&
-        y>=0 && y < this.config.mapSize) {
-        var idx = y*this.config.mapSize+x;
-        if (this.map[idx] !== r) {
-            this.map[idx] = r;
-            this.mapUpdates.push(idx);
+    if (x>=0 && x < this.map.width &&
+        y>=0 && y < this.map.height) {
+        var idx = y*this.map.width+x;
+        if (this.map.data[idx] !== r) {
+            this.map.data[idx] = r;
+            this.map.updates.push(idx);
         }
     }
 };
 
 GameEngine.prototype.createMap = function () {
-    for (let y=0; i<this.config.mapSize; i++) {
-        for (let x=0; i<this.config.mapSize; i++) {
-            this.map[y*this.config.mapSize + x] = 0;
+    for (let y=0; i<this.map.height; i++) {
+        for (let x=0; i<this.map.width; i++) {
+            this.map.data[y*this.map.width + x] = 0;
         }
     }
-};
-
-GameEngine.prototype.createMap = function () {
-    this.map = new Array(this.config.mapSize * this.config.mapSize);
 };
 
 GameEngine.prototype.startSomeFires = function () {
-    var n = this.config.startFires;
+    var n = this.config.map.startFires;
     for (let i=0; i<n; i++) {
-        var x = Math.round(Math.random()*this.config.mapSize);
-        var y = Math.round(Math.random()*this.config.mapSize);
+        var x = Math.round(Math.random()*this.map.viewPort.w) + this.map.viewPort.x;
+        var y = Math.round(Math.random()*this.map.viewPort.h) + this.map.viewPort.y;
         this.ignite(x,y);
         this.ignite(x+1,y);
         this.ignite(x,y+1);
         this.ignite(x-1,y);
         this.ignite(x,y-1);
     }
+    this.map.fireUpdates.length = 0;
 };
 
 GameEngine.prototype.stepOneTick = function () {
     this.ticks += 1;
     this.updatePlayers();
-    this.updateSparks();
+    this.updateRetardant();
     this.updateFires();
+
+    this.updateMapTimeout();
+};
+
+GameEngine.prototype.retardantCanBePlaced = function (x, y, batch) {
+    for (let i=0; i<batch.length; i++) {
+        if (batch[i].x === x &&
+            batch[i].y === y) {
+            return false;
+        }
+    }
+    return true;
+}
+
+GameEngine.prototype.retardantLevelAt = function (x, y) {
+    for (let i=0; i<this.map.retardant.length; i++) {
+        if (this.map.retardant[i].x === x &&
+            this.map.retardant[i].y === y) {
+            return this.map.retardant[i].level;
+        }
+    }
+    return 0;
+};
+
+GameEngine.prototype.retardantAt = function (x, y) {
+    for (let i=0; i<this.map.retardant.length; i++) {
+        if (this.map.retardant[i].x === x &&
+            this.map.retardant[i].y === y) {
+            return this.map.retardant[i];
+        }
+    }
+    return null;
+};
+
+GameEngine.prototype.addRetardant = function (x, y, batch) {
+    for (let i=0; i<batch.length; i++) {
+        if (batch[i].x === x &&
+            batch[i].y === y) {
+            return;
+        }
+    }
+
+    var timeout = this.ticks + this.config.retardant.duration + Math.floor(Math.random()*this.config.retardant.durJitter - this.config.retardant.durJitter/2);
+
+    for (let i=0; i<this.map.retardant.length; i++) {
+        if (this.map.retardant[i].x === x &&
+            this.map.retardant[i].y === y) {
+            var r = this.map.retardant[i];
+            r.amt += 1;
+            r.timeout = timeout;
+            this.map.retardantUpdates.push([UPDATE_UPDATE, r]);
+            batch.push(r);
+            return;
+        }
+    }
+    var r = {x:x, y:y, amt:1, timeout:timeout};
+    this.map.retardant.push (r);
+    this.map.retardantUpdates.push([UPDATE_ADD, r]);
+    batch.push(r);
 };
 
 GameEngine.prototype.ignite = function (x, y) {
     var m = this.mapAt(x,y);
-    if (m !== MAP_ROCK && m !== MAP_HROAD && m !== MAP_VROAD && m !== MAP_WATER && m !== MAP_ASH && m !== MAP_RETARDANT)
-        this.mapSet(x,y, MAP_FIRE);
+    if (m === MAP_ROCK ||
+        m === MAP_HROAD ||
+        m === MAP_VROAD ||
+        m === MAP_WATER ||
+        m === MAP_ASH ||
+        m === MAP_RETARDANT)
+        return;
+    for (let i=0; i<this.map.fire.length;i++)
+        if (this.map.fire[i].x === x &&
+            this.map.fire[i].y === y)
+            return;
+    var f = {x:x, y:y, level: 1};
+    this.map.fire.push(f);
+    this.map.fireUpdates.push([UPDATE_ADD, f]);
 }
 
-GameEngine.prototype.extinguish = function (x, y) {
-    var m = this.mapAt(x,y);
-    if (m === MAP_FIRE) {
-        this.mapSet(x,y, MAP_ASH);
-        return true;
-    }
-}
+GameEngine.prototype.extinguish = function (idx, reduction) {
+    var f = this.map.fire[idx];
+    f.level -= reduction;
+    // if (f.level < 0) {
+    this.map.fire.splice(idx, 1);
+    this.map.fireUpdates.push([UPDATE_DEL, f]);
+    // }
+};
 
-// GameEngine.prototype.addSmoke = function (x, y) {
-//     var s = {position: {x:x*this.config.mapCellSize,
-//                                 y:y*this.config.mapCellSize},
-//              velocity: {x: 0.1, y: Math.random()*0.1-0.05},
-//              tick: this.ticks};
-//     this.smoke.push(s);
-//     this.newSmoke.push(s);
-// }
-
-GameEngine.prototype.updateFires = function () {
-    var n = 2;
-    for (let i=0; i<n; i++) {
-        var x = Math.round(Math.random()*this.config.mapSize);
-        var y = Math.round(Math.random()*this.config.mapSize);
-        var m = this.mapAt(x,y);
-        if (m === MAP_FIRE) {
-            this.mapSet(x,y, MAP_ASH);
-            this.ignite(x+1,y);
-            this.ignite(x,y+1);
-            this.ignite(x-1,y);
-            this.ignite(x,y-1);
-        } if (m === MAP_RETARDANT) {
-            var r1 = this.extinguish(x+1,y);
-            var r2 = this.extinguish(x,y+1);
-            var r3 = this.extinguish(x-1,y);
-            var r4 = this.extinguish(x,y-1);
-            if (r1||r2||r3||r4) this.mapSet(x,y,MAP_GRASS);
+GameEngine.prototype.updateRetardant = function () {
+    for (let i=this.map.retardant.length-1; i>=0; i--) {
+        if (this.ticks >= this.map.retardant[i].timeout) {
+            var r = this.map.retardant[i];
+            this.map.retardant.splice(i,1);
+            this.map.retardantUpdates.push([UPDATE_DEL,r]);
+            var c = 0;
+            for (let j=this.map.fire.length-1; j>=0; j--) {
+                if (Math.abs(r.x-this.map.fire[j].x) <= 1 &&
+                    Math.abs(r.y-this.map.fire[j].y) <= 1) {
+                // if (r.x === this.map.fire[j].x &&
+                //     r.y === this.map.fire[j].y) {
+                    this.extinguish(j, r.amt);
+                    c += 1;
+                    // console.log('extinguished', r.x,r.y);
+                }
+            }
+            // console.log('howmany', c, r.x, r.y);
         }
     }
-    // for (let i=0; i<10; i++) {
-    //     var x = Math.round(Math.random()*this.config.mapSize);
-    //     var y = Math.round(Math.random()*this.config.mapSize);
-    //     var m = this.mapAt(x,y);
-    //     if (m === MAP_FIRE) {
-    //         this.addSmoke(x,y);
-    //         // this.smoke.push({position: {x:x*this.config.mapCellSize,
-    //         //                             y:y*this.config.mapCellSize},
-    //         //                  velocity: {x: 0.1, y: Math.random()*0.2-0.1}});
+};
+
+GameEngine.prototype.fireSanity = function (msg) {
+    var dups = 0;
+    for (let i=0; i<this.map.fire.length; i++)
+        for (let j=i+1; j<this.map.fire.length; j++) {
+            if (this.map.fire[i].x === this.map.fire[j].x &&
+                this.map.fire[i].y === this.map.fire[j].y)
+                dups += 1;
+        }
+    if (dups > 0)
+        console.log(msg, 'duplicate fires', dups);
+};
+
+GameEngine.prototype.updateFires = function () {
+    // this.fireSanity('');
+    if (this.map.fire.length > 0) {
+        var n = 1;
+        for (let i=0; i<n; i++) {
+            var idx = Math.floor(Math.random() * this.map.fire.length);
+            var f = this.map.fire[idx];
+            if (!f) console.log(this.map.fire.length, f, idx);
+            this.map.fire.splice(idx,1);
+            this.map.fireUpdates.push([UPDATE_DEL, f]);
+            this.mapSet(f.x, f.y, MAP_ASH);
+            this.ignite(f.x+1,f.y);
+            this.ignite(f.x,f.y+1);
+            this.ignite(f.x-1,f.y);
+            this.ignite(f.x,f.y-1);
+        }
+    }
+    //     } if (m === MAP_RETARDANT) {
+    //         var r1 = this.extinguish(f.x+1,f.y);
+    //         var r2 = this.extinguish(f.x,f.y+1);
+    //         var r3 = this.extinguish(f.x-1,f.y);
+    //         var r4 = this.extinguish(f.x,f.y-1);
+    //         if (r1||r2||r3||r4) this.mapSet(f.x, f.y, MAP_GRASS);
     //     }
     // }
 };
 
-GameEngine.prototype.updateSparks = function () {
-
+GameEngine.prototype.updateMapTimeout = function () {
+    if (this.ticks >= this.map.timeout) {
+        this.map.timeout = this.ticks + this.config.map.resizeDuration;
+        var amt = 50;
+        this.map.viewPort.x -= amt;
+        this.map.viewPort.y -= amt;
+        this.map.viewPort.w += amt*2;
+        this.map.viewPort.h += amt*2;
+        if (this.map.viewPort.x < 0) this.map.viewPort.x = 0;
+        if (this.map.viewPort.y < 0) this.map.viewPort.y = 0;
+        if (this.map.viewPort.w > this.map.width) this.map.viewPort.w = this.map.width;
+        if (this.map.viewPort.h > this.map.height) this.map.viewPort.h = this.map.height;
+        this.map.viewPortUpdated = true;
+    }
 };
 
 // GameEngine.prototype.updateSmoke = function () {
@@ -258,8 +372,14 @@ GameEngine.prototype.playerApplyMovement = function (p) {
         p.speed += 0.1;
         if (p.speed > this.config.player.maxSpeed) p.speed = this.config.player.maxSpeed;
     } else if (p.thrustFlag === 's') {
+        var mx = Math.round(p.position.x/this.config.map.cellSize),
+            my = Math.round(p.position.y/this.config.map.cellSize),
+            m = this.mapAt(mx, my);
         p.speed -= 0.1;
-        if (p.speed < 0) p.speed = 0;
+        var min;
+        if (m === MAP_RUNWAY) min = 0;
+        else min = 1;
+        if (p.speed < min) p.speed = min;
     }
 
     p.position.x += p.speed * Math.cos(deg2rad(p.angle));
@@ -267,13 +387,26 @@ GameEngine.prototype.playerApplyMovement = function (p) {
 };
 
 GameEngine.prototype.playerApplyDump = function (p) {
+    if (p.waterFillTimer > 0) p.waterFillTimer -= 1;
     if (p.dumpFlag) {
-        var mx = Math.round(p.position.x/this.config.mapCellSize),
-            my = Math.round(p.position.y/this.config.mapCellSize),
+        var mx = Math.round(p.position.x/this.config.map.cellSize),
+            my = Math.round(p.position.y/this.config.map.cellSize),
             m = this.mapAt(mx, my);
-        if (m !== MAP_WATER && m !== MAP_ROCK) {
-            this.mapSet(mx, my, MAP_RETARDANT);
+        if (m === MAP_WATER) {
+            if (p.waterFillTimer <= 0 && p.speed < 2) {
+                p.water += 1;
+                p.waterFillTimer = p.config.waterFillRate;
+            }
+            if (p.water > p.config.maxWater)
+                p.water = p.config.maxWater;
+        } else if (p.water > 0 &&
+                   this.retardantCanBePlaced(mx,my,p.retardantBatch)) {
+            this.addRetardant(mx, my, p.retardantBatch);
+            p.water -= 1;
+            if (p.water < 0) p.water = 0;
         }
+    } else {
+        p.retardantBatch.length = 0;
     }
 };
 
@@ -299,9 +432,9 @@ GameEngine.prototype.updatePlayer = function (p) {
         }
 
         // if (p.position.x < 0 ||
-        //     p.position.x > this.config.mapSize * this.config.mapCellSize ||
+        //     p.position.x > this.map.width * this.config.map.cellSize ||
         //     p.position.y < 0 ||
-        //     p.position.y > this.config.mapSize * this.config.mapCellSize) {
+        //     p.position.y > this.map.height * this.config.map.cellSize) {
         //     this.killPlayer(p);
         // }
     } else {
@@ -321,18 +454,21 @@ GameEngine.prototype.updatePlayers = function () {
 GameEngine.prototype.addPlayer = function (id) {
     this.players[id] = {id: id,
                         angle: this.config.player.startAngle,
-                        position: {x: this.config.player.startPosition.x,
-                                   y: this.config.player.startPosition.y},
+                        position: {x: this.map.width * this.config.map.cellSize / 2,
+                                   y: this.map.height * this.config.map.cellSize / 2},
+
                         speed: 0,
                         config: this.config.player,
                         turnFlag: 0,
                         thrustFlag: 0,
-                        water: 100,
+                        water: this.config.player.maxWater,
+                        waterFillTimer: 0,
                         spawnTimer: 0,
                         alive: true,
                         health: this.config.player.health,
                         lastKey: {seq: null, tick: null},
-                        outstandingMovementRequests: []
+                        outstandingMovementRequests: [],
+                        retardantBatch: []
                        };
 };
 
@@ -347,8 +483,8 @@ GameEngine.prototype.delPlayer = function (id) {
 GameEngine.prototype.killPlayer = function (p) {
     p.alive = false;
     p.spawnTimer = 0;
-    this.ignite(Math.round(p.position.x/this.config.mapCellSize),
-                Math.round(p.position.y/this.config.mapCellSize));
+    this.ignite(Math.round(p.position.x/this.config.map.cellSize),
+                Math.round(p.position.y/this.config.map.cellSize));
 };
 
 

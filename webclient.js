@@ -44,7 +44,7 @@ function WebClient (engine) {
     this.movementRequests = [];
     this.curMovementRequestSeq = 0;
 
-    this.mapChangePredictions = [];
+    this.retardantPredictions = [];
 
     this.map_images = new Array(10);
     this.map_images[MAP_FIRE] = g_images['fire'];
@@ -76,6 +76,7 @@ WebClient.prototype.connect = function () {
     this.network.socket.on('join', this.onPlayerJoin.bind(this));
     this.network.socket.on('part', this.onPlayerPart.bind(this));
     this.network.socket.on('reset', this.onReset.bind(this));
+    this.network.socket.on('viewport', this.onViewPort.bind(this));
 };
 
 WebClient.prototype.begin = function () {
@@ -137,10 +138,7 @@ WebClient.prototype.onKeyUp = function (ev) {
 
 WebClient.prototype.onReset = function (data) {
     for (let k in data.players) {
-        this.engine.players[k].alive = true;
-        this.engine.players[k].position.x = data.players[k][0];
-        this.engine.players[k].position.y = data.players[k][1];
-        this.engine.players[k].angle = data.players[k][2];
+        this.initPlayer(k);
     }
     this.engine.map = data.map;
 };
@@ -252,6 +250,7 @@ WebClient.prototype.onConnect = function (data) {
     }
     // this.engine.smoke = data.smoke;
     this.engine.map = data.map;
+    console.log('map', this.engine.map.width, this.engine.map.height, this.engine.map.fire.length);
 
     this.startGameTickTimer();
 
@@ -306,6 +305,10 @@ WebClient.prototype.onServerUpdate = function (data) {
     if (this.network.serverUpdates.length >= this.engine.config.serverUpdateBufferSize) {
         this.network.serverUpdates.splice(0,1);
     }
+};
+
+WebClient.prototype.onViewPort = function (data) {
+    this.engine.map.viewPort = data;
 };
 
 WebClient.prototype.processKbdInput = function () {
@@ -376,21 +379,22 @@ WebClient.prototype.interpolatePlayer = function (p) {
     }
 };
 
-WebClient.prototype.mapAtUnsafe = function (x, y) {
-    var r = this.engine.map[y*this.engine.config.mapSize+x];
-    for (let i=0; i<this.mapChangePredictions.length; i++) {
-        if (this.mapChangePredictions[i][0] === x &&
-            this.mapChangePredictions[i][1] === y)
-            r = this.mapChangePredictions[i][2];
-    }
-    return r;
-};
+// WebClient.prototype.mapAtUnsafe = function (x, y) {
+//     var r = this.engine.map.data[y*this.engine.map.width+x];
+//     for (let i=0; i<this.mapChangePredictions.length; i++) {
+//         if (this.mapChangePredictions[i][0] === x &&
+//             this.mapChangePredictions[i][1] === y)
+//             r = this.mapChangePredictions[i][2];
+//     }
+//     return r;
+// };
 
-WebClient.prototype.addMapChange = function (x, y, r) {
-    if (x>=0 && x < this.engine.config.mapSize &&
-        y>=0 && y < this.engine.config.mapSize &&
-        this.mapAtUnsafe(x,y) !== r) {
-        this.mapChangePredictions.push([x, y, r]);
+WebClient.prototype.addRetardant = function (x, y) {
+    if (x>=0 && x < this.engine.map.width &&
+        y>=0 && y < this.engine.map.height) {
+        var m = this.engine.mapAt(x,y);
+        if (m !== MAP_WATER)
+            this.retardantPredictions.push([x, y]);
     }
 };
 
@@ -399,12 +403,10 @@ WebClient.prototype.stepPlayer = function (p) {
         this.engine.playerApplyMovement(p);
 
         if (p.dumpFlag) {
-            var mx = Math.round(p.position.x/this.engine.config.mapCellSize),
-                my = Math.round(p.position.y/this.engine.config.mapCellSize),
-                m = this.engine.mapAt(mx, my);
-            if (m !== MAP_WATER && m !== MAP_ROCK) {
-                this.addMapChange(mx, my, MAP_RETARDANT);
-            }
+            var mx = Math.round(p.position.x/this.engine.config.map.cellSize),
+                my = Math.round(p.position.y/this.engine.config.map.cellSize);
+                // m = this.engine.mapAt(mx, my);
+            this.addRetardant(mx, my);
         }
     }
 }
@@ -428,7 +430,61 @@ WebClient.prototype.processServerUpdates = function () {
         for (let i=0; i<this.network.serverUpdates.length; i++) {
             var mapUpdates = this.network.serverUpdates[i].m;
             for (let i=0; i<mapUpdates.length;i++) {
-                this.engine.map[mapUpdates[i][0]] = mapUpdates[i][1];
+                this.engine.map.data[mapUpdates[i][0]] = mapUpdates[i][1];
+            }
+
+            // this.engine.fireSanity('before');
+
+            var fireUpdates = this.network.serverUpdates[i].f;
+            for (let i=0; i<fireUpdates.length;i++) {
+                var f = fireUpdates[i][1];
+                if (fireUpdates[i][0] === UPDATE_ADD) {
+                    this.engine.map.fire.push(f);
+                } else {
+                    for (let j=this.engine.map.fire.length-1; j>=0; j--) {
+                        if (f.x === this.engine.map.fire[j].x &&
+                            f.y === this.engine.map.fire[j].y) {
+                            if (fireUpdates[i][0] === UPDATE_DEL) {
+                                this.engine.map.fire.splice(j,1);
+                            } else if (fireUpdates[i][0] === UPDATE_UPDATE) {
+                                this.engine.map.fire[j] = f;
+                            } else {
+                                console.log("no action for fire update", fireUpdates[i]);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // this.engine.fireSanity('after');
+
+            var retardantUpdates = this.network.serverUpdates[i].r;
+            for (let i=0; i<retardantUpdates.length;i++) {
+                var f = retardantUpdates[i][1];
+                if (retardantUpdates[i][0] === UPDATE_ADD) {
+                    this.engine.map.retardant.push(f);
+                } else {
+                    for (let j=0; j<this.engine.map.retardant.length; j++) {
+                        if (f.x === this.engine.map.retardant[j].x &&
+                            f.y === this.engine.map.retardant[j].y) {
+                            if (retardantUpdates[i][0] === UPDATE_DEL) {
+                                this.engine.map.retardant.splice(j,1);
+                            } else if (retardantUpdates[i][0] === UPDATE_UPDATE) {
+                                this.engine.map.retardant[j] = retardantUpdates[i][1];
+                            } else {
+                                console.log("no action for retardant update", retardantUpdates[i]);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+
+            if (typeof this.network.serverUpdates[i].vp !== 'undefined') {
+                this.engine.map.viewPort = this.network.serverUpdates[i].vp;
+                console.log('view port updated', this.engine.map.viewPort);
             }
         }
         var last = this.network.serverUpdates[this.network.serverUpdates.length-1];
@@ -453,7 +509,7 @@ WebClient.prototype.processServerUpdates = function () {
                 break;
             }
         }
-        this.mapChangePredictions.length = 0;
+        this.retardantPredictions.length = 0;
 
         this.players[this.id].backup_x = this.players[this.id].position.x;
         this.players[this.id].backup_y = this.players[this.id].position.y;
@@ -465,6 +521,9 @@ WebClient.prototype.processServerUpdates = function () {
         this.replayPlayerKeys();
 
         this.network.serverUpdates.length = 0;
+
+    // console.log('fire', this.engine.map.fire.length, 'retardant', this.engine.map.retardant.length);
+
     }
 };
 
@@ -494,52 +553,83 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.translate(-this.players[this.id].position.x+this.canvas.width/2,
                        -this.players[this.id].position.y+this.canvas.height/2);
     // this.ctx.strokeStyle = '#003300';
-    var maxx = this.engine.config.mapSize * this.engine.config.mapCellSize;
-    var maxy = this.engine.config.mapSize * this.engine.config.mapCellSize;
-    // for (let x=0; x<this.engine.config.mapSize; x++) {
-    //     this.ctx.moveTo(x*this.engine.config.mapCellSize, 0);
-    //     this.ctx.lineTo(x*this.engine.config.mapCellSize, maxy);
+    var maxx = this.engine.map.width * this.engine.config.map.cellSize;
+    var maxy = this.engine.map.height * this.engine.config.map.cellSize;
+    // for (let x=0; x<this.engine.mapWidth; x++) {
+    //     this.ctx.moveTo(x*this.engine.config.map.cellSize, 0);
+    //     this.ctx.lineTo(x*this.engine.config.map.cellSize, maxy);
     // }
-    // for (let y=0; y<this.engine.config.mapSize; y++) {
-    //     this.ctx.moveTo(0, y*this.engine.config.mapCellSize);
-    //     this.ctx.lineTo(maxx, y*this.engine.config.mapCellSize);
+    // for (let y=0; y<this.engine.mapHeight; y++) {
+    //     this.ctx.moveTo(0, y*this.engine.config.map.cellSize);
+    //     this.ctx.lineTo(maxx, y*this.engine.config.map.cellSize);
     // }
     // this.ctx.stroke();
-    this.ctx.lineWidth = 4;
-    this.ctx.strokeStyle = '#00AA00';
-    this.ctx.strokeRect(-2, -2, maxx+4, maxy+4);
-    this.ctx.lineWidth = 1;
 
-    var startx = Math.round((this.players[this.id].position.x - this.canvas.width/2)/this.engine.config.mapCellSize);
-    var starty = Math.round((this.players[this.id].position.y - this.canvas.height/2)/this.engine.config.mapCellSize);
-    var endx = startx+Math.round(this.canvas.width/this.engine.config.mapCellSize);
-    var endy = starty+Math.round(this.canvas.height/this.engine.config.mapCellSize);
+    var startx = Math.round((this.players[this.id].position.x - this.canvas.width/2)/this.engine.config.map.cellSize);
+    var starty = Math.round((this.players[this.id].position.y - this.canvas.height/2)/this.engine.config.map.cellSize);
+    var endx = startx+Math.round(this.canvas.width/this.engine.config.map.cellSize);
+    var endy = starty+Math.round(this.canvas.height/this.engine.config.map.cellSize);
+
     if (startx < 0) startx = 0;
     if (starty < 0) starty = 0;
-    if (endx >= this.engine.config.mapSize) endx = this.engine.config.mapSize-1;
-    if (endy >= this.engine.config.mapSize) endy = this.engine.config.mapSize-1;
+    if (endx >= this.engine.mapWidth) endx = this.engine.mapWidth-1;
+    if (endy >= this.engine.mapHeight) endy = this.engine.mapHeight-1;
+
+    if (startx < this.engine.map.viewPort.x) startx = this.engine.map.viewPort.x;
+    if (starty < this.engine.map.viewPort.y) starty = this.engine.map.viewPort.y;
+    if (endx >= this.engine.map.viewPort.x + this.engine.map.viewPort.w) endx = this.engine.map.viewPort.x + this.engine.map.viewPort.w;
+    if (endy >= this.engine.map.viewPort.y + this.engine.map.viewPort.h) endy = this.engine.map.viewPort.y + this.engine.map.viewPort.h;
+
+
+    // console.log(startx, endx, starty, endy);
 
     for (let y=starty; y<=endy; y++) {
         for (let x=startx; x<=endx; x++) {
-            var m = this.map_images[this.engine.map[y*this.engine.config.mapSize+x]];
-            if (!m) console.log(this.engine.map[y*this.engine.config.mapSize+x]);
+            var m = this.map_images[this.engine.map.data[y*this.engine.map.width+x]];
+            if (!m) console.log(this.engine.map.data[y*this.engine.map.width+x], x, y);
             this.ctx.drawImage(m,
-                               x * this.engine.config.mapCellSize,
-                               y * this.engine.config.mapCellSize);
-        }
-    }
-    for (let i=0; i<this.mapChangePredictions.length; i++) {
-        if (this.mapChangePredictions[i][0] >= startx &&
-            this.mapChangePredictions[i][0] <= endx &&
-            this.mapChangePredictions[i][1] >= starty &&
-            this.mapChangePredictions[i][1] <= endy) {
-            var m = this.map_images[this.mapChangePredictions[i][2]];
-            this.ctx.drawImage(m,
-                               this.mapChangePredictions[i][0] * this.engine.config.mapCellSize,
-                               this.mapChangePredictions[i][1] * this.engine.config.mapCellSize);
+                               x * this.engine.config.map.cellSize,
+                               y * this.engine.config.map.cellSize);
         }
     }
 
+    // Map Border
+    this.ctx.lineWidth = 4;
+    this.ctx.strokeStyle = '#00AA00';
+    this.ctx.strokeRect(this.engine.map.viewPort.x*this.engine.config.map.cellSize-2, this.engine.map.viewPort.y*this.engine.config.map.cellSize-2, (this.engine.map.viewPort.w+1)*this.engine.config.map.cellSize+4, (this.engine.map.viewPort.h+1)*this.engine.config.map.cellSize+4);
+    this.ctx.lineWidth = 1;
+
+
+    // Fire
+    for (let i=0; i<this.engine.map.fire.length; i++) {
+        this.ctx.drawImage(Math.random() < 0.5 ? g_images['flame']:g_images['flame2'],
+                           this.engine.map.fire[i].x * this.engine.config.map.cellSize,
+                           this.engine.map.fire[i].y * this.engine.config.map.cellSize);
+    }
+
+    for (let i=0; i<this.engine.map.retardant.length; i++) {
+        this.ctx.drawImage(this.map_images[MAP_RETARDANT],
+                           this.engine.map.retardant[i].x * this.engine.config.map.cellSize,
+                           this.engine.map.retardant[i].y * this.engine.config.map.cellSize);
+    }
+
+    this.ctx.strokeStyle = "#FF0000";
+    this.ctx.lineWidth = 2;
+    for (let i=0; i<this.retardantPredictions.length; i++) {
+        if (this.retardantPredictions[i][0] >= startx &&
+            this.retardantPredictions[i][0] <= endx &&
+            this.retardantPredictions[i][1] >= starty &&
+            this.retardantPredictions[i][1] <= endy) {
+            this.ctx.drawImage(this.map_images[MAP_RETARDANT],
+                               this.retardantPredictions[i][0] * this.engine.config.map.cellSize,
+                               this.retardantPredictions[i][1] * this.engine.config.map.cellSize);
+            this.ctx.strokeRect(this.retardantPredictions[i][0] * this.engine.config.map.cellSize,
+                                this.retardantPredictions[i][1] * this.engine.config.map.cellSize,
+                                this.engine.config.map.cellSize,
+                                this.engine.config.map.cellSize);
+        }
+    }
+    this.ctx.lineWidth = 1;
 
     for (let id in this.players) {
         if (this.players[id].alive) {
@@ -614,6 +704,29 @@ WebClient.prototype.drawGameState = function () {
     // this.ctx.globalAlpha = 1;
 
     this.ctx.restore();
+
+    // HUD
+
+    var water_w = 200;
+    this.ctx.strokeStyle = "#3333FF";
+    this.ctx.strokeRect(10, 10, water_w, 20);
+    this.ctx.fillStyle = "#AAAAFF";
+    this.ctx.fillRect(10, 11, water_w, 18);
+    this.ctx.fillStyle = "#3333FF";
+    this.ctx.fillRect(10, 11, water_w * this.players[this.id].water / this.engine.config.player.maxWater , 18);
+
+    // for (let i=1; i<= this.engine.config.player.maxWater; i++) {
+    //     var full = i<=this.players[this.id].water;
+    //     if (full)
+    //         this.ctx.fillRect();
+    //     else
+    //         this.ctx.fillRect();
+    //     this.ctx.drawImage( ? g_images['watertankfull']:g_images['watertankempty'],
+    //                        2 + (i-1)*(g_images['watertankfull'].width+3),
+    //                        5);
+    // }
+
+
 };
 
 WebClient.prototype.gameLogicUpdate = function () {
