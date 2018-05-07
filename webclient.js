@@ -39,6 +39,16 @@ function WebClient (engine) {
 
     this.ticks = 0;
 
+    this.keyState = {KEY_LEFT: 0,
+                     KEY_RIGHT: 0,
+                     KEY_UP: 0,
+                     KEY_DOWN: 0,
+                     KEY_SPACE: 0,
+                     KEY_WP_WATER: 0,
+                     KEY_WP_HOUS: 0,
+                     KEY_WP_FIRE: 0,
+                     KEY_WP_UNKNOWN: 0};
+
     this.keyEvents = [];
 
     this.movementRequests = [];
@@ -104,6 +114,12 @@ WebClient.prototype.decodeKeyCode = function(which) {
         return KEY_DOWN;
     else if (which === 32)
         return KEY_SPACE;
+    else if (which === 49)
+        return KEY_WP_WATER;
+    else if (which === 50)
+        return KEY_WP_HOUSE;
+    else if (which === 51)
+        return KEY_WP_FIRE;
     else
         return undefined;
 };
@@ -119,20 +135,26 @@ WebClient.prototype.onKeyDown = function (ev) {
     if (ev.which === 27) this.cancelUpdates();
     var k = this.decodeKeyCode(ev.which);
     if (k) {
-        this.network.hasNewInput = true;
-        this.keyEvents.push([1, k]);
+        if (!this.keyState[k]) {
+            this.network.hasNewInput = true;
+            this.keyEvents.push([1, k]);
+        }
         ev.preventDefault();
         ev.stopPropagation();
+        this.keyState[k] = 1;
     }
 };
 
 WebClient.prototype.onKeyUp = function (ev) {
     var k = this.decodeKeyCode(ev.which);
     if (k) {
-        this.network.hasNewInput = true;
-        this.keyEvents.push([0, k]);
+        if (this.keyState[k]) {
+            this.network.hasNewInput = true;
+            this.keyEvents.push([0, k]);
+        }
         ev.preventDefault();
         ev.stopPropagation();
+        this.keyState[k] = 0;
     }
 };
 
@@ -180,6 +202,7 @@ WebClient.prototype.initPlayer = function (k) {
                         turnFlag: 0,
                         thrustFlag: 0,
                         dumpFlag: 0,
+                        wayPointFlags: [],
                         config: this.engine.config.player
                       };
 };
@@ -356,11 +379,13 @@ WebClient.prototype.placeMovementRequest = function () {
         this.curMovementRequestSeq += 1;
         // this.keyEventsTick = this.ticks;
         // var k = {seq:this.keyEventsSeq, tick: this.ticks, events:this.keyEvents};
-        var k = [ this.curMovementRequestSeq, p.turnFlag, p.thrustFlag, p.dumpFlag ]
+        if (p.wayPointFlags.length > 0) console.log(p.wayPointsFlags);
+        var k = [ this.curMovementRequestSeq, p.turnFlag, p.thrustFlag, p.dumpFlag, p.wayPointFlags ];
         // console.log(k);
         this.movementRequests.push(k);
         var packet = 'k' + JSON.stringify(k);
         this.network.socket.send (packet);
+        p.wayPointFlags.length = 0;
     }
 };
 
@@ -482,6 +507,28 @@ WebClient.prototype.processServerUpdates = function () {
             }
 
 
+            var wayPointUpdates = this.network.serverUpdates[i].wp;
+            for (let i=0; i<wayPointUpdates.length;i++) {
+                var wp = wayPointUpdates[i][1];
+                if (wayPointUpdates[i][0] === UPDATE_ADD) {
+                    this.engine.map.wayPoints.push(wp);
+                } else {
+                    for (let j=0; j<this.engine.map.retardant.length; j++) {
+                        if (wp.x === this.engine.map.retardant[j].x &&
+                            wp.y === this.engine.map.retardant[j].y) {
+                            if (wayPointUpdates[i][0] === UPDATE_DEL) {
+                                this.engine.map.wayPoints.splice(j,1);
+                            } else if (wayPointUpdates[i][0] === UPDATE_UPDATE) {
+                                this.engine.map.wayPoints[j] = wayPointUpdates[i][1];
+                            } else {
+                                console.log("no action for waypoint update", wayPointUpdates[i]);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
             if (typeof this.network.serverUpdates[i].vp !== 'undefined') {
                 this.engine.map.viewPort = this.network.serverUpdates[i].vp;
                 console.log('view port updated', this.engine.map.viewPort);
@@ -545,6 +592,121 @@ WebClient.prototype.drawExplosion = function(ctx, x, y) {
     ctx.beginPath();
     ctx.arc(x, y, 7, 0, Math.PI*2, false);
     ctx.stroke();
+};
+
+WebClient.prototype.HUDDirection = function (from, to) {
+    var a = stdAngle(angleTo(from, to));
+    var p1 = {x:this.canvas.width/2, y:this.canvas.height/2};
+    var p2 = {x:p1.x + Math.cos(deg2rad(a)),
+              y:p1.y + Math.sin(deg2rad(a))};
+    var p3, p4;
+
+    var corners = [rad2deg(Math.atan2(this.canvas.height/2,this.canvas.width/2)),
+                   rad2deg(Math.atan2(this.canvas.height/2,-this.canvas.width/2)),
+                   stdAngle(rad2deg(Math.atan2(-this.canvas.height/2,-this.canvas.width/2))),
+                   stdAngle(rad2deg(Math.atan2(-this.canvas.height/2,this.canvas.width/2)))];
+
+    // console.log(corners);
+
+    // start_a = 45;
+
+    var x,y;
+    // console.log(a);
+    if (a <= corners[0]) {
+        p3 = {x:this.canvas.width-5, y: 5};
+        p4 = {x:this.canvas.width-5, y: this.canvas.height-5};
+    } else if (a <= corners[1]) {
+        p3 = {x:5, y: this.canvas.height-5};
+        p4 = {x:this.canvas.width-5, y: this.canvas.height-5};
+    } else if (a <= corners[2]) {
+        p3 = {x:5, y: 5};
+        p4 = {x:5, y: this.canvas.height-5};
+    } else if (a <= corners[3]) {
+        p3 = {x:5, y:5};
+        p4 = {x:this.canvas.width-5, y:5};
+    } else {
+        p3 = {x:this.canvas.width-5, y:5};
+        p4 = {x:this.canvas.width-5, y:this.canvas.height-5};
+    }
+    return lines_intersection_point(p1,p2,p3,p4)[1];
+};
+
+WebClient.prototype.drawWayPointsOnMap = function () {
+    for (let i=0; i<this.engine.map.wayPoints.length; i++) {
+        if (Math.abs(this.players[this.id].position.x - this.engine.map.wayPoints[i].x) < this.canvas.width/2 &&
+            Math.abs(this.players[this.id].position.y - this.engine.map.wayPoints[i].y) < this.canvas.height/2) {
+            var letter;
+            switch(this.engine.map.wayPoints[i].type) {
+            case MAP_WATER:
+                this.ctx.fillStyle = "#3333FF";
+                letter = "WATER";
+                break;
+            case MAP_HOUSE:
+                this.ctx.fillStyle = "#BB9900";
+                letter = "HILL";
+                break;
+            case MAP_FIRE:
+                this.ctx.fillStyle = "#FFFF00";
+                letter = "FIRE";
+                break;
+            default:
+                this.ctx.fillStyle = "#FFFFFF";
+                letter = "????";
+                break;
+            }
+            var x = this.engine.map.wayPoints[i].x,
+                y = this.engine.map.wayPoints[i].y;
+            var w = 40, h=20;
+            this.ctx.beginPath();
+            this.ctx.moveTo(x-w,y-h*3);
+            this.ctx.lineTo(x+w,y-h*3);
+            this.ctx.lineTo(x+w,y-h);
+            this.ctx.lineTo(x+w*1/3,y-h);
+            this.ctx.lineTo(x,y);
+            this.ctx.lineTo(x-w/3,y-h);
+            this.ctx.lineTo(x-w,y-h);
+            this.ctx.globalAlpha = 0.6;
+            this.ctx.fill()
+            this.ctx.fillStyle = "#FFFFFF";
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(letter,
+                              this.engine.map.wayPoints[i].x,
+                              this.engine.map.wayPoints[i].y-h*2);
+            this.ctx.globalAlpha = 1;
+        }
+    }
+};
+
+WebClient.prototype.drawWayPointsOnHUD = function () {
+    for (let i=0; i<this.engine.map.wayPoints.length; i++) {
+        if (Math.abs(this.players[this.id].position.x - this.engine.map.wayPoints[i].x) < this.canvas.width/2 &&
+            Math.abs(this.players[this.id].position.y - this.engine.map.wayPoints[i].y) < this.canvas.height/2)
+            continue;
+        switch(this.engine.map.wayPoints[i].type) {
+        case MAP_WATER:
+            this.ctx.fillStyle = "#3333FF";
+            letter = "W";
+            break;
+        case MAP_HOUSE:
+            this.ctx.fillStyle = "#BB9900";
+            letter = "H";
+            break;
+        case MAP_FIRE:
+            this.ctx.fillStyle = "#FFFF00";
+            letter = "F";
+            break;
+        default:
+            this.ctx.fillStyle = "#FFFFFF";
+            letter = "?";
+            break;
+        }
+
+        var pos = this.HUDDirection(this.players[this.id].position, this.engine.map.wayPoints[i]);
+        this.ctx.beginPath();
+        this.ctx.arc(pos.x, pos.y, 5, 0, Math.PI*2);
+        this.ctx.fill();
+    }
 };
 
 WebClient.prototype.drawGameState = function () {
@@ -703,9 +865,12 @@ WebClient.prototype.drawGameState = function () {
     // }
     // this.ctx.globalAlpha = 1;
 
+    this.drawWayPointsOnMap();
+
     this.ctx.restore();
 
     // HUD
+    this.drawWayPointsOnHUD()
 
     var water_w = 200;
     this.ctx.strokeStyle = "#3333FF";
@@ -714,6 +879,8 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.fillRect(10, 11, water_w, 18);
     this.ctx.fillStyle = "#3333FF";
     this.ctx.fillRect(10, 11, water_w * this.players[this.id].water / this.engine.config.player.maxWater , 18);
+
+
 
     // for (let i=1; i<= this.engine.config.player.maxWater; i++) {
     //     var full = i<=this.players[this.id].water;

@@ -22,7 +22,7 @@ GameServer.prototype.readMap = function (file) {
     this.engine.map.width = png.width;
     this.engine.map.height = png.height;
     this.engine.map.data = new Array(png.width * png.height);
-    this.engine.map.viewPort = {x: 100, y:100, w:100, h:100};
+    this.engine.map.viewPort = {x: Math.floor(png.width/2)-50, y:Math.floor(png.height/2)-50, w:100, h:100};
 
     for (let x=0; x<png.width; x++) {
         for (let y=0; y<png.height; y++) {
@@ -173,6 +173,7 @@ GameServer.prototype.sendServerUpdate = function () {
 
     full.f = this.engine.map.fireUpdates;
     full.r = this.engine.map.retardantUpdates;
+    full.wp = this.engine.map.wayPointUpdates;
 
     if( this.engine.map.viewPortUpdated ) {
         full.vp = this.engine.map.viewPort;
@@ -187,6 +188,7 @@ GameServer.prototype.sendServerUpdate = function () {
     this.engine.map.updates.length = 0;
     this.engine.map.fireUpdates.length = 0;
     this.engine.map.retardantUpdates.length = 0;
+    this.engine.map.wayPointUpdates.length = 0;
 };
 
 exports.GameServer = GameServer;

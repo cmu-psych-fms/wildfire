@@ -3,6 +3,10 @@ var KEY_RIGHT = 2;
 var KEY_UP = 3;
 var KEY_DOWN = 4;
 var KEY_SPACE = 5;
+var KEY_WP_WATER = 6;
+var KEY_WP_HOUSE = 7;
+var KEY_WP_FIRE = 8;
+var KEY_WP_UNKNOWN = 9;
 
 var MAP_FIRE = 1;
 var MAP_ASH = 2;
@@ -21,6 +25,52 @@ var UPDATE_ADD = 1;
 var UPDATE_DEL = 2;
 
 var PLAYER_SERVER_UPDATE_KEYS = ['alive', ['position', 'x'], ['position', 'y'], 'speed', 'turnFlag'];
+
+// http://paulbourke.net/geometry/lineline2d/
+var LINES_PARALLEL = 0;
+var INTERSECTION_INSIDE = 1;
+var LINES_COINCIDE = 2;
+var INTERSECTION_OUTSIDE_SEG1 = 3;
+var INTERSECTION_OUTSIDE_SEG2 = 4;
+var INTERSECTION_OUTSIDE_BOTH = 5;
+function lines_intersection_point(p1, p2, p3, p4) {
+    var out;
+    var eps = 0.000000000001;
+
+    var denom  = (p4.y-p3.y) * (p2.x-p1.x) - (p4.x-p3.x) * (p2.y-p1.y);
+    var numera = (p4.x-p3.x) * (p1.y-p3.y) - (p4.y-p3.y) * (p1.x-p3.x);
+    var numerb = (p2.x-p1.x) * (p1.y-p3.y) - (p2.y-p1.y) * (p1.x-p3.x);
+
+    if ( (-eps < numera && numera < eps) &&
+         (-eps < numerb && numerb < eps) &&
+         (-eps < denom  && denom  < eps) ) {
+        out = {x:(p1.x + p2.x) * 0.5, y:(p1.y + p2.y) * 0.5};
+        return [LINES_COINCIDE, out];
+    }
+
+    if (-eps < denom  && denom  < eps) {
+	return [LINES_PARALLEL, null];
+    }
+
+    var mua = numera / denom;
+    var mub = numerb / denom;
+
+    out = {x:p1.x + mua * (p2.x - p1.x),
+           y: p1.y + mua * (p2.y - p1.y)};
+    var out1 = mua < 0 || mua > 1;
+    var out2 = mub < 0 || mub > 1;
+
+    if ( out1 & out2) {
+	return [INTERSECTION_OUTSIDE_BOTH, out];
+    } else if ( out1) {
+	return [INTERSECTION_OUTSIDE_SEG1, out];
+    } else if ( out2) {
+	return [INTERSECTION_OUTSIDE_SEG2, out];
+    } else {
+	return [INTERSECTION_INSIDE, out];
+    }
+}
+
 
 function angle_diff(angle1, angle2) {
     // It finally works--don't touch it!
@@ -94,7 +144,9 @@ function GameEngine(config) {
                 fire: [],
                 fireUpdates: [],
                 timeout: this.config.map.resizeDuration,
-                viewPortUpdated: false};
+                viewPortUpdated: false,
+                wayPoints: [],
+                wayPointUpdates: []};
     this.map.data = new Array(this.map.width * this.map.height);
     this.wind = {x:0, y:0};
     this.ticks = 0;
@@ -279,10 +331,12 @@ GameEngine.prototype.updateFires = function () {
             this.map.fire.splice(idx,1);
             this.map.fireUpdates.push([UPDATE_DEL, f]);
             this.mapSet(f.x, f.y, MAP_ASH);
-            this.ignite(f.x+1,f.y);
-            this.ignite(f.x,f.y+1);
-            this.ignite(f.x-1,f.y);
-            this.ignite(f.x,f.y-1);
+            if (Math.random() <= this.config.fire.spreadingOdds) {
+                this.ignite(f.x+1,f.y);
+                this.ignite(f.x,f.y+1);
+                this.ignite(f.x-1,f.y);
+                this.ignite(f.x,f.y-1);
+            }
         }
     }
     //     } if (m === MAP_RETARDANT) {
@@ -336,6 +390,9 @@ GameEngine.prototype.processPlayerKeysHelper = function (p, keys) {
             else if (keys[i][1] === KEY_UP) p.thrustFlag = 'f';
             else if (keys[i][1] === KEY_DOWN) p.thrustFlag = 's';
             else if (keys[i][1] === KEY_SPACE) p.dumpFlag = 1;
+            else if (keys[i][1] === KEY_WP_WATER) p.wayPointFlags.push(MAP_WATER);
+            else if (keys[i][1] === KEY_WP_HOUSE) p.wayPointFlags.push(MAP_HOUSE);
+            else if (keys[i][1] === KEY_WP_FIRE) p.wayPointFlags.push(MAP_FIRE);
         } else {
             if (keys[i][1] === KEY_LEFT || keys[i][1] === KEY_RIGHT) p.turnFlag = 0;
             else if (keys[i][1] === KEY_UP) p.thrustFlag = 0;
@@ -410,12 +467,26 @@ GameEngine.prototype.playerApplyDump = function (p) {
     }
 };
 
+GameEngine.prototype.playerApplyWaypoint = function (p, wp) {
+    var mx = Math.round(p.position.x/this.config.map.cellSize)*this.config.map.cellSize,
+        my = Math.round(p.position.y/this.config.map.cellSize)*this.config.map.cellSize;
+    var o = {tick: this.ticks,
+             type: wp,
+             x: mx,
+             y: my};
+    this.map.wayPoints.push(o);
+    this.map.wayPointUpdates.push([UPDATE_ADD, o]);
+};
+
 GameEngine.prototype.processOutstandingPlayerMovements = function (p) {
     for (let i=0; i<p.outstandingMovementRequests.length; i++) {
         p.lastKey.seq = p.outstandingMovementRequests[i][0];
         p.turnFlag = p.outstandingMovementRequests[i][1];
         p.thrustFlag = p.outstandingMovementRequests[i][2];
         p.dumpFlag = p.outstandingMovementRequests[i][3];
+        for (let j=0; j<p.outstandingMovementRequests[i][4].length; j++) {
+            this.playerApplyWaypoint(p, p.outstandingMovementRequests[i][4][j]);
+        }
         this.playerApplyMovement(p);
         this.playerApplyDump(p);
     }

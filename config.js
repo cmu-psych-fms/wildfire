@@ -13,7 +13,7 @@ function Config() {
                    deathTimer: 120,
                    health: 500,
                    maxWater: 50,
-                   waterFillRate: 7};
+                   waterFillRate: 1};
     this.fortress = { lockTime: 120,
                       smallHex: 40,
                       bigHex: 170,
@@ -33,6 +33,7 @@ function Config() {
     this.map = { resizeDuration: 30 * 60,
                  cellSize: 20,
                  startFires: 30 };
+    this.fire = {spreadingOdds: 0.7};
 
     this.serverUpdateBufferSize = 60;
 }
