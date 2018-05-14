@@ -409,11 +409,12 @@ GameEngine.prototype.processPlayerKeys = function (p, data) {
 
 GameEngine.prototype.resetPlayer = function (p) {
     p.alive = true;
-    p.position.x = this.config.player.startPosition.x;
-    p.position.y = this.config.player.startPosition.y;
+    p.position.x = this.map.width * this.config.map.cellSize / 2;
+    p.position.y = this.map.height * this.config.map.cellSize / 2;
     p.speed = 0;
     p.angle = this.config.player.startAngle;
     p.health = this.config.player.health;
+    p.water = this.config.player.maxWater;
 };
 
 GameEngine.prototype.playerApplyMovement = function (p) {

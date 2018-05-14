@@ -102,7 +102,15 @@ GameServer.prototype.handlePing = function (client, ts) {
 }
 
 GameServer.prototype.handleReset = function () {
+    this.engine.map.fire.length = 0;
+    this.engine.map.fireUpdates.length = 0;
+    this.engine.map.wayPoints.length = 0;
+    this.engine.map.wayPointUpdates.length = 0;
+    this.engine.map.retardant.length = 0;
+    this.engine.map.retardantUpdates.length = 0;
+    this.engine.map.timeout = this.engine.config.map.resizeDuration;
     this.readMap(this.mapFileName);
+
     for (k in this.engine.players) {
         this.engine.resetPlayer(this.engine.players[k]);
     }
