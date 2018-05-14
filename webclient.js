@@ -55,6 +55,7 @@ function WebClient (engine) {
     this.curMovementRequestSeq = 0;
 
     this.retardantPredictions = [];
+    this.predictedRetardantLevel = 0;
 
     this.map_images = new Array(10);
     this.map_images[MAP_FIRE] = g_images['fire'];
@@ -416,10 +417,20 @@ WebClient.prototype.interpolatePlayer = function (p) {
 
 WebClient.prototype.addRetardant = function (x, y) {
     if (x>=0 && x < this.engine.map.width &&
-        y>=0 && y < this.engine.map.height) {
+        y>=0 && y < this.engine.map.height &&
+        this.predictedRetardantLevel > 0) {
         var m = this.engine.mapAt(x,y);
-        if (m !== MAP_WATER)
+        if (m !== MAP_WATER) {
+            for (let i=0; i<this.retardantPredictions; i++) {
+                if (this.retardantPredictions[i][0] === x &&
+                    this.retardantPredictions[i][0] === y) {
+                    return;
+                }
+            }
+            // console.log("retardant", this.predictedRetardantLevel, this.retardantPredictions.length);
             this.retardantPredictions.push([x, y]);
+            this.predictedRetardantLevel -= 1;
+        }
     }
 };
 
@@ -557,6 +568,7 @@ WebClient.prototype.processServerUpdates = function () {
             }
         }
         this.retardantPredictions.length = 0;
+        this.predictedRetardantLevel = this.players[this.id].latest.water;
 
         this.players[this.id].backup_x = this.players[this.id].position.x;
         this.players[this.id].backup_y = this.players[this.id].position.y;
@@ -873,12 +885,13 @@ WebClient.prototype.drawGameState = function () {
     this.drawWayPointsOnHUD()
 
     var water_w = 200;
+    var water_x = (this.canvas.clientWidth - this.engine.config.player.maxWater)/2;
     this.ctx.strokeStyle = "#3333FF";
-    this.ctx.strokeRect(10, 10, water_w, 20);
+    this.ctx.strokeRect(water_x, 10, water_w, 20);
     this.ctx.fillStyle = "#AAAAFF";
-    this.ctx.fillRect(10, 11, water_w, 18);
+    this.ctx.fillRect(water_x, 11, water_w, 18);
     this.ctx.fillStyle = "#3333FF";
-    this.ctx.fillRect(10, 11, water_w * this.players[this.id].water / this.engine.config.player.maxWater , 18);
+    this.ctx.fillRect(water_x, 11, water_w * this.players[this.id].water / this.engine.config.player.maxWater , 18);
 
 
 
