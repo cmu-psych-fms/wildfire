@@ -542,7 +542,7 @@ WebClient.prototype.processServerUpdates = function () {
 
             if (typeof this.network.serverUpdates[i].vp !== 'undefined') {
                 this.engine.map.viewPort = this.network.serverUpdates[i].vp;
-                console.log('view port updated', this.engine.map.viewPort);
+                // console.log('view port updated', this.engine.map.viewPort);
             }
         }
         var last = this.network.serverUpdates[this.network.serverUpdates.length-1];
@@ -655,7 +655,7 @@ WebClient.prototype.drawWayPointsOnMap = function () {
                 break;
             case MAP_HOUSE:
                 this.ctx.fillStyle = "#BB9900";
-                letter = "HILL";
+                letter = "HOUSE";
                 break;
             case MAP_FIRE:
                 this.ctx.fillStyle = "#FFFF00";
@@ -885,7 +885,7 @@ WebClient.prototype.drawGameState = function () {
     this.drawWayPointsOnHUD()
 
     var water_w = 200;
-    var water_x = (this.canvas.clientWidth - this.engine.config.player.maxWater)/2;
+    var water_x = (this.canvas.clientWidth - water_w)/2;
     this.ctx.strokeStyle = "#3333FF";
     this.ctx.strokeRect(water_x, 10, water_w, 20);
     this.ctx.fillStyle = "#AAAAFF";
@@ -893,6 +893,10 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.fillStyle = "#3333FF";
     this.ctx.fillRect(water_x, 11, water_w * this.players[this.id].water / this.engine.config.player.maxWater , 18);
 
+    this.ctx.fillStyle = "#FF0000"
+    this.ctx.font = "14pt sans-serif";
+    this.ctx.textAlign = "center";
+    this.ctx.fillText(this.engine.map.fire.length.toString(), this.canvas.clientWidth/2, this.canvas.clientHeight-7);
 
 
     // for (let i=1; i<= this.engine.config.player.maxWater; i++) {
