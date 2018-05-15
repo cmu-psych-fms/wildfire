@@ -30,10 +30,12 @@ function Config() {
     this.retardant = { duration: 70,
                        durJitter: 40};
 
-    this.map = { resizeDuration: 30 * 60,
+    this.map = { resizeDuration: 200, // 30 * 60,
+                 resizeAmount: 2,
                  cellSize: 20,
                  startFires: 30 };
-    this.fire = {spreadingOdds: 0.7};
+    this.fire = {spreadingOdds: 0.7,
+                 ticks: 2};
 
     this.serverUpdateBufferSize = 60;
 }

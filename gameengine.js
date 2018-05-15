@@ -143,6 +143,7 @@ function GameEngine(config) {
                 retardantUpdates: [],
                 fire: [],
                 fireUpdates: [],
+                fireTimer: 0,
                 timeout: this.config.map.resizeDuration,
                 viewPortUpdated: false,
                 wayPoints: [],
@@ -322,7 +323,8 @@ GameEngine.prototype.fireSanity = function (msg) {
 
 GameEngine.prototype.updateFires = function () {
     // this.fireSanity('');
-    if (this.map.fire.length > 0) {
+    this.map.fireTimer -= 1;
+    if (this.map.fire.length > 0 && this.map.fireTimer <= 0) {
         var n = 1;
         for (let i=0; i<n; i++) {
             var idx = Math.floor(Math.random() * this.map.fire.length);
@@ -338,6 +340,7 @@ GameEngine.prototype.updateFires = function () {
                 this.ignite(f.x,f.y-1);
             }
         }
+        this.map.fireTimer = this.config.fire.ticks;
     }
     //     } if (m === MAP_RETARDANT) {
     //         var r1 = this.extinguish(f.x+1,f.y);
@@ -352,7 +355,7 @@ GameEngine.prototype.updateFires = function () {
 GameEngine.prototype.updateMapTimeout = function () {
     if (this.ticks >= this.map.timeout) {
         this.map.timeout = this.ticks + this.config.map.resizeDuration;
-        var amt = 50;
+        var amt = this.config.map.resizeAmount;
         this.map.viewPort.x -= amt;
         this.map.viewPort.y -= amt;
         this.map.viewPort.w += amt*2;
