@@ -8,7 +8,7 @@ function Config() {
                    maxSpeed: 3,
                    collisionRadius: 10,
                    deathTimer: 120,
-                   colors: ['#FFFF00', '#00FFFF', '#FF3333']
+                   colors: ['#FFFF00', '#00FFFF', '#FF3333', '#FF00FF']
                   };
     this.fortress = { lockTime: 120,
                       smallHex: 40,
