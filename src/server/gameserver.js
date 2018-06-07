@@ -7,6 +7,7 @@ function GameServer() {
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
     this.engine.placeAsteroids(10, 50);
+    this.mode = 'lobby';
 }
 
 GameServer.prototype = {};
@@ -63,6 +64,9 @@ GameServer.prototype.delPlayer = function (client) {
     }
 };
 
+GameServer.prototype.startGameMode = function () {
+};
+
 GameServer.prototype.handlePing = function (client, ts) {
     client.emit('message', 'p'+JSON.stringify(ts));
 }
@@ -75,7 +79,7 @@ GameServer.prototype.onMessage = function (client, m) {
         var data = JSON.parse(m.slice(1));
         switch (cmd) {
         case 'k':
-            this.engine.processPlayerKeys(p, data);
+            this.engine.accumPlayerMovementRequests(p, data);
             break;
         case 'p':
             this.handlePing(client, data);
@@ -90,7 +94,11 @@ GameServer.prototype.startGameTickTimer = function () {
         this.engine.lastTickDuration = t - this.engine.tickTime;
         this.engine.tickTime = t;
         this.engine.stepOneTick();
+        this.checkForGameEnd();
     }.bind(this), 15);
+};
+
+GameServer.prototype.checkForGameEnd = function () {
 };
 
 GameServer.prototype.stopGameTickTimer = function () {
@@ -146,6 +154,7 @@ GameServer.prototype.sendServerUpdate = function () {
     }
     full.msg = this.engine.messages;
     for (let k in this.players) {
+        full.lmr = this.engine.players[k].lastMovementRequest;
         this.players[k].emit('serverupdate', full);
     }
     this.engine.messages.length = 0;

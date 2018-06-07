@@ -1,0 +1,119 @@
+div.experiment_area {
+    width: 800px;
+    height: 630px;
+    padding: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+
+table td {
+    background: lightgray;
+    padding: 2px;
+}
+
+/* Consent */
+
+div.consent-text {
+    padding: 1px 20px 1px 20px;
+    text-align: justify;
+}
+
+div.consent-container {
+    position: relative;
+    /* background-color: white; */
+    background-color: rgb(230,240,255);
+    /* padding: 5px 0 5px 0px; */
+    text-align: center;
+    width: 100%;
+    font-family: sans-serif;
+}
+
+/* message screen */
+
+div.message-container {
+    display: table;
+    height: 100%;
+    width: 100%;
+}
+
+div.message-body {
+    position: relative;
+    /* background-color: white; */
+    background-color: rgb(230,240,255);
+    /* padding: 5px 0 5px 0px; */
+    text-align: center;
+
+
+    display: table-cell;
+    vertical-align: middle;
+
+    font-family: sans-serif;
+}
+
+/* full message screen */
+
+div.full-message-body {
+    position: relative;
+    /* background-color: white; */
+    background-color: rgb(230,240,255);
+    /* padding: 5px 0 5px 0px; */
+    text-align: center;
+    height: 100%;
+    width: 100%;
+}
+
+div.message-text {
+    padding-left: 30px;
+    padding-right: 30px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    font-weight: normal;
+    font-family: sans-serif;
+    font-size: 18px;
+    /* height: 75%; */
+    text-align: left;
+}
+
+div.footer-continue-area {
+    position: absolute;
+    bottom: 15px;
+    text-align: center;
+    width: 100%;
+}
+
+/* controls */
+
+div.instr {
+    display: inline-block;
+    font-size: 18px;
+    margin: 0 15px 0 15px;
+}
+
+span.keyblock {
+    background-color: rgb(50,50,50);
+    color: white;
+    display: inline-block;
+    padding: 5px;
+    min-width: 30px;
+    border-radius: 5px;
+}
+
+span.spaceblock {
+    background-color: rgb(50,50,50);
+    color: white;
+    display: inline-block;
+    padding: 5px 15px 5px 15px;
+    border-radius: 5px;
+}
+
+span.keyinstr {
+    margin: 3px;
+    /* background-color: gray; */
+    /* color: white; */
+    display: inline-block;
+    padding: 5px;
+    color: gray;
+}

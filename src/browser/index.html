@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/> 
+<title>Space Fortress Sign In</title>
+<script type="text/javascript" src="jquery-3.3.1.min.js"></script>
+<link rel="stylesheet" type="text/css" href="main.css"/>
+
+<script type="text/javascript" language="JavaScript">
+$(document).ready(function(){$("input[name=workerId]").select().focus();});
+</script>
+
+</head>
+<body>
+  <form action="main.html"
+        method="GET"
+        accept-charset="utf-8"
+        id="experimentform">
+    <input type="hidden" name="assignmentId" value="demo" >
+    <input type="hidden" name="hitId" value="demo" >
+    <input type="hidden" name="debug" value="true" >
+    <div class="experiment_area">
+    <div class="message-container"><div class="message-body">
+    <p>Enter your Subject ID
+    <p><input type="text" name="workerId" value="demo" >
+    <!-- <p><select name="condition" > -->
+    <!--     <option value="autoturn-semantics-instruction" selected>semantics instruction</option> -->
+    <!--     <option value="autoturn-semantics-noinstruction">semantics no-instruction</option> -->
+    <!--     <option value="autoturn-nosemantics-instruction">no-semantics instruction</option> -->
+    <!--     <option value="autoturn-nosemantics-noinstruction">no-semantics no-instruction</option> -->
+    <!--     </select> -->
+
+    <p><input type="submit" value="Start Experiment">
+    </div></div></div>
+  </form>
+
+</body>
+</html>

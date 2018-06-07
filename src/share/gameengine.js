@@ -287,17 +287,28 @@ GameEngine.prototype.stepOneTick = function () {
     // this.handleCollisions();
 };
 
+GameEngine.prototype.accumPlayerMovementRequests = function (p, req) {
+    p.movementRequests.push(req);
+}
+
 GameEngine.prototype.processPlayerKeys = function (p, keys) {
+    p.missileRequests = 0;
+    p.messageRequests = [];
     for (var i=0; i<keys.length; i++) {
         if (keys[i][0] === 1) {
             if (keys[i][1] === KEY_LEFT) p.turnFlag = 'left';
             else if (keys[i][1] === KEY_RIGHT) p.turnFlag = 'right';
             else if (keys[i][1] === KEY_UP) p.thrustFlag = true;
-            else if (keys[i][1] === KEY_SPACE) this.addMissile(p);
-            else if (keys[i][1] === KEY_1) this.say(p, MESSAGE_1);
-            else if (keys[i][1] === KEY_2) this.say(p, MESSAGE_2);
-            else if (keys[i][1] === KEY_3) this.say(p, MESSAGE_3);
-            else if (keys[i][1] === KEY_4) this.say(p, MESSAGE_4);
+            else if (keys[i][1] === KEY_SPACE) p.missileRequests += 1;
+            else if (keys[i][1] === KEY_1) p.messageRequests.push(MESSAGE_1);
+            else if (keys[i][1] === KEY_2) p.messageRequests.push(MESSAGE_2);
+            else if (keys[i][1] === KEY_3) p.messageRequests.push(MESSAGE_3);
+            else if (keys[i][1] === KEY_4) p.messageRequests.push(MESSAGE_4);
+
+            // else if (keys[i][1] === KEY_1) this.say(p, MESSAGE_1);
+            // else if (keys[i][1] === KEY_2) this.say(p, MESSAGE_2);
+            // else if (keys[i][1] === KEY_3) this.say(p, MESSAGE_3);
+            // else if (keys[i][1] === KEY_4) this.say(p, MESSAGE_4);
         } else {
             if (keys[i][1] === KEY_LEFT || keys[i][1] === KEY_RIGHT) p.turnFlag = null;
             else if (keys[i][1] === KEY_UP) p.thrustFlag = false;
@@ -310,26 +321,40 @@ GameEngine.prototype.say = function (p, msg) {
     this.messages.push([p.id, msg]);
 }
 
+GameEngine.prototype.applyPlayerMovements = function (p) {
+    if (p.turnFlag === 'left') {
+        p.angle -= p.config.turnRate;
+        p.angle = stdAngle(p.angle);
+    } else if (p.turnFlag === 'right') {
+        p.angle += p.config.turnRate;
+        p.angle = stdAngle(p.angle);
+    }
+    if (p.thrustFlag) {
+        p.velocity.x += p.config.acceleration * Math.cos(deg2rad(p.angle));
+        p.velocity.y += p.config.acceleration * Math.sin(deg2rad(p.angle));
+    }
+    if (p.velocity.x > p.config.maxSpeed) p.velocity.x = p.config.maxSpeed;
+    if (p.velocity.x < -p.config.maxSpeed) p.velocity.x = -p.config.maxSpeed;
+    if (p.velocity.y > p.config.maxSpeed) p.velocity.y = p.config.maxSpeed;
+    if (p.velocity.y < -p.config.maxSpeed) p.velocity.y = -p.config.maxSpeed;
+
+    p.position.x += p.velocity.x;
+    p.position.y += p.velocity.y;
+
+};
+
 GameEngine.prototype.updatePlayer = function (p) {
     if (p.alive) {
-        if (p.turnFlag === 'left') {
-            p.angle -= p.config.turnRate;
-            p.angle = stdAngle(p.angle);
-        } else if (p.turnFlag === 'right') {
-            p.angle += p.config.turnRate;
-            p.angle = stdAngle(p.angle);
-        }
-        if (p.thrustFlag) {
-            p.velocity.x += p.config.acceleration * Math.cos(deg2rad(p.angle));
-            p.velocity.y += p.config.acceleration * Math.sin(deg2rad(p.angle));
-        }
-        if (p.velocity.x > p.config.maxSpeed) p.velocity.x = p.config.maxSpeed;
-        if (p.velocity.x < -p.config.maxSpeed) p.velocity.x = -p.config.maxSpeed;
-        if (p.velocity.y > p.config.maxSpeed) p.velocity.y = p.config.maxSpeed;
-        if (p.velocity.y < -p.config.maxSpeed) p.velocity.y = -p.config.maxSpeed;
+        this.applyPlayerMovements(p);
 
-        p.position.x += p.velocity.x;
-        p.position.y += p.velocity.y;
+        if (p.missileRequests > 0) {
+            this.addMissile(p);
+            p.missileRequests = 0;
+        }
+        for (let i=0; i<p.messageRequests.length; i++) {
+            this.say(p, p.messageRequests[i]);
+        }
+        p.messageRequests.length = 0;
 
         if (p.position.x < 0 ||
             p.position.x > this.config.mapSize * this.config.mapCellSize ||
@@ -359,7 +384,7 @@ GameEngine.prototype.updatePlayer = function (p) {
 };
 
 GameEngine.prototype.addMissile = function (owner) {
-    if (!owner.missileState) {
+    // if (!owner.missileState) {
         var m = {owner: owner.id,
                  position: {x: owner.position.x,
                             y: owner.position.y},
@@ -369,8 +394,8 @@ GameEngine.prototype.addMissile = function (owner) {
                  alive: true,
                  spawnTick: this.ticks};
         this.missiles.push(m)
-        owner.missileState = true;
-    }
+        // owner.missileState = true;
+    // }
 };
 
 GameEngine.prototype.addShell = function (owner) {
@@ -545,7 +570,16 @@ GameEngine.prototype.updateFortress = function (f) {
 
 GameEngine.prototype.updatePlayers = function () {
     for (let id in this.players) {
-        this.updatePlayer(this.players[id]);
+        var p = this.players[id];
+        for (let i=0; i<p.movementRequests.length; i++) {
+            p.lastMovementRequest = p.movementRequests[i][0];
+            p.thrustFlag = p.movementRequests[i][1];
+            p.turnFlag = p.movementRequests[i][2];
+            p.missileRequests = p.movementRequests[i][3];
+            p.messageRequests = p.movementRequests[i][4];
+            this.updatePlayer(p);
+        }
+        p.movementRequests.length = 0;
     }
 };
 
@@ -595,10 +629,15 @@ GameEngine.prototype.addPlayer = function (id) {
                         config: this.config.player,
                         turnFlag: 0,
                         thrustFlag: 0,
-                        missileState: 0,
+                        // missileState: 0,
+                        messageRequests: [],
+                        missileRequests: 0,
+                        Requests: [],
                         spawnTimer: 0,
                         alive: true,
-                        color: this.config.player.colors[n%this.config.player.colors.length]
+                        color: this.config.player.colors[n%this.config.player.colors.length],
+                        lastMovementRequest: -1,
+                        movementRequests: []
                        };
 };
 

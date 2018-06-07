@@ -27,6 +27,7 @@ function Config() {
     this.mapSize = 100;
     this.mapCellSize = 20;
     this.serverUpdateBufferSize = 60;
+    this.maxTicks = 60 * 60 * 3;
 }
 
 Config.prototype = {};
