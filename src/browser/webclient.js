@@ -66,6 +66,7 @@ WebClient.prototype.init = function () {
     $("#experiment_area").html('<div style="text-align: center">'+
                                '<canvas id="canvas2d" style="background: #000000"></canvas>'+
                                '<canvas id="canvas3d"></canvas>'+
+                               '<div id="status"></div>'+
                                '<div style="position: absolute; top: 10px; left: 10px">'+
                                '<table>'+
                                '<tr><td>Camera Modes</td>'+
@@ -118,6 +119,9 @@ WebClient.prototype.init = function () {
     this.renderer.setSize(600,500);
 
     this.canvas2d.style.display = 'none';
+    this.canvas3d.style.display = 'none';
+
+    $('#status').html('<h3>Connecting to game server ...</h3>');
 };
 
 WebClient.prototype.addEventListeners = function () {
@@ -150,6 +154,7 @@ WebClient.prototype.connect = function () {
     this.network.socket.on('serverupdate', this.onServerUpdate.bind(this));
     this.network.socket.on('join', this.onPlayerJoin.bind(this));
     this.network.socket.on('part', this.onPlayerPart.bind(this));
+    this.network.socket.on('end', this.onEndGame.bind(this));
 };
 
 
@@ -180,6 +185,7 @@ WebClient.prototype.decodeKeyCode = function(which) {
 WebClient.prototype.cancelUpdates = function () {
     console.log("cancel animation");
     window.cancelAnimationFrame(this.updateid);
+    this.updateid = null;
     this.network.socket.close();
 };
 
@@ -448,16 +454,11 @@ WebClient.prototype.addWorldToScene = function () {
 WebClient.prototype.onConnect = function (data) {
     console.log('connect', data);
     this.id = data.id;
+    var count = 0;
     for (let k in data.players) {
         this.engine.addPlayer(k);
-        this.engine.players[k].alive = data.players[k][0];
-        this.engine.players[k].position.x = data.players[k][1];
-        this.engine.players[k].position.y = data.players[k][2];
-        this.engine.players[k].angle = data.players[k][3];
-        this.engine.players[k].velocity.x = data.players[k][4];
-        this.engine.players[k].velocity.y = data.players[k][5];
-        this.engine.players[k].turnFlag = data.players[k][6];
-        this.engine.players[k].color = data.players[k][7];
+        this.engine.players[k].color = data.players[k].color;
+        count += 1;
     }
     this.engine.fortresses = new Array(data.fortresses.length);
     for (let i=0; i<data.fortresses.length; i++) {
@@ -470,9 +471,11 @@ WebClient.prototype.onConnect = function (data) {
     this.engine.asteroids = data.asteroids;
 
     this.addWorldToScene();
-    this.updateScene();
 
-    this.update( new Date().getTime() );
+    if (count === 1)
+        $('#status').html('<h3>Waiting For Other Player ...</h3>');
+    else if (count >= 2)
+        $('#status').html('<h3>Game will start in 5 seconds!</h3>');
 };
 
 WebClient.prototype.onDisconnect = function (data) {
@@ -507,6 +510,7 @@ WebClient.prototype.onPlayerJoin = function (data) {
     console.log('join', data);
     this.engine.addPlayer(data.id);
     this.addPlayerToScene(this.engine.players[data.id]);
+    $('#status').html('<h3>Game will start in 5 seconds!</h3>');
 };
 
 WebClient.prototype.onPlayerPart = function (data) {
@@ -515,11 +519,23 @@ WebClient.prototype.onPlayerPart = function (data) {
     this.engine.delPlayer(data.id);
 };
 
+WebClient.prototype.onEndGame = function (data) {
+    this.cancelUpdates();
+    for (let k in this.engine.players) {
+        this.engine.delPlayer(k);
+    }
+    console.log('end game');
+    exp.nextScreen();
+};
 
 WebClient.prototype.onServerUpdate = function (data) {
     this.network.serverUpdates.push(data);
     if (this.network.serverUpdates.length >= this.engine.config.serverUpdateBufferSize) {
         this.network.serverUpdates.splice(0,1);
+    }
+    if (!this.updateid) {
+        this.canvas3d.style.display = 'inline-block';
+        this.update( new Date().getTime() );
     }
 };
 

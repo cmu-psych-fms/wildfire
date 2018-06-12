@@ -90,6 +90,25 @@ Logging.prototype.createDB = function () {
 
 };
 
+Logging.prototype.updateProgress = function (worker_id, idx, reward, condition, extra, session_id) {
+    this.db.get('SELECT worker_id, idx from resume where worker_id = ?', [worker_id],
+                function (err, row) {
+                    if (row) {
+                        this.db.run('UPDATE resume SET idx = ?, reward = ?, exp_condition = ?, extra = ? WHERE worker_id = ?', [idx, reward, condition, extra, worker_id]);
+                    } else {
+                        this.db.run('INSERT INTO resume (worker_id,assignment_id,idx,reward,exp_condition,extra) VALUES (?,?,?,?,?,?)',
+                                    [worker_id,
+                                     'lab',
+                                     idx,
+                                     reward,
+                                     condition,
+                                     extra]);
+                    }
+                }.bind(this));
+    this.db.run('INSERT INTO progress_log (worker_id,assignment_id,idx,reward,exp_condition,extra,session_id) VALUES (?,?,?,?,?,?,?)',
+                [worker_id, 'lab', idx, reward, condition, extra, session_id]);
+};
+
 Logging.prototype.addGameLog = function (worker_id, glog, session_id, gnum) {
     this.db.run('INSERT INTO game_data (worker_id, session_id, game_number, log)'+
                 'VALUES (?,?,?,?)',
@@ -97,9 +116,9 @@ Logging.prototype.addGameLog = function (worker_id, glog, session_id, gnum) {
 };
 
 Logging.prototype.addLogBlock = function (worker_id, blk, session_id, sync_id) {
-    this.db.run('INSERT INTO log_block (worker_id, session_id, sync_id, log)'+
-                'VALUES (?,?,?,?)',
-                [worker_id, session_id, sync_id, log]);
+    this.db.run('INSERT INTO log_block (worker_id, assignment_id, hit_id, session_id, sync_id, log)'+
+                'VALUES (?,?,?,?,?,?)',
+                [worker_id, 'lab', 'lab', session_id, sync_id, blk]);
 };
 
 Logging.prototype.addSessionLog = function (worker_id, log) {
@@ -114,7 +133,7 @@ Logging.prototype.getResume = function (worker_id, callback) {
                     if (row) {
                         callback({success:true, resumable:true,
                                   idx: row.idx, reward: row.reward,
-                                  condition: row.condition, extra: row.extra});
+                                  condition: row.condition, extra: JSON.parse(row.extra)});
                     } else {
                         callback({success:true, resumable:false});
                     }

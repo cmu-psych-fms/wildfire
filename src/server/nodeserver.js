@@ -35,7 +35,7 @@ app.post( '/api', urlencodedParser, function( req, res ) {
     // var body = req.query;
     var body = req.body;
 
-    console.log(body);
+    // console.log(body);
 
     if (body.action === 'store-log-block') {
         Log.addLogBlock(body.worker_id,
@@ -54,12 +54,12 @@ app.post( '/api', urlencodedParser, function( req, res ) {
                         body.log);
         res.end(JSON.stringify({success:true}));
     } else if (body.action === 'store-progress') {
-        Log.addProgress(body.worker_id,
-                        body.idx,
-                        body.reward,
-                        body.condition,
-                        body.extra,
-                        body.session_id);
+        Log.updateProgress(body.worker_id,
+                           body.idx,
+                           body.reward,
+                           body.condition,
+                           body.extra,
+                           body.session_id);
         res.end(JSON.stringify({success:true}));
     } else if (body.action === 'resume') {
         Log.getResume(body.worker_id,

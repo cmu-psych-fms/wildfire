@@ -34,7 +34,7 @@ function getHitId() {
 }
 
 function getRawCondition() {
-    return getURLParameter("condition") || "autoturn-nosemantics-noinstruction";
+    return getURLParameter("condition") || "geospatial";
 }
 
 function getSubmitTo() {
