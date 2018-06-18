@@ -34,7 +34,11 @@ ScoreScreen.prototype.keypress = function (ev) {
 };
 
 ScoreScreen.prototype.onward = function () {
-    exp.nextScreen();
+    if (!isFullScreen()) {
+        fullScreenMode();
+    } else {
+        exp.nextScreen();
+    }
 };
 
 ScoreScreen.prototype.cleanup = function () {
@@ -182,9 +186,13 @@ GameStartScreen.prototype.allowContinue = function (ev) {
 };
 
 GameStartScreen.prototype.keypress = function (ev) {
-    if (this.continueEnabled && ev.which === 13) {
+    if (ev.which === 13) {
         ev.preventDefault();
-        exp.nextScreen();
+        if (!isFullScreen()) {
+            fullScreenMode();
+        } else {
+            if (this.continueEnabled) exp.nextScreen();
+        }
     }
 };
 
@@ -233,7 +241,11 @@ MessageScreen.prototype.keypress = function (ev) {
 };
 
 MessageScreen.prototype.clickContinue = function (ev) {
-    exp.nextScreen();
+    if (!isFullScreen()) {
+        fullScreenMode();
+    } else {
+        exp.nextScreen();
+    }
 };
 
 MessageScreen.prototype.cleanup = function () {

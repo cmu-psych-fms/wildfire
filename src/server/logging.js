@@ -4,6 +4,7 @@ var sqlite3 = require('sqlite3').verbose();
 
 function Logging(datadir) {
     this.dbfile = path.join(datadir, 'logdb.sqlite');
+  console.log('logging db', this.dbfile);
 }
 
 Logging.prototype = {};
@@ -38,6 +39,13 @@ Logging.prototype.createDB = function () {
                 'session_id bigint NOT NULL,'+
                 'game_number int,'+
                 'log mediumtext'+
+                ');');
+
+    this.db.run('CREATE TABLE server_game_tick ('+
+                'id integer PRIMARY KEY AUTOINCREMENT,'+
+                'game_number int,'+
+                'tick int,'+
+                'state text'+
                 ');');
 
     this.db.run('CREATE TABLE log_block ('+
@@ -125,6 +133,12 @@ Logging.prototype.addSessionLog = function (worker_id, log) {
     this.db.run('INSERT INTO log_data (worker_id, log)'+
                 'VALUES (?,?)',
                 [worker_id, log]);
+};
+
+Logging.prototype.saveGameState = function (game_number, tick, state) {
+    this.db.run('INSERT INTO server_game_tick (game_number, tick, state)'+
+                'VALUES (?,?,?)',
+                [game_number, tick, JSON.stringify(state)]);
 };
 
 Logging.prototype.getResume = function (worker_id, callback) {

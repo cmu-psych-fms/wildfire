@@ -199,7 +199,7 @@ function createScreens(condition) {
 
     for (i=0; i<numGames; i++) {
         var g = new WebClient(i+1);
-        var s = new ScoreScreen(i+1, 50);
+        var s = new ScoreScreen(i+1, 10);
         var n = i+1;
         screens.push(new GameStartScreen('<h1>Game '+n.toString()+' of '+numGames.toString()+'</h1>' + instructionText, instructions, pages));
         screens.push(g);
@@ -346,7 +346,7 @@ function main () {
             showLoadingScreen();
             getResume(resumeExperimentCallback, startExperimentCallback, rejectExperimentCallback, resumeErrorCallback);
             if (isDebugMode()) {
-                $(document).on('keydown', skipAround);
+                // $(document).on('keydown', skipAround);
             }
         }
     } else {

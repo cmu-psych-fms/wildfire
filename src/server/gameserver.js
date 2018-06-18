@@ -1,13 +1,14 @@
 var engine = require('./gameengine');
 var config = require('./config');
 
-function GameServer() {
+function GameServer(logging) {
     this.numPlayers = 0;
     this.players = {};
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
     this.engine.placeAsteroids(10, 50);
     this.mode = 'lobby';
+    this.logging = logging;
 }
 
 GameServer.prototype = {};
@@ -43,12 +44,17 @@ GameServer.prototype.addPlayer = function (client) {
     }
 };
 
+GameServer.prototype.disconnected = function (client) {
+  console.log("someone disconnected. abort game.");
+  this.endGameMode();
+};
+
 GameServer.prototype.delPlayer = function (client) {
     this.numPlayers -= 1;
-    if (this.numPlayers <= 0) {
-        console.log('No more players');
-        this.endGameMode();
-    }
+    // if (this.numPlayers <= 0) {
+    //     console.log('No more players');
+    //     this.endGameMode();
+    // }
     delete this.players[client.userid];
     this.engine.delPlayer(client.userid);
     for (let k in this.players) {
@@ -106,6 +112,7 @@ GameServer.prototype.startGameTickTimer = function () {
         this.engine.lastTickDuration = t - this.engine.tickTime;
         this.engine.tickTime = t;
         this.engine.stepOneTick();
+        this.logging.saveGameState(this.game_number, this.engine.ticks, this.engine.dumpState());
         this.checkForGameEnd();
     }.bind(this), 15);
 };
@@ -168,6 +175,7 @@ GameServer.prototype.sendServerUpdate = function () {
                      this.engine.asteroids[i].angle];
     }
     full.msg = this.engine.messages;
+    full.points = this.engine.points;
     for (let k in this.players) {
         full.lmr = this.engine.players[k].lastMovementRequest;
         this.players[k].emit('serverupdate', full);

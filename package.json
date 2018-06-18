@@ -1,18 +1,28 @@
 {
   "name": "geospatial",
+  "productName": "Geospatial",
   "version": "1.0.0",
   "description": "multiplayer geospatial task",
-  "main": "src/server/nodeserver.js",
+  "other_main": "src/server/nodeserver.js",
+  "main": "src/app/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron .",
+    "pkg": "electron-packager . Geospatial --overwrite --ignore='\\.dmg$' --ignore=.gitignore$ --ignore=/upload.sh$ --ignore='/aup($|/)' --ignore='/db-scripts($|/)' --ignore='/perl($|/)' --ignore='/xcf($|/)' --ignore=/notes.txt$ --ignore=/create-dmg.sh$ --ignore='/contrib($|/)' --ignore=comm.txt$"
   },
   "author": "Shawn Betts",
   "license": "GVPL2",
   "dependencies": {
+    "electron": "^2.0.2",
+    "electron-default-menu": "^1.0.1",
+    "electron-settings": "^3.2.0",
     "express": "^4.16.3",
     "socket.io": "^2.0.4",
     "sqlite3": "^4.0.0",
     "uuid": "^3.2.1",
     "yargs": "^11.0.0"
+  },
+  "devDependencies": {
+    "electron-packager": "^12.1.0"
   }
 }

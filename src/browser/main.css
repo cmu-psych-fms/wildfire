@@ -1,3 +1,30 @@
+/* Vertically center the game area. */
+
+body {
+    /* margin: 8px 0 10px 0; */
+    margin: 0;
+    padding: 0;
+    background-color: lightgray;
+}
+
+div.vc-outer {
+    display: table;
+    position: absolute;
+    height: 100%;
+    width: 100%;
+
+    background-color: lightgray;
+}
+
+div.vc-middle {
+    display: table-cell;
+    vertical-align: middle;
+
+    background-color: lightgray;
+}
+
+/*  */
+
 div.experiment_area {
     width: 800px;
     height: 630px;
@@ -116,4 +143,15 @@ span.keyinstr {
     display: inline-block;
     padding: 5px;
     color: gray;
+}
+
+/* Game screen */
+
+#points {
+    position:absolute;
+    bottom: 50px;
+    left:50%;
+    color:white;
+    font-size: 30px;
+    font-family: sans-serif;
 }

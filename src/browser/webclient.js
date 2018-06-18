@@ -65,25 +65,26 @@ WebClient.prototype.setCameraMode = function (mode) {
 WebClient.prototype.init = function () {
     $("#experiment_area").html('<div style="text-align: center">'+
                                '<canvas id="canvas2d" style="background: #000000"></canvas>'+
-                               '<canvas id="canvas3d"></canvas>'+
-                               '<div id="status"></div>'+
-                               '<div style="position: absolute; top: 10px; left: 10px">'+
-                               '<table>'+
-                               '<tr><td>Camera Modes</td>'+
-                               '<tr><td><button onclick="exp.currentScreen().setCameraMode("2d")">2D Mode</button></td>'+
-                               '<tr><td><button onclick="exp.currentScreen().setCameraMode("chase")">Chase Camera</button></td>'+
-                               '<tr><td><button onclick="exp.currentScreen().setCameraMode("overhead")">Overhead Camera</button></td>'+
-                               '<tr><td><button onclick="exp.currentScreen().setCameraMode("stationary")">Stationary Camera</button></td>'+
-                               '<tr><td><button onclick="exp.currentScreen().setCameraMode("muzzle")">Muzzle Camera</button></td>'+
-                               '</table>'+
-                               '</div>'+
-                               '<div style="position: absolute; top: 10px; right: 10px">'+
-                               '<table>'+
-                               '<tr><td>1<td>I need help. Come to my position</tr>'+
-                               '<tr><td>2<td>Split up to cover more ground</tr>'+
-                               '<tr><td>3<td>Follow me</tr>'+
-                               '<tr><td>4<td>10-4. In transit.</tr>'+
-                               '</table></div>');
+                               '<canvas id="canvas3d" style="position:absolute; top:0; left:0"></canvas>'+
+                               '<div id="points"></div>'+
+                               '<div id="status"></div>');
+                               // '<div style="position: absolute; top: 10px; left: 10px">'+
+                               // '<table>'+
+                               // '<tr><td>Camera Modes</td>'+
+                               // '<tr><td><button onclick="exp.currentScreen().setCameraMode("2d")">2D Mode</button></td>'+
+                               // '<tr><td><button onclick="exp.currentScreen().setCameraMode("chase")">Chase Camera</button></td>'+
+                               // '<tr><td><button onclick="exp.currentScreen().setCameraMode("overhead")">Overhead Camera</button></td>'+
+                               // '<tr><td><button onclick="exp.currentScreen().setCameraMode("stationary")">Stationary Camera</button></td>'+
+                               // '<tr><td><button onclick="exp.currentScreen().setCameraMode("muzzle")">Muzzle Camera</button></td>'+
+                               // '</table>'+
+                               // '</div>'+
+                               // '<div style="position: absolute; top: 10px; right: 10px">'+
+                               // '<table>'+
+                               // '<tr><td>1<td>I need help. Come to my position</tr>'+
+                               // '<tr><td>2<td>Split up to cover more ground</tr>'+
+                               // '<tr><td>3<td>Follow me</tr>'+
+                               // '<tr><td>4<td>10-4. In transit.</tr>'+
+                               // '</table></div>');
 
 
     this.connect();
@@ -99,7 +100,7 @@ WebClient.prototype.init = function () {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(70,
                                               // this.canvas2d.clientWidth / this.canvas2d.clientHeight,
-                                              600/500,
+                                              window.innerWidth/window.innerHeight,
                                               1,
                                               10000);
     this.camera.up.set(0,0,1);
@@ -116,7 +117,7 @@ WebClient.prototype.init = function () {
     this.scene.add( light );
 
     this.renderer = new THREE.WebGLRenderer({canvas:this.canvas3d});
-    this.renderer.setSize(600,500);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
 
     this.canvas2d.style.display = 'none';
     this.canvas3d.style.display = 'none';
@@ -136,13 +137,15 @@ WebClient.prototype.clearEvents = function () {
 
 
 WebClient.prototype.cleanup = function () {
+    for (let k in this.engine.players) {
+        this.engine.delPlayer(k);
+    }
     this.clearEvents();
-    exp.gameReward = 0;
-    exp.gamePoints = 0;
+    exp.gameReward = this.engine.config.pointConversion * this.engine.points;
+    exp.gamePoints = this.engine.points;
 
     exp.lg('end');
-    window.cancelAnimationFrame(this.updateid);
-    this.network.socket.close();
+    this.cancelUpdates();
 };
 
 WebClient.prototype.connect = function () {
@@ -479,10 +482,10 @@ WebClient.prototype.onConnect = function (data) {
 };
 
 WebClient.prototype.onDisconnect = function (data) {
-    console.log('disconnect', data);
     // We got disconnected
+    console.log('disconnect', data);
     this.network.state = 'disconnected';
-    this.cancelUpdates();
+    exp.nextScreen();
 };
 
 
@@ -520,10 +523,6 @@ WebClient.prototype.onPlayerPart = function (data) {
 };
 
 WebClient.prototype.onEndGame = function (data) {
-    this.cancelUpdates();
-    for (let k in this.engine.players) {
-        this.engine.delPlayer(k);
-    }
     console.log('end game');
     exp.nextScreen();
 };
@@ -628,6 +627,8 @@ WebClient.prototype.processServerUpdates = function () {
         }
         // We only need the last update
         var last = this.network.serverUpdates[this.network.serverUpdates.length-1];
+        this.engine.points = last.points;
+        $('#points').html(this.engine.points);
         var players = last.p;
         for (let k in players) {
             // console.log('update', k, players[k], this.engine.players[k])

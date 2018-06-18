@@ -112,3 +112,21 @@ function skipAround (ev) {
 var _PADCHAR="=",_ALPHA="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 function base64Getbyte(s,i){var x=s.charCodeAt(i);if(x>255){throw"INVALID_CHARACTER_ERR: DOM Exception 5";}return x;}
 function base64Encode(s){if(arguments.length!==1){throw"SyntaxError: exactly one argument required";}s=String(s);var i,b10,x=[],imax=s.length-s.length%3;if(s.length===0){return s;}for(i=0;i<imax;i+=3){b10=(base64Getbyte(s,i)<<16)|(base64Getbyte(s,i+1)<<8)|base64Getbyte(s,i+2);x.push(_ALPHA.charAt(b10>>18));x.push(_ALPHA.charAt((b10>>12)&63));x.push(_ALPHA.charAt((b10>>6)&63));x.push(_ALPHA.charAt(b10&63));}switch(s.length-imax){case 1:b10=base64Getbyte(s,i)<<16;x.push(_ALPHA.charAt(b10>>18)+_ALPHA.charAt((b10>>12)&63)+_PADCHAR+_PADCHAR);break;case 2:b10=(base64Getbyte(s,i)<<16)|(base64Getbyte(s,i+1)<<8);x.push(_ALPHA.charAt(b10>>18)+_ALPHA.charAt((b10>>12)&63)+_ALPHA.charAt((b10>>6)&63)+_PADCHAR);break;default:break;}return x.join("");}
+
+function isFullScreen() {
+    return true;
+    // return document.fullscreenElement ||
+    //     document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+}
+
+function fullScreenMode() {
+    if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+    } else if (document.documentElement.msRequestFullscreen) {
+        document.documentElement.msRequestFullscreen();
+    } else if (document.documentElement.mozRequestFullScreen) {
+        document.documentElement.mozRequestFullScreen();
+    } else if (document.documentElement.webkitRequestFullscreen) {
+        document.documentElement.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+    }
+}

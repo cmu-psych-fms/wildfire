@@ -23,6 +23,9 @@ function Config() {
     this.shell = { collisionRadius: 3,
                    speed: 1.5,
                    lifespan: 180};
+    this.rewards = { shipDeath: -100,
+                     fortressDestroy: 100 };
+    this.pointConversion = 0.10;
     this.message = { duration: 240 };
     this.mapSize = 100;
     this.mapCellSize = 20;

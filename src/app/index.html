@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="app.css">
+    <title>Space Fortress Server</title>
+  </head>
+  <body>
+    <!-- <h1>Space Fortress Server</h1> -->
+
+    <table style="font-family: sans-serif; padding-bottom: 20px;">
+      <!-- <tr><td class="key"><span style="">Condition</span> -->
+      <!--   <td> -->
+          <!-- <select id="condition" name="condition" > -->
+          <!--     <option value="autoturn" selected>Autoturn</option> -->
+          <!--     <option value="youturn">Youturn</option> -->
+          <!--     <option value="flappy_autoturn">Flappy Autoturn</option> -->
+          <!--     <option value="flappy_youturn">Flappy Youturn</option> -->
+          <!--     <option value="nav">Navigation</option> -->
+          <!-- </select> -->
+          <!-- <\!-- <td> -\-> -->
+          <!--   Log Format -->
+          <!--   <select id="logFormat" > -->
+          <!--       <option value="native" selected>Native</option> -->
+          <!--       <option value="flappy">Flappy</option> -->
+          <!--       <option value="sf">Space Fortress</option> -->
+          <!--   </select> -->
+      <!-- </tr> -->
+
+      <tr>
+        <td class="key">Data folder
+        <td><span id="data-dir"></span>
+          <button id="change">Change...</button>
+      </tr>
+    </table>
+
+    <hr>
+    <div id="server_logging" style="font-family: monospace">
+      Server Logging Area
+    </div>
+
+    <script>
+      require('./renderer_main.js')
+    </script>
+
+  </body>
+</html>
