@@ -205,6 +205,7 @@ function GameEngine(config) {
     this.shells = [];
     this.asteroids = [];
     this.ticks = 0;
+    this.clock = 0;
     this.rawPoints = 0;
     this.points = 0;
 
@@ -284,7 +285,8 @@ GameEngine.prototype.createMap = function () {
     this.map = new Array(this.config.mapSize * this.config.mapSize);
 };
 
-GameEngine.prototype.stepOneTick = function () {
+GameEngine.prototype.stepOneTick = function (ms) {
+    this.clock += ms;
     this.ticks += 1;
     this.updatePlayers();
     this.updateFortresses();
@@ -664,40 +666,69 @@ GameEngine.prototype.killPlayer = function (p) {
     this.reward(this.config.rewards.shipDeath);
 };
 
-GameEngine.prototype.dumpState = function () {
-    var fortresses = new Array(this.fortresses.length);
-    var players = {};
-    var asteroids = new Array(this.asteroids.length);
+GameEngine.prototype.gameStateColumnTitles = function () {
+    // FIXME: this could get out of sync with dumpState()
+    var titles = new Array(5);
 
-    for (let k in this.players) {
-      players[k] = {id: this.players[k].id,
-                    angle: this.players[k].angle,
-                    position: this.players[k].position,
-                    velocity: this.players[k].velocity,
-                    turnFlag: this.players[k].turnFlag,
-                    thrustFlag: this.players[k].thrustFlag,
-                    alive: this.players[k].alive
-                   };
-    }
-    for (let i=0; i<this.fortresses.length; i++) {
-      fortresses[i] = {alive: this.fortresses[i].alive,
-                       angle: this.fortresses[i].angle,
-                       playerTarget: this.fortresses[i].playerTarget ? this.fortresses[i].playerTarget.id:null,
-                       missileTarget: this.fortresses[i].missileTarget ? this.fortresses[i].missileTarget.position:null
+    titles[0] = 'game_ticks';
+    titles[1] = 'game_clock';
+    titles[2] = ['player_alive',
+                 'player_x',
+                 'player_y',
+                 'player_vx',
+                 'player_vy',
+                 'player_turnFlag',
+                 'player_thrustFrag'];
+    titles[3] = ['fortress_alive',
+                 'fortress_angle',
+                 'fortress_playerTarget',
+                 'fortress_missileTarget'];
+    titles[4] = ['asteroid_angle',
+                 'asteroid_x',
+                 'asteroid_y',
+                 'asteroid_vx',
+                 'asteroid_vy'];
+    return titles;
 };
+
+GameEngine.prototype.dumpState = function () {
+    var numPlayers = 2;
+    var state = new Array(5);
+
+    state[0] = this.ticks;
+    state[1] = this.clock;
+
+    var j = 0;
+    state[2] = new Array(numPlayers);
+    for (let k in this.players) {
+        state[2][j] = [this.players[k].alive,
+                       this.players[k].angle,
+                       this.players[k].position.x,
+                       this.players[k].position.y,
+                       this.players[k].velocity.x,
+                       this.players[k].velocity.y,
+                       this.players[k].turnFlag,
+                       this.players[k].thrustFlag];
     }
 
+    state[3] = new Array(this.fortresses.length);
+    for (let i=0; i<this.fortresses.length; i++) {
+        state[3][i] = [this.fortresses[i].alive,
+                       this.fortresses[i].angle,
+                       this.fortresses[i].playerTarget ? this.fortresses[i].playerTarget.id:-1,
+                       this.fortresses[i].missileTarget ? this.fortresses[i].missileTarget.position:-1];
+    }
+
+    state[4] = new Array(this.asteroids.length);
     for (let i=0; i<this.asteroids.length; i++) {
-        asteroids[i] = {position: this.asteroids[i].position,
-                        velocity: this.asteroids[i].velocity,
-                        angle: this.asteroids[i].angle};
+        state[4][i] = [this.asteroids[i].angle,
+                       this.asteroids[i].position.x,
+                       this.asteroids[i].position.y,
+                       this.asteroids[i].velocity.x,
+                       this.asteroids[i].velocity.y];
     }
 
-    return { ticks: this.ticks,
-             fortresses: fortresses,
-             asteroids: asteroids,
-             players: players
-           };
+    return state;
 };
 
 exports.GameEngine = GameEngine;

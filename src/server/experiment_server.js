@@ -3,7 +3,7 @@ var verbose = false,
     path = require('path'),
     uuid = require('uuid/v1'),
     http = require('http'),
-    logging = require('./logging'),
+    logging = require('./fileLogging'),
     game_server = require('./gameserver.js');
 
 function ExperimentServer(data_dir, client_dir) {
@@ -14,7 +14,7 @@ function ExperimentServer(data_dir, client_dir) {
     var bodyParser = require('body-parser');
     var urlencodedParser = bodyParser.urlencoded({ extended: false });
 
-    this.Log = new logging.Logging(data_dir);
+    this.Log = new logging.FileLogging(data_dir);
     this.Log.openDB();
 
     this.server.listen(gameport);
@@ -44,8 +44,7 @@ function ExperimentServer(data_dir, client_dir) {
                            body.game_number);
             res.end(JSON.stringify({success:true}));
         } else if (body.action === 'store-log') {
-            this.Log.addLogBlock(body.worker_id,
-                            body.log);
+            this.Log.addSessionLog(body.worker_id, body.log);
             res.end(JSON.stringify({success:true}));
         } else if (body.action === 'store-progress') {
             this.Log.updateProgress(body.worker_id,

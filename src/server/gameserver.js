@@ -45,8 +45,8 @@ GameServer.prototype.addPlayer = function (client) {
 };
 
 GameServer.prototype.disconnected = function (client) {
-  console.log("someone disconnected. abort game.");
-  this.endGameMode();
+    console.log("someone disconnected. abort game.");
+    if (this.mode === 'game') this.endGameMode();
 };
 
 GameServer.prototype.delPlayer = function (client) {
@@ -73,6 +73,7 @@ GameServer.prototype.endGameMode = function () {
     this.mode = 'lobby';
     this.stopServerUpdates();
     this.stopGameTickTimer();
+    this.logging.endGame();
     for (let k in this.players) {
         this.players[k].emit('end');
         this.engine.delPlayer(k);
@@ -96,6 +97,9 @@ GameServer.prototype.onMessage = function (client, m) {
         var cmd = m[0];
         var data = JSON.parse(m.slice(1));
         switch (cmd) {
+        case 'g':
+            this.game_number = data.gnum;
+            break;
         case 'k':
             this.engine.accumPlayerMovementRequests(p, data);
             break;
@@ -107,11 +111,21 @@ GameServer.prototype.onMessage = function (client, m) {
 };
 
 GameServer.prototype.startGameTickTimer = function () {
+    var players = [];
+    var fortresses = [];
+    var asteroids = [];
+    this.logging.startGame(this.game_number, {gnum: this.game_number,
+                                              titles: this.engine.gameStateColumnTitles(),
+                                              players: players,
+                                              fortresses: fortresses,
+                                              asteroids: asteroids
+                                             });
     this.gameTickTimer = setInterval(function() {
         var t = new Date().getTime();
-        this.engine.lastTickDuration = t - this.engine.tickTime;
-        this.engine.tickTime = t;
-        this.engine.stepOneTick();
+        if (this.tickTime) this.lastTickDuration = t - this.tickTime;
+        else this.lastTickDuration = 0;
+        this.tickTime = t;
+        this.engine.stepOneTick(this.lastTickDuration);
         this.logging.saveGameState(this.game_number, this.engine.ticks, this.engine.dumpState());
         this.checkForGameEnd();
     }.bind(this), 15);

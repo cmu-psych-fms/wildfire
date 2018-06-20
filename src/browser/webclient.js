@@ -31,7 +31,8 @@
 
 }() );
 
-function WebClient (engine) {
+function WebClient (gnum) {
+    this.game_number = gnum;
     this.engine = new GameEngine(new Config());
     this.network = {serverUpdates: [],
                     latency: 0};
@@ -125,16 +126,23 @@ WebClient.prototype.init = function () {
     $('#status').html('<h3>Connecting to game server ...</h3>');
 };
 
+WebClient.prototype.addLobbyEventListeners = function () {
+    $(document).on('keydown', $.proxy(this.lobbyOnKeyDown, this));
+    $(document).on('keyup', $.proxy(this.lobbyOnKeyUp, this));
+};
+
+
 WebClient.prototype.addEventListeners = function () {
     $(document).on('keydown', $.proxy(this.onKeyDown, this));
     $(document).on('keyup', $.proxy(this.onKeyUp, this));
 };
 
 WebClient.prototype.clearEvents = function () {
+    $(document).off('keydown', $.proxy(this.lobbyOnKeyDown));
+    $(document).off('keyup', $.proxy(this.lobbyOnKeyUp));
     $(document).off('keydown', $.proxy(this.onKeyDown));
     $(document).off('keyup', $.proxy(this.onKeyUp));
 };
-
 
 WebClient.prototype.cleanup = function () {
     for (let k in this.engine.players) {
@@ -146,6 +154,14 @@ WebClient.prototype.cleanup = function () {
 
     exp.lg('end');
     this.cancelUpdates();
+};
+
+WebClient.prototype.lobbyOnKeyDown = function (ev) {
+    
+};
+
+WebClient.prototype.lobbyOnKeyUp = function (ev) {
+    
 };
 
 WebClient.prototype.connect = function () {
@@ -474,6 +490,8 @@ WebClient.prototype.onConnect = function (data) {
     this.engine.asteroids = data.asteroids;
 
     this.addWorldToScene();
+
+    this.network.socket.send('g' + JSON.stringify({gnum: this.game_number}));
 
     if (count === 1)
         $('#status').html('<h3>Waiting For Other Player ...</h3>');
