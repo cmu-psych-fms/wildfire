@@ -704,40 +704,54 @@ GameEngine.prototype.gameStateColumnTitles = function () {
     return titles;
 };
 
+Number.prototype.fixed = function(n) { n = n || 3; return parseFloat(this.toFixed(n)); };
+
 GameEngine.prototype.dumpState = function () {
     var numPlayers = 2;
-    var state = new Array(5);
+    var state = new Array(7);
 
     state[0] = this.ticks;
     state[1] = this.clock;
 
     state[2] = new Array(numPlayers);
     for (let i=0;i<this.players.length;i++) {
-        state[2][i] = [this.players[i].alive,
-                       this.players[i].angle,
-                       this.players[i].position.x,
-                       this.players[i].position.y,
-                       this.players[i].velocity.x,
-                       this.players[i].velocity.y,
+        state[2][i] = [this.players[i].alive?1:0,
+                       this.players[i].angle.fixed(1),
+                       this.players[i].position.x.fixed(3),
+                       this.players[i].position.y.fixed(3),
+                       this.players[i].velocity.x.fixed(3),
+                       this.players[i].velocity.y.fixed(3),
                        this.players[i].turnFlag,
                        this.players[i].thrustFlag];
     }
 
     state[3] = new Array(this.fortresses.length);
     for (let i=0; i<this.fortresses.length; i++) {
-        state[3][i] = [this.fortresses[i].alive,
-                       this.fortresses[i].angle,
+        state[3][i] = [this.fortresses[i].alive?1:0,
+                       this.fortresses[i].angle.fixed(1),
                        this.fortresses[i].playerTarget ? this.fortresses[i].playerTarget.id:-1,
                        this.fortresses[i].missileTarget ? this.fortresses[i].missileTarget.position:-1];
     }
 
     state[4] = new Array(this.asteroids.length);
     for (let i=0; i<this.asteroids.length; i++) {
-        state[4][i] = [this.asteroids[i].angle,
-                       this.asteroids[i].position.x,
-                       this.asteroids[i].position.y,
-                       this.asteroids[i].velocity.x,
-                       this.asteroids[i].velocity.y];
+        state[4][i] = [this.asteroids[i].angle.fixed(1),
+                       this.asteroids[i].position.x.fixed(3),
+                       this.asteroids[i].position.y.fixed(3),
+                       this.asteroids[i].velocity.x.fixed(3),
+                       this.asteroids[i].velocity.y.fixed(3)];
+    }
+    state[5] = new Array(this.missiles.length);
+    for (let i=0; i<this.missiles.length;i++) {
+        state[5][i] = [this.missiles[i].angle.fixed(1),
+                       this.missiles[i].position.x.fixed(3),
+                       this.missiles[i].position.y.fixed(3)];
+    }
+    state[6] = new Array(this.shells.length);
+    for (let i=0; i<this.shells.length;i++) {
+        state[6][i] = [this.shells[i].angle.fixed(1),
+                       this.shells[i].position.x.fixed(3),
+                       this.shells[i].position.y.fixed(3)];
     }
 
     return state;

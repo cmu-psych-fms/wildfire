@@ -79,7 +79,8 @@ GameServer.prototype.endGameMode = function () {
     this.mode = 'lobby';
     this.stopServerUpdates();
     this.stopGameTickTimer();
-    this.logging.endGame({points: this.engine.points,
+    this.logging.endGame(this.game_number,
+                         {points: this.engine.points,
                           rawPoints: this.engine.rawPoints});
     for (let i=0; i<this.players.length; i++) {
         this.players[i].client.emit('end');
@@ -119,9 +120,24 @@ GameServer.prototype.onMessage = function (client, m) {
 };
 
 GameServer.prototype.startGameTickTimer = function () {
-    var players = [];
-    var fortresses = [];
-    var asteroids = [];
+    var players = new Array(this.engine.players.length);
+    for (let i=0; i<this.players.length; i++) {
+        players[i] = {id: this.engine.players[i].id,
+                      color: this.engine.players[i].color,
+                      position: this.engine.players[i].position,
+                      angle: this.engine.players[i].angle}
+    }
+    var fortresses = new Array(this.engine.fortresses.length);
+    for (let i=0; i<this.engine.fortresses.length; i++) {
+        fortresses[i] = {angle:this.engine.fortresses[i].angle,
+                         radius:this.engine.fortresses[i].radius,
+                         position: this.engine.fortresses[i].position}
+    }
+    var asteroids = new Array(this.engine.asteroids.length);
+    for (let i=0; i<this.engine.asteroids.length; i++) {
+        asteroids[i] = this.engine.asteroids[i];
+    }
+
     console.log('game number', this.game_number);
     this.logging.startGame(this.game_number, {gnum: this.game_number,
                                               titles: this.engine.gameStateColumnTitles(),
