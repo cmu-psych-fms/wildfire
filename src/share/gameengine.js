@@ -199,7 +199,7 @@ Hexagon.prototype.drawPartial = function (ctx, x, y, angle, color) {
 
 function GameEngine(config) {
     this.config = config;
-    this.players = {};
+    this.players = [];
     this.fortresses = [];
     this.missiles = [];
     this.shells = [];
@@ -217,6 +217,13 @@ function GameEngine(config) {
 }
 
 GameEngine.prototype = {};
+
+GameEngine.prototype.getPlayer = function (id) {
+    for (let i=0; i<this.players.length;i++) {
+        if (this.players[i].id === id) return this.players[i];
+    }
+    return null;
+}
 
 GameEngine.prototype.reward = function (amt) {
     this.rawPoints += amt;
@@ -484,9 +491,9 @@ GameEngine.prototype.updateShells = function () {
             s.alive = false;
             continue;
         }
-        for (let k in this.players) {
-            if (distance(s.position, this.players[k].position) < this.config.player.collisionRadius+this.config.shell.collisionRadius) {
-                this.killPlayer(this.players[k]);
+        for (let j=0; j<this.players.length; j++) {
+            if (distance(s.position, this.players[j].position) < this.config.player.collisionRadius+this.config.shell.collisionRadius) {
+                this.killPlayer(this.players[j]);
                 s.alive = false;
                 break;
             }
@@ -521,9 +528,9 @@ GameEngine.prototype.fortressAimAt = function (f, pos) {
 GameEngine.prototype.updateFortress = function (f) {
     if (f.alive) {
         if (f.playerTarget) {
-            if (!this.players[f.playerTarget].alive ||
+            if (!f.playerTarget.alive ||
                 // !this.hexagons[f.radius].inside(f.position, this.players[f.playerTarget].position)) {
-                distance(f.position, this.players[f.playerTarget].position) > f.radius) {
+                distance(f.position, f.playerTarget.position) > f.radius) {
                 f.playerTarget = null;
             }
         }
@@ -535,11 +542,11 @@ GameEngine.prototype.updateFortress = function (f) {
             }
         }
         if (!f.playerTarget) {
-            for (k in this.players) {
-                if (this.players[k].alive &&
+            for (i=0;i<this.players.length;i++) {
+                if (this.players[i].alive &&
                     // this.hexagons[f.radius].inside(f.position, this.players[k].position)) {
-                    distance(f.position, this.players[k].position) <= f.radius) {
-                    f.playerTarget = k;
+                    distance(f.position, this.players[i].position) <= f.radius) {
+                    f.playerTarget = this.players[i];
                     f.targetTimer = 0;
                     break;
                 }
@@ -556,12 +563,12 @@ GameEngine.prototype.updateFortress = function (f) {
         }
 
         var target = null;
-        if (f.playerTarget) target = this.players[f.playerTarget];
+        if (f.playerTarget) target = f.playerTarget;
         else if (f.missileTarget) target = f.missileTarget;
 
         if (f.playerTarget) {
             // f.angle = angleTo(f.position, this.players[f.playerTarget].position);
-            this.fortressAimAt(f, this.players[f.playerTarget].position);
+            this.fortressAimAt(f, f.playerTarget.position);
             f.targetTimer += 1;
             if (f.targetTimer > this.config.fortress.lockTime) {
                 this.addShell(f);
@@ -580,14 +587,14 @@ GameEngine.prototype.updateFortress = function (f) {
 };
 
 GameEngine.prototype.updatePlayers = function () {
-    for (let id in this.players) {
-        var p = this.players[id];
-        for (let i=0; i<p.movementRequests.length; i++) {
-            p.lastMovementRequest = p.movementRequests[i][0];
-            p.thrustFlag = p.movementRequests[i][1];
-            p.turnFlag = p.movementRequests[i][2];
-            p.missileRequests = p.movementRequests[i][3];
-            p.messageRequests = p.movementRequests[i][4];
+    for (let i=0; i<this.players.length; i++) {
+        var p = this.players[i];
+        for (let j=0; j<p.movementRequests.length; j++) {
+            p.lastMovementRequest = p.movementRequests[j][0];
+            p.thrustFlag = p.movementRequests[j][1];
+            p.turnFlag = p.movementRequests[j][2];
+            p.missileRequests = p.movementRequests[j][3];
+            p.messageRequests = p.movementRequests[j][4];
             this.updatePlayer(p);
         }
         p.movementRequests.length = 0;
@@ -618,10 +625,10 @@ GameEngine.prototype.updateAsteroids = function () {
                     this.missiles[j].alive = false;
                 }
             }
-            for (let k in this.players) {
-                if (this.players[k].alive) {
-                    if (distance(this.players[k].position, pos) < this.asteroids[i].bubbles[b].r) {
-                        this.killPlayer(this.players[k]);
+            for (let j=0; j<this.players.length; j++) {
+                if (this.players[j].alive) {
+                    if (distance(this.players[j].position, pos) < this.asteroids[i].bubbles[b].r) {
+                        this.killPlayer(this.players[j]);
                     }
                 }
             }
@@ -630,32 +637,38 @@ GameEngine.prototype.updateAsteroids = function () {
 };
 
 GameEngine.prototype.addPlayer = function (id) {
-    var n = Object.keys(this.players).length;
-    this.players[id] = {id: id,
-                        angle: this.config.player.startAngle,
-                        position: {x: this.config.player.startPosition.x,
-                                   y: this.config.player.startPosition.y},
-                        velocity: {x: this.config.player.startVelocity.x,
-                                   y: this.config.player.startVelocity.y},
-                        config: this.config.player,
-                        turnFlag: 0,
-                        thrustFlag: 0,
-                        // missileState: 0,
-                        messageRequests: [],
-                        missileRequests: 0,
-                        Requests: [],
-                        spawnTimer: 0,
-                        alive: true,
-                        color: this.config.player.colors[n%this.config.player.colors.length],
-                        lastMovementRequest: -1,
-                        movementRequests: []
-                       };
+    this.players.push({id: id,
+                       angle: this.config.player.startAngle,
+                       position: {x: this.config.player.startPosition.x,
+                                  y: this.config.player.startPosition.y},
+                       velocity: {x: this.config.player.startVelocity.x,
+                                  y: this.config.player.startVelocity.y},
+                       config: this.config.player,
+                       turnFlag: 0,
+                       thrustFlag: 0,
+                       // missileState: 0,
+                       messageRequests: [],
+                       missileRequests: 0,
+                       Requests: [],
+                       spawnTimer: 0,
+                       alive: true,
+                       color: this.config.player.colors[this.players.length%this.config.player.colors.length],
+                       lastMovementRequest: -1,
+                       movementRequests: []
+                      });
 };
 
 GameEngine.prototype.delPlayer = function (id) {
-    delete this.players[id];
+    var match = null;
+    for (let i=0; i<this.players.length;i++) {
+        if (this.players[i].id === id) {
+            match = this.players[i];
+            break;
+        }
+    }
+
     for (let i=0; i<this.fortresses.length; i++) {
-        if (this.fortresses[i].playerTarget === id)
+        if (this.fortresses[i].playerTarget === match)
             this.fortresses[i].playerTarget = null;
     }
 };
@@ -698,17 +711,16 @@ GameEngine.prototype.dumpState = function () {
     state[0] = this.ticks;
     state[1] = this.clock;
 
-    var j = 0;
     state[2] = new Array(numPlayers);
-    for (let k in this.players) {
-        state[2][j] = [this.players[k].alive,
-                       this.players[k].angle,
-                       this.players[k].position.x,
-                       this.players[k].position.y,
-                       this.players[k].velocity.x,
-                       this.players[k].velocity.y,
-                       this.players[k].turnFlag,
-                       this.players[k].thrustFlag];
+    for (let i=0;i<this.players.length;i++) {
+        state[2][i] = [this.players[i].alive,
+                       this.players[i].angle,
+                       this.players[i].position.x,
+                       this.players[i].position.y,
+                       this.players[i].velocity.x,
+                       this.players[i].velocity.y,
+                       this.players[i].turnFlag,
+                       this.players[i].thrustFlag];
     }
 
     state[3] = new Array(this.fortresses.length);

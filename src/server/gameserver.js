@@ -3,7 +3,7 @@ var config = require('./config');
 
 function GameServer(logging) {
     this.numPlayers = 0;
-    this.players = {};
+    this.players = [];
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
     this.engine.placeAsteroids(10, 50);
@@ -14,16 +14,17 @@ function GameServer(logging) {
 GameServer.prototype = {};
 
 GameServer.prototype.addPlayer = function (client) {
-    for (let k in this.players) {
-        this.players[k].emit('join', {id: client.userid});
+    for (let i=0; i<this.players.length; i++) {
+        this.players[i].client.emit('join', {id: client.userid});
     }
-    this.players[client.userid] = client;
+    this.players.push({client: client,
+                       id: client.userid});
     this.engine.addPlayer(client.userid);
-    this.numPlayers += 1;
 
-    var players = {};
-    for (let k in this.players) {
-        players[k] = {color: this.engine.players[k].color};
+    var players = new Array(this.players.length);
+    for (let i=0; i<this.players.length; i++) {
+        players[i] = {color: this.engine.players[i].color,
+                      id: this.engine.players[i].id};
     }
     var fpayload = new Array(this.engine.fortresses.length);
     for (let i =0;i<this.engine.fortresses.length; i++) {
@@ -33,13 +34,13 @@ GameServer.prototype.addPlayer = function (client) {
                        this.engine.fortresses[i].angle,
                        this.engine.fortresses[i].radius];
     }
-    this.players[client.userid].emit('connected', {id:client.userid,
-                                                   players: players,
-                                                   fortresses: fpayload,
-                                                   asteroids: this.engine.asteroids});
+    client.emit('connected', {id:client.userid,
+                              players: players,
+                              fortresses: fpayload,
+                              asteroids: this.engine.asteroids});
 
-    console.log('num players', this.numPlayers);
-    if (this.numPlayers >= 2) {
+    console.log('num players', this.players.length);
+    if (this.players.length >= 2) {
         setTimeout(this.startGameMode.bind(this), 5000);
     }
 };
@@ -55,10 +56,15 @@ GameServer.prototype.delPlayer = function (client) {
     //     console.log('No more players');
     //     this.endGameMode();
     // }
-    delete this.players[client.userid];
+    for (i=0; i<this.players.length;i++) {
+        if (this.players[i].id === client.id) {
+            this.players.splice(i,1);
+            break;
+        }
+    }
     this.engine.delPlayer(client.userid);
-    for (let k in this.players) {
-        this.players[k].emit('part', {id:client.userid});
+    for (let i=0; i<this.players.length;i++) {
+        this.players[i].client.emit('part', {id:client.userid});
     }
 };
 
@@ -73,12 +79,13 @@ GameServer.prototype.endGameMode = function () {
     this.mode = 'lobby';
     this.stopServerUpdates();
     this.stopGameTickTimer();
-    this.logging.endGame();
-    for (let k in this.players) {
-        this.players[k].emit('end');
-        this.engine.delPlayer(k);
+    this.logging.endGame({points: this.engine.points,
+                          rawPoints: this.engine.rawPoints});
+    for (let i=0; i<this.players.length; i++) {
+        this.players[i].client.emit('end');
+        this.engine.delPlayer(this.players[i].id);
     }
-    this.players = {};
+    this.players = [];
     // Set everything up for a fresh new game
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
@@ -91,13 +98,14 @@ GameServer.prototype.handlePing = function (client, ts) {
 }
 
 GameServer.prototype.onMessage = function (client, m) {
-    var p = this.engine.players[client.userid];
+    var p = this.engine.getPlayer(client.userid);
     // console.log('message', m);
     if (p) {
         var cmd = m[0];
         var data = JSON.parse(m.slice(1));
         switch (cmd) {
         case 'g':
+            console.log('got game number', data);
             this.game_number = data.gnum;
             break;
         case 'k':
@@ -114,6 +122,7 @@ GameServer.prototype.startGameTickTimer = function () {
     var players = [];
     var fortresses = [];
     var asteroids = [];
+    console.log('game number', this.game_number);
     this.logging.startGame(this.game_number, {gnum: this.game_number,
                                               titles: this.engine.gameStateColumnTitles(),
                                               players: players,
@@ -151,15 +160,15 @@ GameServer.prototype.stopServerUpdates = function () {
 
 GameServer.prototype.sendServerUpdate = function () {
     var full = {};
-    full.p = {};
-    for (let k in this.players) {
-        full.p[k] = [this.engine.players[k].alive?1:0,
-                     this.engine.players[k].position.x,
-                     this.engine.players[k].position.y,
-                     this.engine.players[k].angle,
-                     this.engine.players[k].velocity.x,
-                     this.engine.players[k].velocity.y,
-                     this.engine.players[k].turnFlag];
+    full.p = new Array(this.players.length);
+    for (let i=0;i<this.players.length;i++) {
+        full.p[i] = [this.engine.players[i].alive?1:0,
+                     this.engine.players[i].position.x,
+                     this.engine.players[i].position.y,
+                     this.engine.players[i].angle,
+                     this.engine.players[i].velocity.x,
+                     this.engine.players[i].velocity.y,
+                     this.engine.players[i].turnFlag];
     }
     full.f = new Array(this.engine.fortresses.length);
     for (let i =0;i<this.engine.fortresses.length; i++) {
@@ -190,9 +199,9 @@ GameServer.prototype.sendServerUpdate = function () {
     }
     full.msg = this.engine.messages;
     full.points = this.engine.points;
-    for (let k in this.players) {
-        full.lmr = this.engine.players[k].lastMovementRequest;
-        this.players[k].emit('serverupdate', full);
+    for (let i=0; i<this.players.length; i++) {
+        full.lmr = this.engine.players[i].lastMovementRequest;
+        this.players[i].client.emit('serverupdate', full);
     }
     this.engine.messages.length = 0;
 };

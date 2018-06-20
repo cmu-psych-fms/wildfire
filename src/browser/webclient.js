@@ -145,9 +145,7 @@ WebClient.prototype.clearEvents = function () {
 };
 
 WebClient.prototype.cleanup = function () {
-    for (let k in this.engine.players) {
-        this.engine.delPlayer(k);
-    }
+    this.engine.players = [];
     this.clearEvents();
     exp.gameReward = this.engine.config.pointConversion * this.engine.points;
     exp.gamePoints = this.engine.points;
@@ -230,12 +228,12 @@ WebClient.prototype.onKeyUp = function (ev) {
 };
 
 WebClient.prototype.updateScene = function () {
-    for (let k in this.engine.players) {
-        this.engine.players[k].mesh.position.x = this.engine.players[k].position.x;
-        this.engine.players[k].mesh.position.y = this.engine.players[k].position.y;
-        // this.engine.players[k].mesh.position.z = 10;
-        this.engine.players[k].mesh.rotation.z = this.engine.players[k].angle * Math.PI/180;
-        this.engine.players[k].mesh.visible = this.engine.players[k].alive ? true:false;
+    for (let i=0; i<this.engine.players.length; i++) {
+        this.engine.players[i].mesh.position.x = this.engine.players[i].position.x;
+        this.engine.players[i].mesh.position.y = this.engine.players[i].position.y;
+        // this.engine.players[i].mesh.position.z = 10;
+        this.engine.players[i].mesh.rotation.z = this.engine.players[i].angle * Math.PI/180;
+        this.engine.players[i].mesh.visible = this.engine.players[i].alive ? true:false;
     }
     for (let i=0; i<this.engine.fortresses.length; i++) {
         this.engine.fortresses[i].mesh.position.x = this.engine.fortresses[i].position.x;
@@ -397,8 +395,8 @@ WebClient.prototype.addWorldToScene = function () {
         this.scene.add(m);
     }
 
-    for (let k in this.engine.players) {
-        this.addPlayerToScene(this.engine.players[k]);
+    for (let i=0; i<this.engine.players.length; i++) {
+        this.addPlayerToScene(this.engine.players[i]);
     }
 
     material = new THREE.MeshPhongMaterial({color: 0x3333FF,
@@ -473,11 +471,9 @@ WebClient.prototype.addWorldToScene = function () {
 WebClient.prototype.onConnect = function (data) {
     console.log('connect', data);
     this.id = data.id;
-    var count = 0;
-    for (let k in data.players) {
-        this.engine.addPlayer(k);
-        this.engine.players[k].color = data.players[k].color;
-        count += 1;
+    for (let i=0; i<data.players.length; i++) {
+        this.engine.addPlayer(data.players[i].id);
+        this.engine.players[i].color = data.players[i].color;
     }
     this.engine.fortresses = new Array(data.fortresses.length);
     for (let i=0; i<data.fortresses.length; i++) {
@@ -493,9 +489,9 @@ WebClient.prototype.onConnect = function (data) {
 
     this.network.socket.send('g' + JSON.stringify({gnum: this.game_number}));
 
-    if (count === 1)
+    if (this.engine.players.length === 1)
         $('#status').html('<h3>Waiting For Other Player ...</h3>');
-    else if (count >= 2)
+    else if (this.engine.players.length >= 2)
         $('#status').html('<h3>Game will start in 5 seconds!</h3>');
 };
 
@@ -530,13 +526,13 @@ WebClient.prototype.onMessage = function (msg) {
 WebClient.prototype.onPlayerJoin = function (data) {
     console.log('join', data);
     this.engine.addPlayer(data.id);
-    this.addPlayerToScene(this.engine.players[data.id]);
+    this.addPlayerToScene(this.engine.getPlayer(data.id));
     $('#status').html('<h3>Game will start in 5 seconds!</h3>');
 };
 
 WebClient.prototype.onPlayerPart = function (data) {
     console.log('part', data);
-    this.scene.remove(this.engine.players[data.id].mesh);
+    this.scene.remove(this.engine.getPlayer(data.id).mesh);
     this.engine.delPlayer(data.id);
 };
 
@@ -557,26 +553,27 @@ WebClient.prototype.onServerUpdate = function (data) {
 };
 
 WebClient.prototype.processKbdInput = function () {
-    this.engine.processPlayerKeys(this.engine.players[this.id], this.keyEvents);
+    var p = this.engine.getPlayer(this.id);
+    this.engine.processPlayerKeys(p, this.keyEvents);
     this.movementRequestSeq += 1;
     // console.log('master yah',
     //             this.engine.players[this.id].missileRequests,
     //             this.engine.players[this.id].messageRequests);
     var m = [this.movementRequestSeq,
-             this.engine.players[this.id].thrustFlag,
-             this.engine.players[this.id].turnFlag,
-             this.engine.players[this.id].missileRequests,
-             this.engine.players[this.id].messageRequests];
+             p.thrustFlag,
+             p.turnFlag,
+             p.missileRequests,
+             p.messageRequests];
     var packet = 'k' + JSON.stringify(m);
     this.network.socket.send (packet);
     this.movementRequests.push(m);
     this.keyEvents = [];
-    if (this.engine.players[this.id].alive)
-        this.engine.applyPlayerMovements(this.engine.players[this.id]);
+    if (p.alive)
+        this.engine.applyPlayerMovements(p);
 };
 
 WebClient.prototype.replayMovementRequests = function () {
-    var p = this.engine.players[this.id];
+    var p = this.engine.getPlayer(this.id);
 
     if (p.alive) {
         for (let i=0; i<this.movementRequests.length; i++) {
@@ -629,9 +626,9 @@ WebClient.prototype.predictiveStep = function () {
 
 WebClient.prototype.processServerUpdates = function () {
     if (this.network.serverUpdates.length === 0) {
-        for (let k in this.engine.players) {
-            if (k !== this.id)
-                this.predictPlayer(this.engine.players[k]);
+        for (let i=0; i<this.engine.players.length; i++) {
+            if (this.engine.players[i].id !== this.id)
+                this.predictPlayer(this.engine.players[i]);
         }
         this.predictiveStep();
     } else {
@@ -639,7 +636,7 @@ WebClient.prototype.processServerUpdates = function () {
         for (let i=0; i<this.network.serverUpdates.length; i++) {
             var msg = this.network.serverUpdates[i].msg;
             for (let i=0; i<msg.length;i++) {
-                this.engine.messages.push({player: msg[i][0], msg: msg[i][1], tick: this.engine.ticks});
+                this.engine.messages.push({player: this.engine.getPlayer(msg[i][0]), msg: msg[i][1], tick: this.engine.ticks});
                 g_sounds[msg[i][1]].play();
             }
         }
@@ -648,16 +645,16 @@ WebClient.prototype.processServerUpdates = function () {
         this.engine.points = last.points;
         $('#points').html(this.engine.points);
         var players = last.p;
-        for (let k in players) {
+        for (let i=0;i<players.length;i++) {
             // console.log('update', k, players[k], this.engine.players[k])
-            if (this.engine.players[k]) {
-                this.engine.players[k].alive = players[k][0],
-                this.engine.players[k].position.x = players[k][1];
-                this.engine.players[k].position.y = players[k][2];
-                this.engine.players[k].angle = players[k][3];
-                this.engine.players[k].velocity.x = players[k][4];
-                this.engine.players[k].velocity.y = players[k][5];
-                this.engine.players[k].turnFlag = players[k][6];
+            if (this.engine.players[i]) {
+                this.engine.players[i].alive = players[i][0],
+                this.engine.players[i].position.x = players[i][1];
+                this.engine.players[i].position.y = players[i][2];
+                this.engine.players[i].angle = players[i][3];
+                this.engine.players[i].velocity.x = players[i][4];
+                this.engine.players[i].velocity.y = players[i][5];
+                this.engine.players[i].turnFlag = players[i][6];
             }
         }
         var fortresses = last.f;
@@ -801,29 +798,31 @@ WebClient.prototype.drawEgocentric = function () {
     // this.camera.position.y = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
     // this.camera.position.z = 300;
     // this.camera.lookAt(this.engine.players[this.id].mesh.position);
+    var p = this.engine.getPlayer(this.id);
+
 
     if (this.cameraMode === 'chase') {
-        this.camera.position.x = this.engine.players[this.id].position.x - Math.cos(this.engine.players[this.id].angle * Math.PI/180)*200;
-        this.camera.position.y = this.engine.players[this.id].position.y - Math.sin(this.engine.players[this.id].angle * Math.PI/180)*200;
+        this.camera.position.x = p.position.x - Math.cos(p.angle * Math.PI/180)*200;
+        this.camera.position.y = p.position.y - Math.sin(p.angle * Math.PI/180)*200;
         this.camera.position.z = 200;
-        this.camera.lookAt(this.engine.players[this.id].mesh.position);
+        this.camera.lookAt(p.mesh.position);
     } else if (this.cameraMode === 'overhead') {
-        this.camera.position.x = this.engine.players[this.id].position.x;
-        this.camera.position.y = this.engine.players[this.id].position.y;
+        this.camera.position.x = p.position.x;
+        this.camera.position.y = p.position.y;
         this.camera.position.z = 500;
-        this.camera.lookAt(this.engine.players[this.id].mesh.position);
+        this.camera.lookAt(p.mesh.position);
     } else if (this.cameraMode === 'stationary') {
         this.camera.position.x = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
         this.camera.position.y = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
         this.camera.position.z = 300;
-        this.camera.lookAt(this.engine.players[this.id].mesh.position);
+        this.camera.lookAt(p.mesh.position);
     } else if (this.cameraMode === 'muzzle') {
-        this.camera.position.x = this.engine.players[this.id].position.x - Math.cos(this.engine.players[this.id].angle * Math.PI/180)*0.5;
-        this.camera.position.y = this.engine.players[this.id].position.y - Math.sin(this.engine.players[this.id].angle * Math.PI/180)*0.5;
+        this.camera.position.x = p.position.x - Math.cos(p.angle * Math.PI/180)*0.5;
+        this.camera.position.y = p.position.y - Math.sin(p.angle * Math.PI/180)*0.5;
         this.camera.position.z = 30;
-        this.camera.lookAt(this.engine.players[this.id].mesh.position);
-        // this.camera.position.x += Math.cos(this.engine.players[this.id].angle * Math.PI/180)*30;
-        // this.camera.position.y += Math.cos(this.engine.players[this.id].angle * Math.PI/180)*30;
+        this.camera.lookAt(p.mesh.position);
+        // this.camera.position.x += Math.cos(p.angle * Math.PI/180)*30;
+        // this.camera.position.y += Math.cos(p.angle * Math.PI/180)*30;
         this.camera.position.z = 45;
     }
 
@@ -831,10 +830,12 @@ WebClient.prototype.drawEgocentric = function () {
 };
 
 WebClient.prototype.drawGameState = function () {
+    var p = this.engine.getPlayer(this.id);
+
     this.ctx.save();
     this.ctx.clearRect(0,0,this.canvas2d.width,this.canvas2d.height);
-    this.ctx.translate(-this.engine.players[this.id].position.x+this.canvas2d.width/2,
-                       -this.engine.players[this.id].position.y+this.canvas2d.height/2);
+    this.ctx.translate(-p.position.x+this.canvas2d.width/2,
+                       -p.position.y+this.canvas2d.height/2);
     this.ctx.strokeStyle = '#003300';
     var maxx = this.engine.config.mapSize * this.engine.config.mapCellSize;
     var maxy = this.engine.config.mapSize * this.engine.config.mapCellSize;
@@ -901,17 +902,17 @@ WebClient.prototype.drawGameState = function () {
         }
 
     }
-    for (let id in this.engine.players) {
-        if (this.engine.players[id].alive)
+    for (let i=0; i<this.engine.players.length; i++) {
+        if (this.engine.players[i].alive)
             shipWireframe.draw (this.ctx,
-                                this.engine.players[id].position.x,
-                                this.engine.players[id].position.y,
-                                this.engine.players[id].angle,
-                                this.engine.players[id].color);
+                                this.engine.players[i].position.x,
+                                this.engine.players[i].position.y,
+                                this.engine.players[i].angle,
+                                this.engine.players[i].color);
         else
             this.drawExplosion(this.ctx,
-                               this.engine.players[id].position.x,
-                               this.engine.players[id].position.y);
+                               this.engine.players[i].position.x,
+                               this.engine.players[i].position.y);
     }
 
     // Projectiles
@@ -950,13 +951,14 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.restore();
 
     // Way points
-    for (let k in this.engine.players) {
-        if (this.engine.players[k].id === this.id) continue;
-        if (Math.abs(this.engine.players[this.id].position.x - this.engine.players[k].position.x) < this.canvas2d.width/2 &&
-            Math.abs(this.engine.players[this.id].position.y - this.engine.players[k].position.y) < this.canvas2d.height/2)
+    var self = this.engine.getPlayer(this.id);
+    for (let i=0; i<this.engine.players.length; i++) {
+        if (this.engine.players[i] === self) continue;
+        if (Math.abs(self.position.x - this.engine.players[i].position.x) < this.canvas2d.width/2 &&
+            Math.abs(self.position.y - this.engine.players[i].position.y) < this.canvas2d.height/2)
             continue;
-        var pos = this.HUDDirection(this.engine.players[this.id].position, this.engine.players[k].position);
-        this.ctx.fillStyle = this.engine.players[k].color;
+        var pos = this.HUDDirection(self.position, this.engine.players[i].position);
+        this.ctx.fillStyle = this.engine.players[i].color;
         this.ctx.beginPath();
         this.ctx.arc(pos.x, pos.y, 5, 0, Math.PI*2);
         this.ctx.fill();
@@ -984,7 +986,7 @@ WebClient.prototype.drawGameState = function () {
         var w = this.ctx.measureText(txt).width + 20;
         var diff = (this.engine.messages[i].tick + this.engine.config.message.duration) - this.engine.ticks;
         this.roundRect(this.ctx, 10, y, Math.max(100, w), 35);
-        this.ctx.strokeStyle = this.engine.players[this.engine.messages[i].player].color;
+        this.ctx.strokeStyle = this.engine.messages[i].player.color;
         this.ctx.fillStyle = '#000000';
 
         if (diff < fadeThreshold) this.ctx.globalAlpha = diff/fadeThreshold * 0.7;
@@ -992,7 +994,7 @@ WebClient.prototype.drawGameState = function () {
 
         this.ctx.fill();
         this.ctx.stroke();
-        this.ctx.fillStyle = this.engine.players[this.engine.messages[i].player].color;
+        this.ctx.fillStyle = this.engine.messages[i].player.color;
         // this.ctx.fillStyle = '#000000';
         this.ctx.fillText(txt, 20, y + 5+16);
         this.ctx.globalAlpha = 1;
