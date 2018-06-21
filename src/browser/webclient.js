@@ -40,7 +40,7 @@ function WebClient (gnum) {
     this.keyEvents = [];
     this.movementRequests = [];
     this.movementRequestSeq = -1;
-
+    this.gameStates = [];
 
     this.messageText = ["Impossible",
                         "I need help. Come to my position.",
@@ -164,7 +164,8 @@ WebClient.prototype.lobbyOnKeyUp = function (ev) {
 
 WebClient.prototype.connect = function () {
     this.network.socket = io.connect();
-    this.network.socket.on('connected', this.onConnect.bind(this));
+    this.network.socket.on('connect', this.onConnect.bind(this));
+    this.network.socket.on('joined', this.onJoined.bind(this));
 
     this.network.socket.on('disconnect', this.onDisconnect.bind(this));
     this.network.socket.on('message', this.onMessage.bind(this));
@@ -468,8 +469,14 @@ WebClient.prototype.addWorldToScene = function () {
     this.scene.add(this.three.rightBorder);
 };
 
-WebClient.prototype.onConnect = function (data) {
-    console.log('connect', data);
+WebClient.prototype.onConnect = function () {
+    console.log('connect');
+    this.network.socket.send('i' + JSON.stringify({id: getWorkerId(), gnum: this.game_number}));
+    $('#status').html('<h3>Identifying Client ...</h3>');
+};
+
+WebClient.prototype.onJoined = function (data) {
+    console.log('joined', data);
     this.id = data.id;
     for (let i=0; i<data.players.length; i++) {
         this.engine.addPlayer(data.players[i].id);
@@ -486,8 +493,6 @@ WebClient.prototype.onConnect = function (data) {
     this.engine.asteroids = data.asteroids;
 
     this.addWorldToScene();
-
-    this.network.socket.send('g' + JSON.stringify({gnum: this.game_number}));
 
     if (this.engine.players.length === 1)
         $('#status').html('<h3>Waiting For Other Player ...</h3>');
@@ -1016,6 +1021,14 @@ WebClient.prototype.updateMessages = function () {
     }
 };
 
+WebClient.prototype.saveState = function () {
+    exp.log.push(this.engine.dumpState());
+    if (exp.log.length >= exp.logSyncLength) {
+        console.log('syncing game state');
+        exp.com.synchronizeLog(exp.log);
+    }
+};
+
 WebClient.prototype.update = function (t) {
     this.dt = this.lastUpdateTime ? (t - this.lastUpdateTime) : 1000/60.0;
     this.lastUpdateTime = t;
@@ -1024,6 +1037,7 @@ WebClient.prototype.update = function (t) {
 
     this.processKbdInput();
     this.processServerUpdates();
+    this.saveState();
     this.updateScene();
     if (this.cameraMode === '2d')
         this.drawGameState();

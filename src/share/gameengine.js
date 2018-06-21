@@ -225,6 +225,20 @@ GameEngine.prototype.getPlayer = function (id) {
     return null;
 }
 
+GameEngine.prototype.getPlayerIndex = function (p) {
+    for (let i=0; i<this.players.length; i++) {
+        if (this.players[i] === p) return i;
+    }
+    return -1;
+};
+
+GameEngine.prototype.getMissileIndex = function (m) {
+    for (let i=0; i<this.missiles.length; i++) {
+        if (this.missiles[i] === m) return i;
+    }
+    return -1;
+};
+
 GameEngine.prototype.reward = function (amt) {
     this.rawPoints += amt;
     this.points += amt;
@@ -251,7 +265,7 @@ GameEngine.prototype.makeAsteroid = function (n) {
     }
 
     return asteroid;
-}
+};
 
 GameEngine.prototype.placeAsteroids = function (n, tries) {
     this.asteroids = new Array(n);
@@ -729,8 +743,8 @@ GameEngine.prototype.dumpState = function () {
     for (let i=0; i<this.fortresses.length; i++) {
         state[3][i] = [this.fortresses[i].alive?1:0,
                        this.fortresses[i].angle.fixed(1),
-                       this.fortresses[i].playerTarget ? this.fortresses[i].playerTarget.id:-1,
-                       this.fortresses[i].missileTarget ? this.fortresses[i].missileTarget.position:-1];
+                       this.getPlayerIndex(this.fortresses[i].playerTarget),
+                       this.getMissileIndex(this.fortresses[i].missileTarget)];
     }
 
     state[4] = new Array(this.asteroids.length);

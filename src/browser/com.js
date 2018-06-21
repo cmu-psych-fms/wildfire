@@ -67,24 +67,17 @@ function Com(worker_id, assignment_id, hit_id) {
     this.assignment_id = assignment_id;
     this.hit_id = hit_id;
     this.session_id = getCurrentTime();
-    this.log_offset = 0;
     this.log_blocks = [];
-
-    this.game_data_requests = [];
 
     return this;
 }
 
 Com.prototype = {};
 
-Com.prototype.isGameLogsComplete = function () {
+Com.prototype.isLogsComplete = function () {
     var ret = true;
-    $.each(this.game_data_requests, function (i, p) { ret = ret && p.completed; });
+    $.each(this.log_blocks, function (i, p) { ret = ret && p.completed; });
     return ret;
-};
-
-Com.prototype.setGameLogCallback = function (callback) {
-    $.each(this.game_data_requests, function (i, p) { p.callback = callback; });
 };
 
 Com.prototype.revisitThing = function (thing, override) {
@@ -98,14 +91,8 @@ Com.prototype.revisitLogBlocks = function (override) {
     this.revisitThing(this.log_blocks, override);
 };
 
-Com.prototype.revisitGameData = function (override) {
-    this.revisitThing(this.game_data_requests, override);
-};
-
 Com.prototype.synchronizeLog = function (log) {
-    if (log.length > this.log_offset) {
-        var logPortion = log.slice(this.log_offset, log.length);
-        this.log_offset = log.length;
+    if (log.length > 0) {
         var p = new Payload(SERVER_URL, 10000,
                             { 'action': 'store-log-block',
                               // 'assignment_id' : this.assignment_id,
@@ -113,29 +100,11 @@ Com.prototype.synchronizeLog = function (log) {
                               'worker_id' : this.worker_id,
                               'session_id': this.session_id,
                               'sync_id': this.log_blocks.length,
-                              'log': JSON.stringify(logPortion) });
+                              'log': JSON.stringify(log) });
         this.log_blocks.unshift(p);
+        log.length = 0;
     }
     this.revisitLogBlocks(false);
-};
-
-Com.prototype.sendLog = function (log, extra, successCallback, failCallback) {
-    var r;
-    r = $.ajax(SERVER_URL,
-               { 'type' : 'POST',
-                 'data' : { 'action': 'store-log',
-                            // 'assignment_id' : this.assignment_id,
-                            // 'hit_id' : this.hit_id,
-                            'worker_id' : this.worker_id,
-                            'extra': JSON.stringify(extra),
-                            'log' : JSON.stringify(log) },
-                 'dataType' : 'json',
-                 'timeout': 60000
-               });
-    r.done(successCallback);
-    r.fail(function (xhr, status, thrownerror) {
-        failCallback(status);
-    });
 };
 
 Com.prototype.storeProgress = function (idx, reward, condition, extra ) {
@@ -152,19 +121,6 @@ Com.prototype.storeProgress = function (idx, reward, condition, extra ) {
            { 'type' : 'POST',
              'data' : d,
              'dataType' : 'json' });
-};
-
-Com.prototype.sendGameData = function (game_number, logData) {
-    var p = new Payload(SERVER_URL, 120000,
-                        { 'action': 'store-game-data',
-                          'assignment_id' : this.assignment_id,
-                          'worker_id' : this.worker_id,
-                          'hit_id' : this.hit_id,
-                          'session_id': this.session_id,
-                          'game' : game_number,
-                          'log' : JSON.stringify(logData) });
-    this.game_data_requests.unshift(p);
-    this.revisitGameData(false);
 };
 
 function getResume (resumeCallback, startCallback, rejectCallback, errorCallback) {

@@ -65,6 +65,7 @@ function Experiment () {
     this.reward = 0;
     this.lastBlockReward = 0;
     this.log = [];
+    this.logSyncLength = 60;
 
     this.gameLogData = [];
     this.gameReward = 0;
@@ -164,6 +165,9 @@ Experiment.prototype.lg = function (tag, keys, screen_id) {
 
     // this.storeLine(line);
     this.log.push(line);
+    if (this.log.length >= this.logSyncLength) {
+        this.com.synchronizeLog(this.log);
+    }
 };
 
 Experiment.prototype.lgExperimentStart = function (resumep) {

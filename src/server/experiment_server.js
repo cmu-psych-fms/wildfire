@@ -85,23 +85,30 @@ function ExperimentServer(data_dir, client_dir) {
     gserver = new game_server.GameServer(this.Log);
 
     this.sio.sockets.on('connection', function (client) {
-        //Generate a new UUID, looks something like
-        //5b2ca132-64bd-4513-99da-90e838ca47d1
-        //and store this on their socket/connection
-        client.userid = uuid();
+        // Store some state on the client object.
+        client.userid = null;
+        client.state = 'connected';
 
         //Useful to know when someone connects
-        console.log('\t socket.io:: player ' + client.userid + ' connected');
-
-        //tell the player they connected, giving them their id
-        gserver.addPlayer(client);
+        console.log('socket.io:: player connected');
 
         client.on('message', function(m) {
-            gserver.onMessage(client, m);
+            if (client.state === 'connected') {
+                var cmd = m[0];
+                var data = JSON.parse(m.slice(1));
+                if (cmd === 'i') {
+                    client.userid = data.id;
+                    client.state = 'joined';
+                    console.log('socket.io:: player identified as ' + client.userid);
+                    gserver.addPlayer(client, data);
+                }
+            } else {
+                gserver.onMessage(client, m);
+            }
         });
 
         client.on('disconnect', function () {
-            console.log('\t socket.io:: player ' + client.userid + ' disconnected');
+            console.log('socket.io:: player ' + client.userid + ' disconnected');
             gserver.disconnected(client);
         });
     });

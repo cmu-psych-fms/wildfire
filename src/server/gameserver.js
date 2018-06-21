@@ -2,8 +2,10 @@ var engine = require('./gameengine');
 var config = require('./config');
 
 function GameServer(logging) {
-    this.numPlayers = 0;
     this.players = [];
+    this.tickTime = 0;
+    this.clientGameNumbers = {};
+    this.gameNumber = 0;
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
     this.engine.placeAsteroids(10, 50);
@@ -13,7 +15,18 @@ function GameServer(logging) {
 
 GameServer.prototype = {};
 
-GameServer.prototype.addPlayer = function (client) {
+GameServer.prototype.reset = function () {
+    this.players = [];
+    this.tickTime = 0;
+    this.clientGameNumbers = {};
+    // Set everything up for a fresh new game
+    this.engine = new engine.GameEngine(new config.Config());
+    this.engine.placeFortresses(10, 50);
+    this.engine.placeAsteroids(10, 50);
+};
+
+GameServer.prototype.addPlayer = function (client, joinData) {
+    this.clientGameNumbers[client.userid] = joinData.gnum;
     for (let i=0; i<this.players.length; i++) {
         this.players[i].client.emit('join', {id: client.userid});
     }
@@ -34,10 +47,10 @@ GameServer.prototype.addPlayer = function (client) {
                        this.engine.fortresses[i].angle,
                        this.engine.fortresses[i].radius];
     }
-    client.emit('connected', {id:client.userid,
-                              players: players,
-                              fortresses: fpayload,
-                              asteroids: this.engine.asteroids});
+    client.emit('joined', {id:client.userid,
+                           players: players,
+                           fortresses: fpayload,
+                           asteroids: this.engine.asteroids});
 
     console.log('num players', this.players.length);
     if (this.players.length >= 2) {
@@ -51,11 +64,6 @@ GameServer.prototype.disconnected = function (client) {
 };
 
 GameServer.prototype.delPlayer = function (client) {
-    this.numPlayers -= 1;
-    // if (this.numPlayers <= 0) {
-    //     console.log('No more players');
-    //     this.endGameMode();
-    // }
     for (i=0; i<this.players.length;i++) {
         if (this.players[i].id === client.id) {
             this.players.splice(i,1);
@@ -70,6 +78,7 @@ GameServer.prototype.delPlayer = function (client) {
 
 GameServer.prototype.startGameMode = function () {
     this.mode = 'game';
+    this.gameNumber += 1;
     this.startServerUpdates();
     this.startGameTickTimer();
     console.log('game mode');
@@ -79,18 +88,14 @@ GameServer.prototype.endGameMode = function () {
     this.mode = 'lobby';
     this.stopServerUpdates();
     this.stopGameTickTimer();
-    this.logging.endGame(this.game_number,
+    this.logging.endGame(this.gameNumber,
                          {points: this.engine.points,
                           rawPoints: this.engine.rawPoints});
     for (let i=0; i<this.players.length; i++) {
         this.players[i].client.emit('end');
         this.engine.delPlayer(this.players[i].id);
     }
-    this.players = [];
-    // Set everything up for a fresh new game
-    this.engine = new engine.GameEngine(new config.Config());
-    this.engine.placeFortresses(10, 50);
-    this.engine.placeAsteroids(10, 50);
+    this.reset();
     console.log('lobby mode');
 };
 
@@ -105,10 +110,6 @@ GameServer.prototype.onMessage = function (client, m) {
         var cmd = m[0];
         var data = JSON.parse(m.slice(1));
         switch (cmd) {
-        case 'g':
-            console.log('got game number', data);
-            this.game_number = data.gnum;
-            break;
         case 'k':
             this.engine.accumPlayerMovementRequests(p, data);
             break;
@@ -138,20 +139,21 @@ GameServer.prototype.startGameTickTimer = function () {
         asteroids[i] = this.engine.asteroids[i];
     }
 
-    console.log('game number', this.game_number);
-    this.logging.startGame(this.game_number, {gnum: this.game_number,
-                                              titles: this.engine.gameStateColumnTitles(),
-                                              players: players,
-                                              fortresses: fortresses,
-                                              asteroids: asteroids
-                                             });
+    console.log('game number', this.gameNumber);
+    this.logging.startGame(this.gameNumber, {gnum: this.gameNumber,
+                                             client_gnums: this.clientGameNumbers,
+                                             titles: this.engine.gameStateColumnTitles(),
+                                             players: players,
+                                             fortresses: fortresses,
+                                             asteroids: asteroids
+                                            });
     this.gameTickTimer = setInterval(function() {
         var t = new Date().getTime();
         if (this.tickTime) this.lastTickDuration = t - this.tickTime;
         else this.lastTickDuration = 0;
         this.tickTime = t;
         this.engine.stepOneTick(this.lastTickDuration);
-        this.logging.saveGameState(this.game_number, this.engine.ticks, this.engine.dumpState());
+        this.logging.saveGameState(this.gameNumber, this.engine.ticks, this.engine.dumpState());
         this.checkForGameEnd();
     }.bind(this), 15);
 };
