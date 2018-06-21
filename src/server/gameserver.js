@@ -54,7 +54,17 @@ GameServer.prototype.addPlayer = function (client, joinData) {
 
     console.log('num players', this.players.length);
     if (this.players.length >= 2) {
-        setTimeout(this.startGameMode.bind(this), 5000);
+        this.countDownToStart(5);
+    }
+};
+
+GameServer.prototype.countDownToStart = function (nsecs) {
+    if (nsecs > 0) {
+        for (let i=0; i<this.players.length; i++)
+            this.players[i].client.emit('starting', {seconds: nsecs});
+        setTimeout(this.countDownToStart.bind(this), 1000, nsecs-1);
+    } else {
+        this.startGameMode();
     }
 };
 

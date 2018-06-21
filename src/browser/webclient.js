@@ -68,7 +68,8 @@ WebClient.prototype.init = function () {
                                '<canvas id="canvas2d" style="background: #000000"></canvas>'+
                                '<canvas id="canvas3d" style="position:absolute; top:0; left:0"></canvas>'+
                                '<div id="points"></div>'+
-                               '<div id="status"></div>');
+                               '</div>'+
+                               '<div id="status_area" class="message-container"><div class="message-body"><div id="status"></div></div></div>');
                                // '<div style="position: absolute; top: 10px; left: 10px">'+
                                // '<table>'+
                                // '<tr><td>Camera Modes</td>'+
@@ -123,7 +124,7 @@ WebClient.prototype.init = function () {
     this.canvas2d.style.display = 'none';
     this.canvas3d.style.display = 'none';
 
-    $('#status').html('<h3>Connecting to game server ...</h3>');
+    $('#status').html('<h1>Connecting to game server ...</h1>');
 };
 
 WebClient.prototype.addLobbyEventListeners = function () {
@@ -173,6 +174,7 @@ WebClient.prototype.connect = function () {
     this.network.socket.on('join', this.onPlayerJoin.bind(this));
     this.network.socket.on('part', this.onPlayerPart.bind(this));
     this.network.socket.on('end', this.onEndGame.bind(this));
+    this.network.socket.on('starting', this.onStarting.bind(this));
 };
 
 
@@ -472,7 +474,7 @@ WebClient.prototype.addWorldToScene = function () {
 WebClient.prototype.onConnect = function () {
     console.log('connect');
     this.network.socket.send('i' + JSON.stringify({id: getWorkerId(), gnum: this.game_number}));
-    $('#status').html('<h3>Identifying Client ...</h3>');
+    $('#status').html('<h1>Identifying Client ...</h1>');
 };
 
 WebClient.prototype.onJoined = function (data) {
@@ -494,10 +496,11 @@ WebClient.prototype.onJoined = function (data) {
 
     this.addWorldToScene();
 
-    if (this.engine.players.length === 1)
-        $('#status').html('<h3>Waiting For Other Player ...</h3>');
-    else if (this.engine.players.length >= 2)
-        $('#status').html('<h3>Game will start in 5 seconds!</h3>');
+    $('#status').html('<h1>Waiting For Other Player ...</h1>');
+};
+
+WebClient.prototype.onStarting = function (data) {
+    $('#status').html('<h1>Game will start in</h1><span style="font-size: 50px; font-weight: bold">'+data.seconds.toString()+'</span>');
 };
 
 WebClient.prototype.onDisconnect = function (data) {
@@ -532,7 +535,7 @@ WebClient.prototype.onPlayerJoin = function (data) {
     console.log('join', data);
     this.engine.addPlayer(data.id);
     this.addPlayerToScene(this.engine.getPlayer(data.id));
-    $('#status').html('<h3>Game will start in 5 seconds!</h3>');
+    $('#status').html('<h1>Game will start in 5 seconds!</h1>');
 };
 
 WebClient.prototype.onPlayerPart = function (data) {
@@ -552,6 +555,7 @@ WebClient.prototype.onServerUpdate = function (data) {
         this.network.serverUpdates.splice(0,1);
     }
     if (!this.updateid) {
+        $('#status_area').css('display', 'none');
         this.canvas3d.style.display = 'inline-block';
         this.update( new Date().getTime() );
     }
