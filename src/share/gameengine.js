@@ -210,6 +210,7 @@ function GameEngine(config) {
     this.points = 0;
 
     this.messages = [];
+    this.events = [];
 
     this.hexagons = {};
     this.hexagons[this.config.fortress.bigHex] = new Hexagon(this.config.fortress.bigHex);
@@ -237,6 +238,18 @@ GameEngine.prototype.getMissileIndex = function (m) {
         if (this.missiles[i] === m) return i;
     }
     return -1;
+};
+
+GameEngine.prototype.getFortressIndex = function (f) {
+    for (let i=0; i<this.fortresses.length; i++) {
+        if (this.fortresses[i] === f) return i;
+    }
+    return -1;
+};
+
+
+GameEngine.prototype.addEvent = function (thing) {
+    this.events.push(thing);
 };
 
 GameEngine.prototype.reward = function (amt) {
@@ -307,6 +320,7 @@ GameEngine.prototype.createMap = function () {
 };
 
 GameEngine.prototype.stepOneTick = function (ms) {
+    this.events.length = 0;
     this.clock += ms;
     this.ticks += 1;
     this.updatePlayers();
@@ -320,12 +334,31 @@ GameEngine.prototype.stepOneTick = function (ms) {
 
 GameEngine.prototype.accumPlayerMovementRequests = function (p, req) {
     p.movementRequests.push(req);
-}
+};
+
+GameEngine.prototype.getKeyName = function (key) {
+    var action;
+    var k;
+    if (key[0]) action = 'press';
+    else action = 'release';
+    if (key[1] === KEY_LEFT) k = 'left';
+    else if (key[1] === KEY_RIGHT) k = 'right';
+    else if (key[1] === KEY_UP) k = 'thrust';
+    else if (key[1] === KEY_SPACE) k = 'fire';
+    else if (key[1] === KEY_1) k = '1';
+    else if (key[1] === KEY_2) k = '2';
+    else if (key[1] === KEY_3) k = '3';
+    else if (key[1] === KEY_4) k = '4';
+
+    return action + '-' + k;
+};
 
 GameEngine.prototype.processPlayerKeys = function (p, keys) {
     p.missileRequests = 0;
     p.messageRequests = [];
     for (var i=0; i<keys.length; i++) {
+        this.addEvent({tag: this.getKeyName(keys[i]),
+                       player: this.getPlayerIndex(p)});
         if (keys[i][0] === 1) {
             if (keys[i][1] === KEY_LEFT) p.turnFlag = 'left';
             else if (keys[i][1] === KEY_RIGHT) p.turnFlag = 'right';
@@ -381,9 +414,13 @@ GameEngine.prototype.updatePlayer = function (p) {
         if (p.missileRequests > 0) {
             this.addMissile(p);
             p.missileRequests = 0;
+            this.addEvent({tag: 'missile-fired', player: this.getPlayerIndex(p)});
         }
         for (let i=0; i<p.messageRequests.length; i++) {
             this.say(p, p.messageRequests[i]);
+            this.addEvent({tag: 'player-transmission',
+                           player: this.getPlayerIndex(p),
+                           message: p.messageRequests[i]});
         }
         p.messageRequests.length = 0;
 
@@ -392,11 +429,16 @@ GameEngine.prototype.updatePlayer = function (p) {
             p.position.y < 0 ||
             p.position.y > this.config.mapSize * this.config.mapCellSize) {
             this.killPlayer(p);
+            this.addEvent({tag: 'player-hit-map-edge',
+                           player: this.getPlayerIndex(p)});
         }
         for (let i=0; i<this.fortresses.length; i++) {
             if (this.fortresses[i].alive &&
                 distance(this.fortresses[i].position, p.position) < this.config.player.collisionRadius+this.config.fortress.collisionRadius) {
                 this.killPlayer(p);
+                this.addEvent({tag: 'player-hit-fortress',
+                               player: this.getPlayerIndex(p),
+                               fortress: i});
                 break;
             }
         }
@@ -410,6 +452,8 @@ GameEngine.prototype.updatePlayer = function (p) {
             p.velocity.x = this.config.player.startVelocity.x;
             p.velocity.y = this.config.player.startVelocity.y;
             p.angle = this.config.player.startAngle;
+            this.addEvent({tag:'player-respawn',
+                           player: this.getPlayerIndex(p)});
         }
     }
 };
@@ -445,6 +489,9 @@ GameEngine.prototype.killMissile = function (m) {
     for (let i=0; i<this.fortresses.length; i++) {
         if (this.fortresses[i].missileTarget === m)
             this.fortresses[i].missileTarget = null;
+        this.addEvent({tag:'drop-missile-target',
+                       fortress: i,
+                       missile: this.getMissileIndex(m)});
     }
 };
 
@@ -460,14 +507,16 @@ GameEngine.prototype.updateMissiles = function () {
                 m.position.y < 0 ||
                 m.position.y > this.config.mapSize * this.config.mapCellSize) {
                 this.killMissile(m);
+                this.addEvent({tag:'despawn-missile', missile: i});
                 continue;
             }
             if (this.ticks - m.spawnTick > this.config.missile.lifespan) {
                 this.killMissile(m);
+                this.addEvent({tag:'despawn-missile', missile: i});
                 continue;
             }
-            for (let i=0; i<this.fortresses.length; i++) {
-                var f = this.fortresses[i];
+            for (let j=0; j<this.fortresses.length; j++) {
+                var f = this.fortresses[j];
                 if (f.alive && distance(f.position, m.position) < this.config.fortress.smallHex) {
                     // if (f.alive && this.hexagons[this.config.fortress.smallHex].inside(f.position, m.position)) {
                     this.killMissile(m);
@@ -477,6 +526,7 @@ GameEngine.prototype.updateMissiles = function () {
                         this.reward(this.config.rewards.fortressDestroy);
                         f.alive = false;
                         f.respawnTimer = 0;
+                        this.addEvent({tag:'fortress-destroyed', fortress: j});
                         // console.log(Math.round(f.angle), Math.round(to), a);
                     }
                     break;
@@ -499,16 +549,21 @@ GameEngine.prototype.updateShells = function () {
             s.position.y < 0 ||
             s.position.y > this.config.mapSize * this.config.mapCellSize) {
             s.alive = false;
+            this.addEvent({tag:'shell-despawn', shell: i});
             continue;
         }
         if (this.ticks - s.spawnTick > this.config.shell.lifespan) {
             s.alive = false;
+            this.addEvent({tag:'shell-despawn', shell: i});
             continue;
         }
         for (let j=0; j<this.players.length; j++) {
             if (distance(s.position, this.players[j].position) < this.config.player.collisionRadius+this.config.shell.collisionRadius) {
                 this.killPlayer(this.players[j]);
                 s.alive = false;
+                this.addEvent({tag:'shell-hit-player',
+                               player: j,
+                               shell: i});
                 break;
             }
         }
@@ -545,6 +600,9 @@ GameEngine.prototype.updateFortress = function (f) {
             if (!f.playerTarget.alive ||
                 // !this.hexagons[f.radius].inside(f.position, this.players[f.playerTarget].position)) {
                 distance(f.position, f.playerTarget.position) > f.radius) {
+                this.addEvent({tag: 'drop-player-target',
+                               fortress: this.getFortressIndex(f),
+                               target: this.getPlayerIndex(f.playerTarget)});
                 f.playerTarget = null;
             }
         }
@@ -552,6 +610,9 @@ GameEngine.prototype.updateFortress = function (f) {
             if (!f.missileTarget.alive ||
                 // !this.hexagons[f.radius].inside(f.position, this.missileTarget.position)) {
                 distance(f.position, f.missileTarget.position) > f.radius) {
+                this.addEvent({tag: 'drop-missile-target',
+                               fortress: this.getFortressIndex(f),
+                               target: this.getMissileIndex(f.missileTarget)});
                 f.missileTarget = null;
             }
         }
@@ -562,6 +623,9 @@ GameEngine.prototype.updateFortress = function (f) {
                     distance(f.position, this.players[i].position) <= f.radius) {
                     f.playerTarget = this.players[i];
                     f.targetTimer = 0;
+                    this.addEvent({tag: 'acquire-player-target',
+                                   fortress: this.getFortressIndex(f),
+                                   target: this.getPlayerIndex(f.playerTarget)});
                     break;
                 }
             }
@@ -571,6 +635,9 @@ GameEngine.prototype.updateFortress = function (f) {
                 // if (this.hexagons[f.radius].inside(f.position, this.missiles[i].position)) {
                 if (distance(f.position, this.missiles[i].position) <= f.radius) {
                     f.missileTarget = this.missiles[i];
+                    this.addEvent({tag: 'acquire-missile-target',
+                                   fortress: this.getFortressIndex(f),
+                                   target: this.getMissileIndex(f.missileTarget)});
                     break;
                 }
             }
@@ -587,6 +654,9 @@ GameEngine.prototype.updateFortress = function (f) {
             if (f.targetTimer > this.config.fortress.lockTime) {
                 this.addShell(f);
                 f.targetTimer = 0;
+                this.addEvent({tag:'shell-fired',
+                               fortress: this.getFortressIndex(f),
+                               target: this.getPlayerIndex(f.playerTarget)});
             }
         } else if (f.missileTarget) {
             this.fortressAimAt(f, f.missileTarget.position);
@@ -595,8 +665,11 @@ GameEngine.prototype.updateFortress = function (f) {
         }
     } else {
         f.respawnTimer += 1;
-        if (f.respawnTimer >= this.config.fortress.respawnTime)
+        if (f.respawnTimer >= this.config.fortress.respawnTime) {
             f.alive = true;
+            this.addEvent({tag:'fortress-respawn',
+                           fortress: this.getFortressIndex(f)});
+        }
     }
 };
 
@@ -637,12 +710,18 @@ GameEngine.prototype.updateAsteroids = function () {
             for (let j=0; j<this.missiles.length; j++) {
                 if (this.missiles[j].alive && distance(this.missiles[j].position, pos) < this.asteroids[i].bubbles[b].r) {
                     this.missiles[j].alive = false;
+                    this.addEvent({tag:'missile-hit-asteroid',
+                                   missile: j,
+                                   asteroid: i});
                 }
             }
             for (let j=0; j<this.players.length; j++) {
                 if (this.players[j].alive) {
                     if (distance(this.players[j].position, pos) < this.asteroids[i].bubbles[b].r) {
                         this.killPlayer(this.players[j]);
+                        this.addEvent({tag:'player-hit-asteroid',
+                                       player: j,
+                                       asteroid: i});
                     }
                 }
             }
@@ -695,7 +774,7 @@ GameEngine.prototype.killPlayer = function (p) {
 
 GameEngine.prototype.gameStateColumnTitles = function () {
     // FIXME: this could get out of sync with dumpState()
-    var titles = new Array(5);
+    var titles = new Array(8);
 
     titles[0] = 'game_ticks';
     titles[1] = 'game_clock';
@@ -715,6 +794,13 @@ GameEngine.prototype.gameStateColumnTitles = function () {
                  'asteroid_y',
                  'asteroid_vx',
                  'asteroid_vy'];
+    titles[5] = ['missile_angle',
+                 'missile_x',
+                 'missile_y'];
+    titles[6] = ['shell_angle',
+                 'shell_x',
+                 'shell_y'];
+    titles[7] = 'events';
     return titles;
 };
 
@@ -722,7 +808,7 @@ Number.prototype.fixed = function(n) { n = n || 3; return parseFloat(this.toFixe
 
 GameEngine.prototype.dumpState = function () {
     var numPlayers = 2;
-    var state = new Array(7);
+    var state = new Array(8);
 
     state[0] = this.ticks;
     state[1] = this.clock;
@@ -736,7 +822,7 @@ GameEngine.prototype.dumpState = function () {
                        this.players[i].velocity.x.fixed(3),
                        this.players[i].velocity.y.fixed(3),
                        this.players[i].turnFlag,
-                       this.players[i].thrustFlag];
+                       this.players[i].thrustFlag?1:0];
     }
 
     state[3] = new Array(this.fortresses.length);
@@ -767,6 +853,8 @@ GameEngine.prototype.dumpState = function () {
                        this.shells[i].position.x.fixed(3),
                        this.shells[i].position.y.fixed(3)];
     }
+
+    state[7] = this.events.slice();
 
     return state;
 };

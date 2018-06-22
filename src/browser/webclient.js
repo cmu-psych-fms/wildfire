@@ -1027,6 +1027,9 @@ WebClient.prototype.updateMessages = function () {
 
 WebClient.prototype.saveState = function () {
     exp.log.push(this.engine.dumpState());
+    // This is zero'd out in step_one_tick but the client doesn't call
+    // that so we need to do this manually.
+    this.engine.events.length = 0;
     if (exp.log.length >= exp.logSyncLength) {
         console.log('syncing game state');
         exp.com.synchronizeLog(exp.log);
