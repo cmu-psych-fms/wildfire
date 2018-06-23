@@ -402,6 +402,14 @@ WebClient.prototype.addWorldToScene = function () {
         this.addPlayerToScene(this.engine.players[i]);
     }
 
+    for (let i=0; i<this.engine.startLocations.length; i++) {
+        var mesh = new THREE.Mesh( new THREE.CubeGeometry(this.engine.startLocations[i].w, this.engine.startLocations[i].h, 5, 1, 1, 1),
+                                   new THREE.MeshLambertMaterial({color: this.engine.startLocations[i].color}));
+        mesh.position.x = this.engine.startLocations[i].x;
+        mesh.position.y = this.engine.startLocations[i].y;
+        this.scene.add(mesh);
+    }
+
     material = new THREE.MeshPhongMaterial({color: 0x3333FF,
                                             emissive: 0x072534,
                                             flatShading: true});
@@ -480,6 +488,7 @@ WebClient.prototype.onConnect = function () {
 WebClient.prototype.onJoined = function (data) {
     console.log('joined', data);
     this.id = data.id;
+    this.engine.startLocations = data.startLocations;
     for (let i=0; i<data.players.length; i++) {
         this.engine.addPlayer(data.players[i].id);
         this.engine.players[i].color = data.players[i].color;

@@ -204,6 +204,7 @@ function GameEngine(config) {
     this.missiles = [];
     this.shells = [];
     this.asteroids = [];
+    this.startLocations = [];
     this.ticks = 0;
     this.clock = 0;
     this.rawPoints = 0;
@@ -280,6 +281,19 @@ GameEngine.prototype.makeAsteroid = function (n) {
     return asteroid;
 };
 
+GameEngine.prototype.setStartLocations = function (n) {
+    this.startLocations = new Array(n);
+    var sz = 25, pad = 30;
+    var x = this.config.player.startPosition.x - sz;
+    var y = this.config.player.startPosition.y - sz;
+    for (let i=0; i<this.startLocations.length; i++) {
+        this.startLocations[i] = { x: x, y: y,
+                                   w: sz*2, h: sz*2,
+                                   color: this.config.player.colors[i % this.config.player.colors.length]};
+        y += sz*2+pad;
+    }
+};
+
 GameEngine.prototype.placeAsteroids = function (n, tries) {
     this.asteroids = new Array(n);
     for (let i=0; i<n; i++) {
@@ -296,6 +310,12 @@ GameEngine.prototype.placeFortresses = function (n, tries) {
         var ok = true;
         for (let j=0; j<this.fortresses.length; j++) {
             if (distance(this.fortresses[j].position, pos) < this.config.fortress.bigHex*2) {
+                ok = false;
+                break;
+            }
+        }
+        for (let j=0; j<this.startLocations.length; j++) {
+            if (distance(this.startLoctaions[j], pos) < (this.config.fortress.bigHex + (this.startLoctaions[j].w+this.startLoctaions[j].h)/2)) {
                 ok = false;
                 break;
             }
@@ -447,8 +467,10 @@ GameEngine.prototype.updatePlayer = function (p) {
         p.spawnTimer += 1;
         if (p.spawnTimer >= this.config.player.deathTimer) {
             p.alive = true;
-            p.position.x = this.config.player.startPosition.x;
-            p.position.y = this.config.player.startPosition.y;
+            // FIXME: store start location in player object?
+            var loc = this.startLocations[this.getPlayerIndex(p)];
+            p.position.x = loc.x;
+            p.position.y = loc.y;
             p.velocity.x = this.config.player.startVelocity.x;
             p.velocity.y = this.config.player.startVelocity.y;
             p.angle = this.config.player.startAngle;
@@ -730,10 +752,11 @@ GameEngine.prototype.updateAsteroids = function () {
 };
 
 GameEngine.prototype.addPlayer = function (id) {
+    var loc = this.startLocations[this.players.length % this.startLocations.length];
     this.players.push({id: id,
                        angle: this.config.player.startAngle,
-                       position: {x: this.config.player.startPosition.x,
-                                  y: this.config.player.startPosition.y},
+                       position: {x: loc.x,
+                                  y: loc.y},
                        velocity: {x: this.config.player.startVelocity.x,
                                   y: this.config.player.startVelocity.y},
                        config: this.config.player,

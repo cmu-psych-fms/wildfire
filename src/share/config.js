@@ -1,5 +1,5 @@
 function Config() {
-    this.player = {startPosition: {x: 500.0, y: 500.0},
+    this.player = {startPosition: {x: 200.0, y: 200.0},
                    startVelocity: {x:0.0, y:0.0},
                    startAngle: 0,
                    turnRate: 3,

@@ -2,13 +2,7 @@ var engine = require('./gameengine');
 var config = require('./config');
 
 function GameServer(logging) {
-    this.players = [];
-    this.tickTime = 0;
-    this.clientGameNumbers = {};
     this.gameNumber = 0;
-    this.engine = new engine.GameEngine(new config.Config());
-    this.engine.placeFortresses(10, 50);
-    this.engine.placeAsteroids(10, 50);
     this.mode = 'lobby';
     this.logging = logging;
 }
@@ -23,6 +17,7 @@ GameServer.prototype.reset = function () {
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
     this.engine.placeAsteroids(10, 50);
+    this.engine.setStartLocations(2);
 };
 
 GameServer.prototype.addPlayer = function (client, joinData) {
@@ -50,7 +45,8 @@ GameServer.prototype.addPlayer = function (client, joinData) {
     client.emit('joined', {id:client.userid,
                            players: players,
                            fortresses: fpayload,
-                           asteroids: this.engine.asteroids});
+                           asteroids: this.engine.asteroids,
+                           startLocations: this.engine.startLocations});
 
     console.log('num players', this.players.length);
     if (this.players.length >= 2) {
@@ -155,7 +151,8 @@ GameServer.prototype.startGameTickTimer = function () {
                                              titles: this.engine.gameStateColumnTitles(),
                                              players: players,
                                              fortresses: fortresses,
-                                             asteroids: asteroids
+                                             asteroids: asteroids,
+                                             startLocations: this.engine.startLocations
                                             });
     this.gameTickTimer = setInterval(function() {
         var t = new Date().getTime();

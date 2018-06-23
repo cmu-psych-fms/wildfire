@@ -83,6 +83,7 @@ function ExperimentServer(data_dir, client_dir) {
     console.log("Listening on port", gameport);
 
     gserver = new game_server.GameServer(this.Log);
+    gserver.reset();
 
     this.sio.sockets.on('connection', function (client) {
         // Store some state on the client object.
