@@ -540,13 +540,16 @@ GameEngine.prototype.updatePlayer = function (p) {
         }
         p.messageRequests.length = 0;
 
-        if (p.position.x < 0 ||
-            p.position.x > this.config.mapSize * this.config.mapCellSize ||
-            p.position.y < 0 ||
-            p.position.y > this.config.mapSize * this.config.mapCellSize) {
-            this.killPlayer(p);
-            this.addEvent({tag: 'player-hit-map-edge',
-                           player: this.getPlayerIndex(p)});
+        for (let i=0; i<this.walls.length; i++) {
+            if (p.position.x > Math.min(this.walls[i].x1, this.walls[i].x2) &&
+                p.position.x < Math.max(this.walls[i].x1, this.walls[i].x2) &&
+                p.position.y > Math.min(this.walls[i].y1, this.walls[i].y2) &&
+                p.position.y < Math.max(this.walls[i].y1, this.walls[i].y2)) {
+                this.killPlayer(p);
+                this.addEvent({tag: 'player-hit-wall',
+                               player: this.getPlayerIndex(p),
+                               wall: i});
+            }
         }
         for (let i=0; i<this.fortresses.length; i++) {
             if (this.fortresses[i].alive &&
@@ -808,16 +811,26 @@ GameEngine.prototype.updatePlayers = function () {
 
 GameEngine.prototype.updateAsteroids = function () {
     for (let i=0; i<this.asteroids.length; i++) {
+        var oldx = this.asteroids[i].position.x;
+        var oldy = this.asteroids[i].position.y;
         this.asteroids[i].position.x += this.asteroids[i].velocity.x;
         this.asteroids[i].position.y += this.asteroids[i].velocity.y;
         this.asteroids[i].angle = stdAngle(this.asteroids[i].angle+this.asteroids[i].angularVelocity);
 
-        if (this.asteroids[i].position.x < 0) this.asteroids[i].velocity.x *= -1;
-        if (this.asteroids[i].position.y < 0) this.asteroids[i].velocity.y *= -1;
-        if (this.asteroids[i].position.x > this.config.mapSize*this.config.mapCellSize) this.asteroids[i].velocity.x *= -1;
-        if (this.asteroids[i].position.y > this.config.mapSize*this.config.mapCellSize) this.asteroids[i].velocity.y *= -1;
-
-
+        for (let j=0; j<this.walls.length; j++) {
+            if (this.asteroids[i].position.x > Math.min(this.walls[j].x1, this.walls[j].x2) &&
+                this.asteroids[i].position.x < Math.max(this.walls[j].x1, this.walls[j].x2) &&
+                this.asteroids[i].position.y > Math.min(this.walls[j].y1, this.walls[j].y2) &&
+                this.asteroids[i].position.y < Math.max(this.walls[j].y1, this.walls[j].y2)) {
+                if (oldx > Math.min(this.walls[j].x1, this.walls[j].x2) &&
+                    oldx < Math.max(this.walls[j].x1, this.walls[j].x2)) {
+                    this.asteroids[i].velocity.y *= -1;
+                } else if (oldy > Math.min(this.walls[j].y1, this.walls[j].y2) &&
+                           oldy < Math.max(this.walls[j].y1, this.walls[j].y2)) {
+                    this.asteroids[i].velocity.x *= -1;
+                }
+            }
+        }
 
         for (let b=0; b<this.asteroids[i].bubbles.length; b++) {
             var pos = rotate_translate(this.asteroids[i].position.x,
