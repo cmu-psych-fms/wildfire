@@ -197,6 +197,48 @@ Hexagon.prototype.drawPartial = function (ctx, x, y, angle, color) {
     ctx.restore();
 };
 
+function Wall(x, y, w, h) {
+    this.x1 = x;
+    this.y1 = y;
+    this.x2 = x + w;
+    this.y2 = y + h;
+}
+
+Wall.prototype = {};
+
+Wall.prototype.translate = function (ofsx, ofsy) {
+    this.x1 += ofsx;
+    this.x2 += ofsx;
+    this.y1 += ofsy;
+    this.y2 += ofsy;
+    return this;
+};
+
+Wall.prototype.rotate = function (r) {
+    var s = Math.sin(r * Math.PI / 180);
+    var c = Math.cos(r * Math.PI / 180);
+
+    var x1 = this.x1 * c - this.y1 * s;
+    var y1 = this.x1 * s + this.y1 * c;
+    var x2 = this.x2 * c - this.y2 * s;
+    var y2 = this.x2 * s + this.y2 * c;
+    this.x1 = x1;
+    this.y1 = y1;
+    this.x2 = x2;
+    this.y2 = y2;
+    return this;
+}
+
+Wall.prototype.copy = function () {
+    // FIXME: ugly.
+    var w = new Wall(0, 0, 0, 0);
+    w.x1 = this.x1;
+    w.y1 = this.y1;
+    w.x2 = this.x2;
+    w.y2 = this.y2;
+    return w;
+}
+
 function GameEngine(config) {
     this.config = config;
     this.players = [];
@@ -204,6 +246,7 @@ function GameEngine(config) {
     this.missiles = [];
     this.shells = [];
     this.asteroids = [];
+    this.walls = [];
     this.startLocations = [];
     this.ticks = 0;
     this.clock = 0;
@@ -283,15 +326,16 @@ GameEngine.prototype.makeAsteroid = function (n) {
 
 GameEngine.prototype.setStartLocations = function (n) {
     this.startLocations = new Array(n);
-    var sz = 25, pad = 30;
-    var x = this.config.player.startPosition.x - sz;
-    var y = this.config.player.startPosition.y - sz;
-    for (let i=0; i<this.startLocations.length; i++) {
-        this.startLocations[i] = { x: x, y: y,
-                                   w: sz*2, h: sz*2,
-                                   color: this.config.player.colors[i % this.config.player.colors.length]};
-        y += sz*2+pad;
-    }
+    var sz = 25, pad = 150;
+    var bounds = this.config.mapSize * this.config.mapCellSize;
+
+    this.startLocations[0] = { x: bounds/4 + pad, y: bounds/4 + pad,
+                               w: sz*2, h: sz*2,
+                               color: this.config.player.colors[0 % this.config.player.colors.length]};
+
+    this.startLocations[1] = { x: bounds/4 + pad, y: bounds*3/4 - pad,
+                               w: sz*2, h: sz*2,
+                               color: this.config.player.colors[1 % this.config.player.colors.length]};
 };
 
 GameEngine.prototype.placeAsteroids = function (n, tries) {
@@ -301,7 +345,59 @@ GameEngine.prototype.placeAsteroids = function (n, tries) {
     }
 };
 
+GameEngine.prototype.placeWalls = function () {
+    var bounds = this.config.mapSize * this.config.mapCellSize;
+    var thickness = 10;
+    // boundary
+    this.walls.push(new Wall(0-thickness/2, 0-thickness/2, thickness, bounds));
+    this.walls.push(new Wall(bounds-thickness/2, 0-thickness/2, thickness, bounds));
+    this.walls.push(new Wall(thickness/2, 0-thickness/2, bounds, thickness));
+    this.walls.push(new Wall(thickness/2, bounds-thickness/2, bounds, thickness));
+    // inner wall
+    var base = [new Wall(-thickness/2, -thickness/2, thickness, bounds/6),
+                new Wall(-thickness/2, -thickness/2, bounds/6, thickness)];
+    this.walls.push(base[0].copy().translate(bounds/4, bounds/4));
+    this.walls.push(base[1].copy().translate(bounds/4, bounds/4));
+    this.walls.push(base[0].copy().rotate(90).translate(bounds*3/4, bounds/4));
+    this.walls.push(base[1].copy().rotate(90).translate(bounds*3/4, bounds/4));
+    this.walls.push(base[0].copy().rotate(270).translate(bounds/4, bounds*3/4));
+    this.walls.push(base[1].copy().rotate(270).translate(bounds/4, bounds*3/4));
+    this.walls.push(base[0].copy().rotate(180).translate(bounds*3/4, bounds*3/4));
+    this.walls.push(base[1].copy().rotate(180).translate(bounds*3/4, bounds*3/4));
+
+
+    this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
+    this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
+
+    this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
+    this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
+
+    this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
+    this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
+
+};
+
 GameEngine.prototype.placeFortresses = function (n, tries) {
+    var bounds = this.config.mapSize * this.config.mapCellSize;
+    var pad = 250;
+    var dist = (bounds-pad*2)/2;
+
+    this.fortresses = new Array(9);
+    for (let x=0; x<3; x++) {
+        for (let y=0; y<3; y++) {
+            this.fortresses[y*3+x] = {alive: true,
+                                      position: {x: pad + x * dist, y: pad + y * dist},
+                                      angle: 0,
+                                      playerTarget: null,
+                                      missileTarget: null,
+                                      radius: this.config.fortress.bigHex,
+                                      config: this.config.fortress,
+                                      respawnTimer: 0};
+        }
+    }
+};
+
+GameEngine.prototype.placeFortressesRandomly = function (n, tries) {
     this.fortresses = [];
     console.log('start placing', this.fortresses.length);
     for (let i=0; i<tries; i++) {

@@ -17,6 +17,7 @@ GameServer.prototype.reset = function () {
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
     this.engine.placeAsteroids(10, 50);
+    this.engine.placeWalls();
     this.engine.setStartLocations(2);
 };
 
@@ -46,6 +47,7 @@ GameServer.prototype.addPlayer = function (client, joinData) {
                            players: players,
                            fortresses: fpayload,
                            asteroids: this.engine.asteroids,
+                           walls: this.engine.walls,
                            startLocations: this.engine.startLocations});
 
     console.log('num players', this.players.length);

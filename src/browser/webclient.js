@@ -451,32 +451,42 @@ WebClient.prototype.addWorldToScene = function () {
     this.scene.add(this.three.grid);
 
     this.scene.add(this.three.floor);
-    this.three.topBorder = new THREE.Mesh( new THREE.CubeGeometry( this.engine.config.mapSize * this.engine.config.mapCellSize, 5, 50,
-                                                                   1,1,1),
-                                        borderMat);
-    this.three.bottomBorder = new THREE.Mesh( new THREE.CubeGeometry( this.engine.config.mapSize * this.engine.config.mapCellSize, 5, 50,
-                                                                      1,1,1),
-                                           borderMat);
-    this.three.leftBorder = new THREE.Mesh( new THREE.CubeGeometry( 5, this.engine.config.mapSize * this.engine.config.mapCellSize, 50,
-                                                                 1,1,1),
-                                           borderMat);
-    this.three.rightBorder = new THREE.Mesh( new THREE.CubeGeometry( 5, this.engine.config.mapSize * this.engine.config.mapCellSize, 50,
-                                                                 1,1,1),
-                                           borderMat);
 
+    this.three.walls = new Array(this.engine.walls.length);
+    for (let i=0; i<this.engine.walls.length; i++) {
+        this.three.walls[i] = new THREE.Mesh( new THREE.CubeGeometry( Math.abs(this.engine.walls[i].x1 - this.engine.walls[i].x2),
+                                                                      Math.abs(this.engine.walls[i].y1 - this.engine.walls[i].y2),
+                                                                      50, 1,1,1),
+                                              borderMat);
+        this.three.walls[i].position.x = this.engine.walls[i].x1 + (this.engine.walls[i].x2 - this.engine.walls[i].x1)/2;
+        this.three.walls[i].position.y = this.engine.walls[i].y1 + (this.engine.walls[i].y2 - this.engine.walls[i].y1)/2;
+        this.scene.add(this.three.walls[i]);
+    }
+
+    // this.three.topBorder = new THREE.Mesh( new THREE.CubeGeometry( this.engine.config.mapSize * this.engine.config.mapCellSize, 5, 50,
+    //                                                                1,1,1),
+    //                                     borderMat);
+    // this.three.bottomBorder = new THREE.Mesh( new THREE.CubeGeometry( this.engine.config.mapSize * this.engine.config.mapCellSize, 5, 50,
+    //                                                                   1,1,1),
+    //                                        borderMat);
+    // this.three.leftBorder = new THREE.Mesh( new THREE.CubeGeometry( 5, this.engine.config.mapSize * this.engine.config.mapCellSize, 50,
+    //                                                              1,1,1),
+    //                                        borderMat);
+    // this.three.rightBorder = new THREE.Mesh( new THREE.CubeGeometry( 5, this.engine.config.mapSize * this.engine.config.mapCellSize, 50,
+    //                                                              1,1,1),
+    //                                        borderMat);
+
+    // this.three.topBorder.position.x = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
+    // this.three.bottomBorder.position.x = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
     // this.three.bottomBorder.position.y = this.engine.config.mapSize * this.engine.config.mapCellSize;
+    // this.three.leftBorder.position.y = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
+    // this.three.rightBorder.position.y = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
     // this.three.rightBorder.position.x = this.engine.config.mapSize * this.engine.config.mapCellSize;
-    this.three.topBorder.position.x = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
-    this.three.bottomBorder.position.x = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
-    this.three.bottomBorder.position.y = this.engine.config.mapSize * this.engine.config.mapCellSize;
-    this.three.leftBorder.position.y = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
-    this.three.rightBorder.position.y = this.engine.config.mapSize * this.engine.config.mapCellSize/2;
-    this.three.rightBorder.position.x = this.engine.config.mapSize * this.engine.config.mapCellSize;
-    // this.three.rightBorder.position.x = this.engine.config.mapSize * this.engine.config.mapCellSize;
-    this.scene.add(this.three.topBorder);
-    this.scene.add(this.three.bottomBorder);
-    this.scene.add(this.three.leftBorder);
-    this.scene.add(this.three.rightBorder);
+
+    // this.scene.add(this.three.topBorder);
+    // this.scene.add(this.three.bottomBorder);
+    // this.scene.add(this.three.leftBorder);
+    // this.scene.add(this.three.rightBorder);
 };
 
 WebClient.prototype.onConnect = function () {
@@ -502,6 +512,7 @@ WebClient.prototype.onJoined = function (data) {
                                      radius: data.fortresses[i][4]};
     }
     this.engine.asteroids = data.asteroids;
+    this.engine.walls = data.walls;
 
     this.addWorldToScene();
 
