@@ -268,7 +268,8 @@ WebClient.prototype.cacheClear = function (cache) {
     }
 };
 
-WebClient.prototype.cacheAdd = function (cache, thing, geom, mat) {
+WebClient.prototype.cacheAdd = function (cache, thing, geom, mat, z) {
+    z = z || 35;
     var found = -1;
     for (i=0; i<cache.length; i++) {
         if (!cache[i].visible) {
@@ -285,8 +286,7 @@ WebClient.prototype.cacheAdd = function (cache, thing, geom, mat) {
 
     cache[found].position.x = thing.position.x;
     cache[found].position.y = thing.position.y;
-    cache[found].position.z = 35;
-    cache[found].rotation.z = thing.angle * Math.PI/180;
+    cache[found].position.z = z;
     cache[found].visible = true;
     thing.mesh = cache[found];
 }
@@ -299,12 +299,26 @@ WebClient.prototype.shellCacheAdd = function (s) {
     this.cacheAdd(this.three.shellCache, s, this.three.shellGeom, this.three.shellMat);
 };
 
+WebClient.prototype.sphereCacheAdd = function (s) {
+    if (s.target !== null) {
+        console.log('chase sphere');
+        this.cacheAdd(this.three.sphereChaseCache, s, this.three.sphereGeom, this.three.sphereChaseMat, 0.1);
+    }
+    else
+        this.cacheAdd(this.three.sphereCache, s, this.three.sphereGeom, this.three.sphereMat, 0.1);
+};
+
 WebClient.prototype.shellCacheClear = function () {
     this.cacheClear(this.three.shellCache);
 };
 
 WebClient.prototype.missileCacheClear = function () {
     this.cacheClear(this.three.missileCache);
+};
+
+WebClient.prototype.sphereCacheClear = function () {
+    this.cacheClear(this.three.sphereCache);
+    this.cacheClear(this.three.sphereChaseCache);
 };
 
 WebClient.prototype.createFortressShield = function (radius) {
@@ -435,9 +449,18 @@ WebClient.prototype.addWorldToScene = function () {
     this.three.missileMat = new THREE.MeshLambertMaterial({color: 0xFFFF00});
     this.three.shellGeom = new THREE.CubeGeometry(20, 5, 5, 1, 1, 1);
     this.three.shellMat = new THREE.MeshLambertMaterial({color: 0xFF0000});
+    this.three.sphereGeom = new THREE.SphereGeometry(this.engine.config.spheres.radius * 1.5, 8, 8);
+    this.three.sphereMat = new THREE.MeshPhongMaterial({color: 0x3333FF,
+                                                        emissive: 0x072534,
+                                                        flatShading: true});
+    this.three.sphereChaseMat = new THREE.MeshPhongMaterial({color: 0xFF3333,
+                                                             emissive: 0x072534,
+                                                             flatShading: true});
 
     this.three.missileCache = [];
     this.three.shellCache = [];
+    this.three.sphereCache = [];
+    this.three.sphereChaseCache = [];
 
     this.three.floor = new THREE.Mesh( new THREE.PlaneGeometry( this.engine.config.mapSize * this.engine.config.mapCellSize,
                                                                 this.engine.config.mapSize * this.engine.config.mapCellSize,
@@ -513,6 +536,7 @@ WebClient.prototype.onJoined = function (data) {
     }
     this.engine.asteroids = data.asteroids;
     this.engine.walls = data.walls;
+    this.engine.spheres = data.spheres;
 
     this.addWorldToScene();
 
@@ -718,6 +742,15 @@ WebClient.prototype.processServerUpdates = function () {
             this.engine.asteroids[i].position.x = asteroids[i][0];
             this.engine.asteroids[i].position.y = asteroids[i][1];
             this.engine.asteroids[i].angle = asteroids[i][2];
+        }
+        var spheres = last.spheres;
+        this.engine.spheres = new Array(spheres.length);
+        this.sphereCacheClear();
+        for (let i=0; i<this.engine.spheres.length; i++) {
+            this.engine.spheres[i] = {position: {x: spheres[i][0],
+                                                 y: spheres[i][1]},
+                                      target: spheres[i][2]};
+            this.sphereCacheAdd(this.engine.spheres[i]);
         }
 
         var lastMovementRequest = last.lmr;

@@ -25,6 +25,10 @@ function Config() {
                    lifespan: 180};
     this.rewards = { shipDeath: -100,
                      fortressDestroy: 100 };
+    this.spheres = { spawnQuantity: 3,
+                     radius: 20,
+                     acceleration: 0.1,
+                     speed: 0.8};
     this.pointConversion = 0.10;
     this.message = { duration: 240 };
     this.mapSize = 100;

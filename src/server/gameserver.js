@@ -16,7 +16,7 @@ GameServer.prototype.reset = function () {
     // Set everything up for a fresh new game
     this.engine = new engine.GameEngine(new config.Config());
     this.engine.placeFortresses(10, 50);
-    this.engine.placeAsteroids(10, 50);
+    // this.engine.placeAsteroids(10, 50);
     this.engine.placeWalls();
     this.engine.setStartLocations(2);
 };
@@ -48,6 +48,7 @@ GameServer.prototype.addPlayer = function (client, joinData) {
                            fortresses: fpayload,
                            asteroids: this.engine.asteroids,
                            walls: this.engine.walls,
+                           spheres: this.engine.spheres,
                            startLocations: this.engine.startLocations});
 
     console.log('num players', this.players.length);
@@ -224,6 +225,13 @@ GameServer.prototype.sendServerUpdate = function () {
                      this.engine.asteroids[i].position.y,
                      this.engine.asteroids[i].angle];
     }
+    full.spheres = new Array(this.engine.spheres.length);
+    for (let i =0;i<this.engine.spheres.length; i++) {
+        full.spheres[i] = [this.engine.spheres[i].position.x,
+                           this.engine.spheres[i].position.y,
+                           this.engine.spheres[i].target ? this.engine.getPlayerIndex(this.engine.spheres[i].target):null];
+    }
+
     full.msg = this.engine.messages;
     full.points = this.engine.points;
     for (let i=0; i<this.players.length; i++) {

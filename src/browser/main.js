@@ -195,13 +195,13 @@ function createScreens(condition) {
     // screens.push(new DemographicSurvey());
     // screens.push(new SoundCheck(['fire-missile', 'fire-shell', 'vlner-reset']));
 
-    screens.push(new Instructions(instructions, pages));
+    // screens.push(new Instructions(instructions, pages));
 
     for (i=0; i<numGames; i++) {
         var g = new WebClient(i+1);
         var s = new ScoreScreen(i+1, 10);
         var n = i+1;
-        screens.push(new GameStartScreen('<h1>Game '+n.toString()+' of '+numGames.toString()+'</h1>' + instructionText, instructions, pages));
+        // screens.push(new GameStartScreen('<h1>Game '+n.toString()+' of '+numGames.toString()+'</h1>' + instructionText, instructions, pages));
         screens.push(g);
         screens.push(s);
     }

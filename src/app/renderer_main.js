@@ -66,3 +66,36 @@ for (let i=0; i<interfaces.length; i++) {
 }
 
 var server = new es.ExperimentServer(settings.get('datadir'), path.join(__dirname, 'browser'));
+
+// Be able to update the data dir and have it take immediate effect
+
+// change asteroids to spheres to that bounce and chase the player if
+// they get too close. They bounce off the start locations.  maybe
+// they appear when a fortress is destroyed and have a lifespan before
+// disappearing below the surface.
+
+// maybe both players have to hit the sphere to make it disappear.
+
+// when you hit a sphere it chases the player who hit it. but you have
+// to wait for the other player to shoot them to get rid of them.
+
+// they are all the same size. fortresses release a configurable
+// number of them upon destruction.
+
+// draw a line between ball and target player. if a wall intersects
+// the line then the ball bounces deterministally. maybe it also loses
+// its target. in order to destroy the ball it must have a
+// target. when it has a target its color changes maybe to red.
+
+// 50 points to destroy the squere. but they only last maybe 30
+// seconds.
+
+// player missiles destroys other players
+
+// must do something about camera angle to reduce chances of nausea.
+
+// maybe a camera mode where the camera is always pointing in the same
+// direction but it's position moves in order to keep the ship at the
+// center. like the ultima 8 camera angle. the "isometric" camera.
+
+// maybe player can customize distance with +/- keys.

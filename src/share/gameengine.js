@@ -239,6 +239,34 @@ Wall.prototype.copy = function () {
     return w;
 }
 
+Wall.prototype.intersectLine = function (p1, p2) {
+    var p3 = {x:0,y:0},
+        p4 = {x:0,y:0};
+    p3.x = this.x1;
+    p3.y = this.y1;
+    p4.x = this.x1;
+    p4.y = this.y2;
+    if (lines_intersection_point(p1, p2, p3, p4)[0] === INTERSECTION_INSIDE) return true;
+
+    p3.x = this.x1;
+    p3.y = this.y2;
+    p4.x = this.x2;
+    p4.y = this.y2;
+    if (lines_intersection_point(p1, p2, p3, p4)[0] === INTERSECTION_INSIDE) return true;
+
+    p3.x = this.x2;
+    p3.y = this.y2;
+    p4.x = this.x2;
+    p4.y = this.y1;
+    if (lines_intersection_point(p1, p2, p3, p4)[0] === INTERSECTION_INSIDE) return true;
+
+    p3.x = this.x2;
+    p3.y = this.y1;
+    p4.x = this.x1;
+    p4.y = this.y1;
+    if (lines_intersection_point(p1, p2, p3, p4)[0] === INTERSECTION_INSIDE) return true;
+}
+
 function GameEngine(config) {
     this.config = config;
     this.players = [];
@@ -246,6 +274,7 @@ function GameEngine(config) {
     this.missiles = [];
     this.shells = [];
     this.asteroids = [];
+    this.spheres = [];
     this.walls = [];
     this.startLocations = [];
     this.ticks = 0;
@@ -366,14 +395,14 @@ GameEngine.prototype.placeWalls = function () {
     this.walls.push(base[1].copy().rotate(180).translate(bounds*3/4, bounds*3/4));
 
 
-    this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
-    this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
+    // this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
+    // this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
 
-    this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
-    this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
+    // this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
+    // this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
 
-    this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
-    this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
+    // this.walls.push({x:bounds/4, y:bounds/4, w:thickness, h:bounds/6});
+    // this.walls.push({x:bounds/4+thickness, y:bounds/4, w:bounds/6, h:thickness});
 
 };
 
@@ -444,6 +473,7 @@ GameEngine.prototype.stepOneTick = function (ms) {
     this.updateMissiles();
     this.updateShells();
     this.updateAsteroids();
+    this.updateSpheres();
     // this.updateEntities();
     // this.handleCollisions();
 };
@@ -581,7 +611,7 @@ GameEngine.prototype.updatePlayer = function (p) {
 
 GameEngine.prototype.addMissile = function (owner) {
     // if (!owner.missileState) {
-        var m = {owner: owner.id,
+        var m = {owner: owner,
                  position: {x: owner.position.x,
                             y: owner.position.y},
                  velocity: {x: Math.cos(deg2rad(owner.angle)) * this.config.missile.speed + owner.velocity.x,
@@ -616,6 +646,18 @@ GameEngine.prototype.killMissile = function (m) {
     }
 };
 
+GameEngine.prototype.spawnSpheres = function (f) {
+    for (let i=0; i<this.config.spheres.spawnQuantity; i++) {
+        let a = Math.random() * Math.PI * 2;
+        this.spheres.push({position: {x: f.position.x, y: f.position.y},
+                           velocity: {x: Math.cos(a) * this.config.spheres.speed,
+                                      y: Math.sin(a) * this.config.spheres.speed},
+                           radius: this.config.spheres.radius,
+                           target: null,
+                           alive: true});
+    }
+};
+
 GameEngine.prototype.updateMissiles = function () {
     var acc = [];
     for (let i=0; i<this.missiles.length; i++) {
@@ -644,8 +686,10 @@ GameEngine.prototype.updateMissiles = function () {
                     var to = angleTo(f.position, m.position);
                     var a = angle_diff(f.angle, to);
                     if (a > 120 || a < -120) {
+                    // if (true) {
                         this.reward(this.config.rewards.fortressDestroy);
                         f.alive = false;
+                        this.spawnSpheres(f);
                         f.respawnTimer = 0;
                         this.addEvent({tag:'fortress-destroyed', fortress: j});
                         // console.log(Math.round(f.angle), Math.round(to), a);
@@ -653,6 +697,26 @@ GameEngine.prototype.updateMissiles = function () {
                     break;
                 }
             }
+            for (let j=0; j<this.spheres.length; j++) {
+                if (distance(this.spheres[j].position, m.position) < this.config.spheres.radius) {
+                    this.killMissile(m);
+                    if (this.spheres[j].target) {
+                        if (this.spheres[j].target !== m.owner) {
+                            this.addEvent({tag:'sphere-destroyed', sphere: j});
+                            this.spheres[j].alive = false;
+                        } else {
+                            this.addEvent({tag:'sphere-absorbed-missile', sphere: j});
+                        }
+                    } else {
+                        this.spheres[j].target = m.owner;
+                        this.addEvent({tag:'sphere-acquired-target',
+                                       sphere: j,
+                                       target: this.getPlayerIndex(this.spheres[j].target)});
+                    }
+                    break;
+                }
+            }
+
         }
         if (m.alive) acc.push(m);
     }
@@ -792,6 +856,78 @@ GameEngine.prototype.updateFortress = function (f) {
                            fortress: this.getFortressIndex(f)});
         }
     }
+};
+
+GameEngine.prototype.bounceThingOffWall = function (thing, oldx, oldy) {
+    for (let j=0; j<this.walls.length; j++) {
+        if (thing.position.x > Math.min(this.walls[j].x1, this.walls[j].x2) &&
+            thing.position.x < Math.max(this.walls[j].x1, this.walls[j].x2) &&
+            thing.position.y > Math.min(this.walls[j].y1, this.walls[j].y2) &&
+            thing.position.y < Math.max(this.walls[j].y1, this.walls[j].y2)) {
+            if (oldx > Math.min(this.walls[j].x1, this.walls[j].x2) &&
+                oldx < Math.max(this.walls[j].x1, this.walls[j].x2)) {
+                thing.velocity.y *= -1;
+            } else if (oldy > Math.min(this.walls[j].y1, this.walls[j].y2) &&
+                       oldy < Math.max(this.walls[j].y1, this.walls[j].y2)) {
+                thing.velocity.x *= -1;
+            }
+        }
+    }
+}
+
+GameEngine.prototype.updateSpheres = function () {
+    for (let i=0; i<this.spheres.length; i++) {
+        if (this.spheres[i].alive) {
+            var oldx = this.spheres[i].position.x,
+                oldy = this.spheres[i].position.y;
+
+            if (this.spheres[i].target) {
+                // Lose the target if a wall separates them
+                for (let j=0; j<this.walls.length; j++) {
+                    if (this.walls[j].intersectLine(this.spheres[i].position,
+                                                    this.spheres[i].target.position)) {
+                        this.spheres[i].target = null;
+                        break;
+                    }
+                }
+            }
+            if (this.spheres[i].target) {
+                var a = angleTo(this.spheres[i].position, this.spheres[i].target.position) * Math.PI / 180;
+                this.spheres[i].velocity.x += Math.cos(a) * this.config.spheres.acceleration;
+                this.spheres[i].velocity.y += Math.sin(a) * this.config.spheres.acceleration;
+                // Cap the velocity
+                if (this.spheres[i].velocity.x < -this.config.spheres.speed) {
+                    this.spheres[i].velocity.x = -this.config.spheres.speed;
+                } else if (this.spheres[i].velocity.x > this.config.spheres.speed) {
+                    this.spheres[i].velocity.x = this.config.spheres.speed;
+                }
+                if (this.spheres[i].velocity.y < -this.config.spheres.speed) {
+                    this.spheres[i].velocity.y = -this.config.spheres.speed;
+                } else if (this.spheres[i].velocity.y > this.config.spheres.speed) {
+                    this.spheres[i].velocity.y = this.config.spheres.speed;
+                }
+
+            }
+
+            this.spheres[i].position.x += this.spheres[i].velocity.x;
+            this.spheres[i].position.y += this.spheres[i].velocity.y;
+
+            this.bounceThingOffWall(this.spheres[i], oldx, oldy);
+
+            for (let j=0; j<this.players.length; j++) {
+                if (this.players[j].alive) {
+                    if (distance(this.players[j].position, this.spheres[i].position) < this.spheres[i].radius) {
+                        this.killPlayer(this.players[j]);
+                        this.addEvent({tag:'player-hit-sphere',
+                                       player: j,
+                                       sphere: i});
+                    }
+                }
+            }
+        }
+    }
+    for (let i=this.spheres.length-1; i>0; i--)
+        if (!this.spheres[i].alive) this.spheres.splice(i);
 };
 
 GameEngine.prototype.updatePlayers = function () {
