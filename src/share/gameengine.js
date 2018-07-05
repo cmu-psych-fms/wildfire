@@ -1,3 +1,6 @@
+var UPDATE_ADD = 0;
+var UPDATE_DEL = 1;
+
 var KEY_LEFT = 1;
 var KEY_RIGHT = 2;
 var KEY_UP = 3;
@@ -272,9 +275,16 @@ function GameEngine(config) {
     this.players = [];
     this.fortresses = [];
     this.missiles = [];
+    this.missileCount = 0;
+    // this.missileUpdates = [];
     this.shells = [];
+    this.shellCount = 0;
+    // this.shellUpdates = [];
     this.asteroids = [];
+    // this.asteroidUpdates = [];
     this.spheres = [];
+    this.sphereCount = 0;
+    // this.sphereUpdates = [];
     this.walls = [];
     this.startLocations = [];
     this.ticks = 0;
@@ -611,16 +621,18 @@ GameEngine.prototype.updatePlayer = function (p) {
 
 GameEngine.prototype.addMissile = function (owner) {
     // if (!owner.missileState) {
-        var m = {owner: owner,
-                 position: {x: owner.position.x,
-                            y: owner.position.y},
-                 velocity: {x: Math.cos(deg2rad(owner.angle)) * this.config.missile.speed + owner.velocity.x,
-                            y: Math.sin(deg2rad(owner.angle)) * this.config.missile.speed + owner.velocity.y},
-                 angle: owner.angle,
-                 alive: true,
-                 spawnTick: this.ticks};
-        this.missiles.push(m)
-        // owner.missileState = true;
+    var m = {owner: owner,
+             position: {x: owner.position.x,
+                        y: owner.position.y},
+             velocity: {x: Math.cos(deg2rad(owner.angle)) * this.config.missile.speed + owner.velocity.x,
+                        y: Math.sin(deg2rad(owner.angle)) * this.config.missile.speed + owner.velocity.y},
+             angle: owner.angle,
+             alive: true,
+             spawnTick: this.ticks,
+             id: this.missileCount};
+    this.missiles.push(m)
+    this.missileCount += 1;
+    // owner.missileState = true;
     // }
 };
 
@@ -631,8 +643,10 @@ GameEngine.prototype.addShell = function (owner) {
                         y: Math.sin(deg2rad(owner.angle)) * this.config.shell.speed},
              angle: owner.angle,
              alive: true,
-             spawnTick: this.ticks};
+             spawnTick: this.ticks,
+             id: this.shellCount};
     this.shells.push(m);
+    this.shellCount += 1;
 };
 
 GameEngine.prototype.killMissile = function (m) {
@@ -654,7 +668,9 @@ GameEngine.prototype.spawnSpheres = function (f) {
                                       y: Math.sin(a) * this.config.spheres.speed},
                            radius: this.config.spheres.radius,
                            target: null,
-                           alive: true});
+                           alive: true,
+                           id: this.sphereCount});
+        this.sphereCount += 1;
     }
 };
 
@@ -685,8 +701,8 @@ GameEngine.prototype.updateMissiles = function () {
                     this.killMissile(m);
                     var to = angleTo(f.position, m.position);
                     var a = angle_diff(f.angle, to);
-                    if (a > 120 || a < -120) {
-                    // if (true) {
+                    // if (a > 120 || a < -120) {
+                    if (true) {
                         this.reward(this.config.rewards.fortressDestroy);
                         f.alive = false;
                         this.spawnSpheres(f);
@@ -913,6 +929,8 @@ GameEngine.prototype.updateSpheres = function () {
             this.spheres[i].position.y += this.spheres[i].velocity.y;
 
             this.bounceThingOffWall(this.spheres[i], oldx, oldy);
+
+            // TODO: If moving the ball puts it on top of another ball, then don't move them.
 
             for (let j=0; j<this.players.length; j++) {
                 if (this.players[j].alive) {

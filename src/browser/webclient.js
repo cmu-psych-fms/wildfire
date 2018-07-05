@@ -31,6 +31,63 @@
 
 }() );
 
+function Cache(scene, geom, material, z) {
+    this.scene = scene;
+    this.cache = [];
+    this.geom = geom;
+    this.material = material;
+    this.z = z || 35;
+}
+
+Cache.prototype = {};
+
+Cache.prototype.clear = function () {
+    for (i=0; i<this.cache.length; i++) {
+        this.cache[i].visible = false;
+    }
+};
+
+Cache.prototype.add = function (thing) {
+    var found = -1;
+    for (i=0; i<this.cache.length; i++) {
+        if (!this.cache[i].visible) {
+            // found = i;
+            break;
+        }
+    }
+    if (found < 0) {
+        var m = new THREE.Mesh(this.geom, this.material);
+        this.scene.add(m);
+        this.cache.push(m);
+        found = this.cache.length-1;
+    }
+
+    this.cache[found].position.x = thing.position.x;
+    this.cache[found].position.y = thing.position.y;
+    this.cache[found].position.z = this.z;
+    this.cache[found].visible = true;
+    thing.mesh = this.cache[found];
+};
+
+function SphereCache(scene, geom, material, chaseMaterial) {
+    this.roamCache = new Cache(scene, geom, material);
+    this.chaseCache = new Cache(scene, geom, chaseMaterial);
+}
+
+SphereCache.prototype = {};
+
+SphereCache.prototype.clear = function () {
+    this.roamCache.clear();
+    this.chaseCache.clear();
+};
+
+
+SphereCache.prototype.add = function (s) {
+    if (s.target !== null) this.chaseCache.add(s);
+    else this.roamCache.add(s);
+};
+
+
 function WebClient (gnum) {
     this.game_number = gnum;
     this.engine = new GameEngine(new Config());
@@ -41,6 +98,8 @@ function WebClient (gnum) {
     this.movementRequests = [];
     this.movementRequestSeq = -1;
     this.gameStates = [];
+    this.lastUpdateTime = null;
+    this.leftOverDT = 0;
 
     this.messageText = ["Impossible",
                         "I need help. Come to my position.",
@@ -262,65 +321,6 @@ WebClient.prototype.updateScene = function () {
     }
 };
 
-WebClient.prototype.cacheClear = function (cache) {
-    for (i=0; i<cache.length; i++) {
-        cache[i].visible = false;
-    }
-};
-
-WebClient.prototype.cacheAdd = function (cache, thing, geom, mat, z) {
-    z = z || 35;
-    var found = -1;
-    for (i=0; i<cache.length; i++) {
-        if (!cache[i].visible) {
-            // found = i;
-            break;
-        }
-    }
-    if (found < 0) {
-        var m = new THREE.Mesh(geom, mat);
-        this.scene.add(m);
-        cache.push(m);
-        found = cache.length-1;
-    }
-
-    cache[found].position.x = thing.position.x;
-    cache[found].position.y = thing.position.y;
-    cache[found].position.z = z;
-    cache[found].visible = true;
-    thing.mesh = cache[found];
-}
-
-WebClient.prototype.missileCacheAdd = function (m) {
-    this.cacheAdd(this.three.missileCache, m, this.three.missileGeom, this.three.missileMat);
-};
-
-WebClient.prototype.shellCacheAdd = function (s) {
-    this.cacheAdd(this.three.shellCache, s, this.three.shellGeom, this.three.shellMat);
-};
-
-WebClient.prototype.sphereCacheAdd = function (s) {
-    if (s.target !== null) {
-        console.log('chase sphere');
-        this.cacheAdd(this.three.sphereChaseCache, s, this.three.sphereGeom, this.three.sphereChaseMat, 0.1);
-    }
-    else
-        this.cacheAdd(this.three.sphereCache, s, this.three.sphereGeom, this.three.sphereMat, 0.1);
-};
-
-WebClient.prototype.shellCacheClear = function () {
-    this.cacheClear(this.three.shellCache);
-};
-
-WebClient.prototype.missileCacheClear = function () {
-    this.cacheClear(this.three.missileCache);
-};
-
-WebClient.prototype.sphereCacheClear = function () {
-    this.cacheClear(this.three.sphereCache);
-    this.cacheClear(this.three.sphereChaseCache);
-};
-
 WebClient.prototype.createFortressShield = function (radius) {
     var h = this.engine.hexagons[radius];
     var geometry = new THREE.Geometry();
@@ -445,22 +445,35 @@ WebClient.prototype.addWorldToScene = function () {
     var borderMat = new THREE.MeshLambertMaterial({color: 0xFF8800});
     this.three = {};
 
-    this.three.missileGeom = new THREE.CubeGeometry(20, 5, 5, 1, 1, 1);
-    this.three.missileMat = new THREE.MeshLambertMaterial({color: 0xFFFF00});
-    this.three.shellGeom = new THREE.CubeGeometry(20, 5, 5, 1, 1, 1);
-    this.three.shellMat = new THREE.MeshLambertMaterial({color: 0xFF0000});
-    this.three.sphereGeom = new THREE.SphereGeometry(this.engine.config.spheres.radius * 1.5, 8, 8);
-    this.three.sphereMat = new THREE.MeshPhongMaterial({color: 0x3333FF,
-                                                        emissive: 0x072534,
-                                                        flatShading: true});
-    this.three.sphereChaseMat = new THREE.MeshPhongMaterial({color: 0xFF3333,
-                                                             emissive: 0x072534,
-                                                             flatShading: true});
 
-    this.three.missileCache = [];
-    this.three.shellCache = [];
-    this.three.sphereCache = [];
-    this.three.sphereChaseCache = [];
+    this.three.missileCache = new Cache(this.scene,
+                                        new THREE.CubeGeometry(20, 5, 5, 1, 1, 1),
+                                        new THREE.MeshLambertMaterial({color: 0xFFFF00}),
+                                        35);
+    this.three.shellCache = new Cache(this.scene,
+                                      new THREE.CubeGeometry(20, 5, 5, 1, 1, 1),
+                                      new THREE.MeshLambertMaterial({color: 0xFF0000}),
+                                      35);
+    this.three.sphereCache = new SphereCache(this.scene,
+                                             new THREE.SphereGeometry(this.engine.config.spheres.radius * 1.5, 8, 8),
+                                             new THREE.MeshPhongMaterial({color: 0x3333FF,
+                                                                          emissive: 0x072534,
+                                                                          flatShading: true}),
+                                             new THREE.MeshPhongMaterial({color: 0xFF3333,
+                                                                          emissive: 0x072534,
+                                                                          flatShading: true}),
+                                             0.1);
+
+    // Create a few objects for the cache to avoid lag later
+    for (let i=0; i<10; i++) {
+        this.three.shellCache.add({position: {x:0,y:0}});
+        this.three.missileCache.add({position: {x:0,y:0}});
+        this.three.sphereCache.add({position: {x:0,y:0}, target: null});
+        this.three.sphereCache.add({position: {x:0,y:0}, target: 0});
+    }
+    this.three.shellCache.clear();
+    this.three.missileCache.clear();
+    this.three.sphereCache.clear();
 
     this.three.floor = new THREE.Mesh( new THREE.PlaneGeometry( this.engine.config.mapSize * this.engine.config.mapCellSize,
                                                                 this.engine.config.mapSize * this.engine.config.mapCellSize,
@@ -601,7 +614,7 @@ WebClient.prototype.onServerUpdate = function (data) {
     if (!this.updateid) {
         $('#status_area').css('display', 'none');
         this.canvas3d.style.display = 'inline-block';
-        this.update( new Date().getTime() );
+        this.requestUpdate();
     }
 };
 
@@ -638,6 +651,25 @@ WebClient.prototype.replayMovementRequests = function () {
     }
 };
 
+WebClient.prototype.lerpThing = function (thing) {
+    if (thing.lerp.step >= thing.lerp.steps) return;
+
+    thing.lerp.step += 1;
+    thing.position.x += thing.lerp.dx;
+    thing.position.y += thing.lerp.dy;
+    thing.angle += thing.lerp.da;
+};
+
+WebClient.prototype.calcLerp = function (thing, start, end, ticks) {
+    thing.lerp = { step: 0,
+                   steps: ticks,
+                   start: start,
+                   end: end,
+                   dx: (end.x - start.x)/ticks,
+                   dy: (end.y - start.y)/ticks,
+                   da: (end.angle - start.angle)/ticks}
+};
+
 WebClient.prototype.predictPlayer = function (p) {
     if (p.alive) {
         if (p.turnFlag === 'left') {
@@ -668,6 +700,11 @@ WebClient.prototype.predictAsteroid = function (a) {
     a.angle = stdAngle(a.angle+a.angularVelocity);
 };
 
+WebClient.prototype.predictSphere = function (s) {
+    s.position.x += s.velocity.x;
+    s.position.y += s.velocity.y;
+};
+
 WebClient.prototype.predictiveStep = function () {
     for (let i=0; i<this.engine.missiles.length;i++)
         this.predictMissile(this.engine.missiles[i]);
@@ -675,7 +712,77 @@ WebClient.prototype.predictiveStep = function () {
         this.predictShell(this.engine.shells[i]);
     for (let i=0; i<this.engine.asteroids.length;i++)
         this.predictAsteroid(this.engine.asteroids[i]);
+    for (let i=0; i<this.engine.spheres.length;i++)
+        this.predictSphere(this.engine.spheres[i]);
 };
+
+WebClient.prototype.translateServerDefault = function (local, server) {
+    local.position.x = server[1];
+    local.position.y = server[2];
+    local.angle = server[3];
+};
+
+WebClient.prototype.translateServerMissile = function (local, server) {
+    local.position.x = server[1];
+    local.position.y = server[2];
+    local.velocity.x = server[3];
+    local.velocity.y = server[4];
+    local.angle = server[5];
+};
+
+
+WebClient.prototype.translateServerSphere = function (sphere, server) {
+    sphere.position.x = server[1];
+    sphere.position.y = server[2];
+    sphere.velocity.x = server[3];
+    sphere.velocity.y = server[4];
+    sphere.target = server[5];
+};
+
+WebClient.prototype.processServerThingUpdate = function (thing, things, translateFn, cache) {
+    var match = -1;
+    for (let j=0; j<things.length; j++) {
+        if (things[j].id === thing[0]) {
+            match = j;
+            break;
+        }
+    }
+    if (match >= 0) {
+        translateFn(things[match], thing);
+        things[match].active = true;
+        cache.add(things[match]);
+        return things[match];
+    } else {
+        var o = {position: {x:0, y:0},
+                 velocity: {x:0, y:0},
+                 angle: 0,
+                 id: thing[0],
+                 active: true};
+        translateFn(o, thing);
+        things.push(o);
+        cache.add(o);
+        return o;
+    }
+}
+
+WebClient.prototype.processServerShellUpdate = function (shell) {
+    this.processServerThingUpdate(shell, this.engine.shells,
+                                  this.translateServerDefault.bind(this),
+                                  this.three.shellCache);
+};
+
+WebClient.prototype.processServerMissileUpdate = function (missile) {
+    this.processServerThingUpdate(missile, this.engine.missiles,
+                                  this.translateServerMissile.bind(this),
+                                  this.three.missileCache);
+};
+
+WebClient.prototype.processServerSphereUpdate = function (sphere) {
+    var o = this.processServerThingUpdate(sphere, this.engine.spheres,
+                                          this.translateServerSphere.bind(this),
+                                          this.three.sphereCache);
+};
+
 
 WebClient.prototype.processServerUpdates = function () {
     if (this.network.serverUpdates.length === 0) {
@@ -718,39 +825,46 @@ WebClient.prototype.processServerUpdates = function () {
             this.engine.fortresses[i].angle = fortresses[i][3];
         }
         var shells = last.s;
-        this.engine.shells = new Array(shells.length);
-        this.shellCacheClear();
-        for (let i=0; i<this.engine.shells.length; i++) {
-            this.engine.shells[i] = {position: {x: shells[i][0],
-                                                y: shells[i][1]},
-                                     angle: shells[i][2]};
-            this.shellCacheAdd(this.engine.shells[i]);
+        this.three.shellCache.clear();
+        for (let i=this.engine.shells.length-1; i>=0; i--) {
+            this.engine.shells[i].active = false;
         }
+        for (let i=0; i<shells.length; i++) {
+            this.processServerShellUpdate(shells[i]);
+        }
+        for (let i=this.engine.shells.length-1; i>=0; i--) {
+            if (!this.engine.shells[i].active) this.engine.shells.splice(i,1);
+        }
+
         var missiles = last.m;
-        this.engine.missiles = new Array(missiles.length);
-        this.missileCacheClear();
-        for (let i=0; i<this.engine.missiles.length; i++) {
-            this.engine.missiles[i] = {position: {x: missiles[i][0],
-                                                  y: missiles[i][1]},
-                                       velocity: {x: missiles[i][2],
-                                                  y: missiles[i][3]},
-                                       angle: missiles[i][4]};
-            this.missileCacheAdd(this.engine.missiles[i]);
+        this.three.missileCache.clear();
+        for (let i=this.engine.missiles.length-1; i>=0; i--) {
+            this.engine.missiles[i].active = false;
         }
+        for (let i=0; i<missiles.length; i++) {
+            this.processServerMissileUpdate(missiles[i]);
+        }
+        for (let i=this.engine.missiles.length-1; i>=0; i--) {
+            if (!this.engine.missiles[i].active) this.engine.missiles.splice(i,1);
+        }
+
+        var spheres = last.spheres;
+        this.three.sphereCache.clear();
+        for (let i=this.engine.spheres.length-1; i>=0; i--) {
+            this.engine.spheres[i].active = false;
+        }
+        for (let i=0; i<spheres.length; i++) {
+            this.processServerSphereUpdate(spheres[i]);
+        }
+        for (let i=this.engine.spheres.length-1; i>=0; i--) {
+            if (!this.engine.spheres[i].active) this.engine.spheres.splice(i,1);
+        }
+
         var asteroids = last.a;
         for (let i=0; i<this.engine.asteroids.length; i++) {
             this.engine.asteroids[i].position.x = asteroids[i][0];
             this.engine.asteroids[i].position.y = asteroids[i][1];
             this.engine.asteroids[i].angle = asteroids[i][2];
-        }
-        var spheres = last.spheres;
-        this.engine.spheres = new Array(spheres.length);
-        this.sphereCacheClear();
-        for (let i=0; i<this.engine.spheres.length; i++) {
-            this.engine.spheres[i] = {position: {x: spheres[i][0],
-                                                 y: spheres[i][1]},
-                                      target: spheres[i][2]};
-            this.sphereCacheAdd(this.engine.spheres[i]);
         }
 
         var lastMovementRequest = last.lmr;
@@ -1089,16 +1203,27 @@ WebClient.prototype.saveState = function () {
     }
 };
 
+WebClient.prototype.requestUpdate = function () {
+    this.updateid = window.requestAnimationFrame( this.update.bind(this), this.canvas );
+}
+
 WebClient.prototype.update = function (t) {
     this.dt = this.lastUpdateTime ? (t - this.lastUpdateTime) : 1000/60.0;
     this.lastUpdateTime = t;
-
-    this.engine.ticks += 1;
-
-    this.processKbdInput();
-    this.processServerUpdates();
-    this.saveState();
+    // If the frame rate drops below 60fps, we need to catch up by
+    // doing doing multiple game ticks.
+    var ms = this.leftOverDT + this.dt;
+    var ticks = Math.floor(ms / (1000/60.0));
+    this.leftOverDT = ms - ticks * 1000/60.0;
+    // console.log(this.lastUpdateTime, this.dt, ms, ticks, this.leftOverDT);
+    for (let i=0; i<ticks; i++) {
+        this.engine.ticks += 1;
+        this.processKbdInput();
+        this.processServerUpdates();
+        this.saveState();
+    }
     this.updateScene();
+
     if (this.cameraMode === '2d')
         this.drawGameState();
     else
@@ -1106,5 +1231,5 @@ WebClient.prototype.update = function (t) {
     this.updateMessages();
 
 
-    this.updateid = window.requestAnimationFrame( this.update.bind(this), this.canvas );
+    this.requestUpdate();
 };

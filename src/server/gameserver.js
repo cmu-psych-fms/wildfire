@@ -88,15 +88,13 @@ GameServer.prototype.delPlayer = function (client) {
 GameServer.prototype.startGameMode = function () {
     this.mode = 'game';
     this.gameNumber += 1;
-    this.startServerUpdates();
-    this.startGameTickTimer();
+    this.startGameTimers();
     console.log('game mode');
 };
 
 GameServer.prototype.endGameMode = function () {
     this.mode = 'lobby';
-    this.stopServerUpdates();
-    this.stopGameTickTimer();
+    this.stopGameTimers();
     this.logging.endGame(this.gameNumber,
                          {points: this.engine.points,
                           rawPoints: this.engine.rawPoints});
@@ -129,7 +127,7 @@ GameServer.prototype.onMessage = function (client, m) {
     }
 };
 
-GameServer.prototype.startGameTickTimer = function () {
+GameServer.prototype.startGameTimers = function () {
     var players = new Array(this.engine.players.length);
     for (let i=0; i<this.players.length; i++) {
         players[i] = {id: this.engine.players[i].id,
@@ -157,15 +155,18 @@ GameServer.prototype.startGameTickTimer = function () {
                                              asteroids: asteroids,
                                              startLocations: this.engine.startLocations
                                             });
-    this.gameTickTimer = setInterval(function() {
-        var t = new Date().getTime();
-        if (this.tickTime) this.lastTickDuration = t - this.tickTime;
-        else this.lastTickDuration = 0;
-        this.tickTime = t;
-        this.engine.stepOneTick(this.lastTickDuration);
-        this.logging.saveGameState(this.gameNumber, this.engine.ticks, this.engine.dumpState());
-        this.checkForGameEnd();
-    }.bind(this), 15);
+    this.gameTickTimer = setInterval(this.stepGame.bind(this), 15);
+    this.serverUpdateTimer = setInterval(this.sendServerUpdate.bind(this), 45);
+};
+
+GameServer.prototype.stepGame = function () {
+    var t = new Date().getTime();
+    if (this.tickTime) this.lastTickDuration = t - this.tickTime;
+    else this.lastTickDuration = 0;
+    this.tickTime = t;
+    this.engine.stepOneTick(this.lastTickDuration);
+    this.logging.saveGameState(this.gameNumber, this.engine.ticks, this.engine.dumpState());
+    this.checkForGameEnd();
 };
 
 GameServer.prototype.checkForGameEnd = function () {
@@ -174,15 +175,8 @@ GameServer.prototype.checkForGameEnd = function () {
     }
 };
 
-GameServer.prototype.stopGameTickTimer = function () {
+GameServer.prototype.stopGameTimers = function () {
     clearInterval(this.gameTickTimer);
-}
-
-GameServer.prototype.startServerUpdates = function () {
-    this.serverUpdateTimer = setInterval(this.sendServerUpdate.bind(this), 45);
-};
-
-GameServer.prototype.stopServerUpdates = function () {
     clearInterval(this.serverUpdateTimer);
 }
 
@@ -207,7 +201,8 @@ GameServer.prototype.sendServerUpdate = function () {
     }
     full.m = new Array(this.engine.missiles.length);
     for (let i =0;i<this.engine.missiles.length; i++) {
-        full.m[i] = [this.engine.missiles[i].position.x,
+        full.m[i] = [this.engine.missiles[i].id,
+                     this.engine.missiles[i].position.x,
                      this.engine.missiles[i].position.y,
                      this.engine.missiles[i].velocity.x,
                      this.engine.missiles[i].velocity.y,
@@ -215,7 +210,8 @@ GameServer.prototype.sendServerUpdate = function () {
     }
     full.s = new Array(this.engine.shells.length);
     for (let i =0;i<this.engine.shells.length; i++) {
-        full.s[i] = [this.engine.shells[i].position.x,
+        full.s[i] = [this.engine.shells[i].id,
+                     this.engine.shells[i].position.x,
                      this.engine.shells[i].position.y,
                      this.engine.shells[i].angle];
     }
@@ -227,8 +223,11 @@ GameServer.prototype.sendServerUpdate = function () {
     }
     full.spheres = new Array(this.engine.spheres.length);
     for (let i =0;i<this.engine.spheres.length; i++) {
-        full.spheres[i] = [this.engine.spheres[i].position.x,
+        full.spheres[i] = [this.engine.spheres[i].id,
+                           this.engine.spheres[i].position.x,
                            this.engine.spheres[i].position.y,
+                           this.engine.spheres[i].velocity.x,
+                           this.engine.spheres[i].velocity.y,
                            this.engine.spheres[i].target ? this.engine.getPlayerIndex(this.engine.spheres[i].target):null];
     }
 
