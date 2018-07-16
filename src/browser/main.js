@@ -198,7 +198,7 @@ function createScreens(condition) {
     // screens.push(new Instructions(instructions, pages));
 
     for (i=0; i<numGames; i++) {
-        var g = new WebClient(i+1);
+        var g = new WebClient(i+1, getWorkerId());
         var s = new ScoreScreen(i+1, 10);
         var n = i+1;
         // screens.push(new GameStartScreen('<h1>Game '+n.toString()+' of '+numGames.toString()+'</h1>' + instructionText, instructions, pages));

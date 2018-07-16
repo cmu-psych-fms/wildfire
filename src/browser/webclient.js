@@ -88,18 +88,9 @@ SphereCache.prototype.add = function (s) {
 };
 
 
-function WebClient (gnum) {
-    this.game_number = gnum;
-    this.engine = new GameEngine(new Config());
-    this.network = {serverUpdates: [],
-                    latency: 0};
+function WebClient (gnum, requestedId) {
+    Client.call(this, gnum, requestedId);
     this.id = null;
-    this.keyEvents = [];
-    this.movementRequests = [];
-    this.movementRequestSeq = -1;
-    this.gameStates = [];
-    this.lastUpdateTime = null;
-    this.leftOverDT = 0;
 
     this.messageText = ["Impossible",
                         "I need help. Come to my position.",
@@ -108,7 +99,7 @@ function WebClient (gnum) {
                         "10-4. In transit."];
 }
 
-WebClient.prototype = {};
+WebClient.prototype = Object.create(Client.prototype);
 
 WebClient.prototype.setCameraMode = function (mode) {
     if (this.cameraMode === '2d' && mode !== '2d') {
@@ -148,7 +139,7 @@ WebClient.prototype.init = function () {
                                // '</table></div>');
 
 
-    this.connect();
+    this.connect(io.connect());
     this.addEventListeners();
 
     this.canvas2d = document.getElementById('canvas2d');
@@ -186,9 +177,19 @@ WebClient.prototype.init = function () {
     $('#status').html('<h1>Connecting to game server ...</h1>');
 };
 
-WebClient.prototype.addLobbyEventListeners = function () {
-    $(document).on('keydown', $.proxy(this.lobbyOnKeyDown, this));
-    $(document).on('keyup', $.proxy(this.lobbyOnKeyUp, this));
+WebClient.prototype.updateStatus = function (status, extra) {
+    Client.prototype.updateStatus.apply(this, arguments);
+    switch (status) {
+    case 'identification':
+        $('#status').html('<h1>Identifying Client ...</h1>');
+        break;
+    case 'lobby':
+        $('#status').html('<h1>Waiting For Other Player ...</h1>');
+        break;
+    case 'countdown':
+        $('#status').html('<h1>Game will start in</h1><span style="font-size: 50px; font-weight: bold">'+extra.toString()+'</span>');
+        break;
+    }
 };
 
 
@@ -198,44 +199,18 @@ WebClient.prototype.addEventListeners = function () {
 };
 
 WebClient.prototype.clearEvents = function () {
-    $(document).off('keydown', $.proxy(this.lobbyOnKeyDown));
-    $(document).off('keyup', $.proxy(this.lobbyOnKeyUp));
     $(document).off('keydown', $.proxy(this.onKeyDown));
     $(document).off('keyup', $.proxy(this.onKeyUp));
 };
 
 WebClient.prototype.cleanup = function () {
-    this.engine.players = [];
+    Client.prototype.cleanup.apply(this, arguments);
     this.clearEvents();
     exp.gameReward = this.engine.config.pointConversion * this.engine.points;
     exp.gamePoints = this.engine.points;
 
     exp.lg('end');
-    this.cancelUpdates();
 };
-
-WebClient.prototype.lobbyOnKeyDown = function (ev) {
-    
-};
-
-WebClient.prototype.lobbyOnKeyUp = function (ev) {
-    
-};
-
-WebClient.prototype.connect = function () {
-    this.network.socket = io.connect();
-    this.network.socket.on('connect', this.onConnect.bind(this));
-    this.network.socket.on('joined', this.onJoined.bind(this));
-
-    this.network.socket.on('disconnect', this.onDisconnect.bind(this));
-    this.network.socket.on('message', this.onMessage.bind(this));
-    this.network.socket.on('serverupdate', this.onServerUpdate.bind(this));
-    this.network.socket.on('join', this.onPlayerJoin.bind(this));
-    this.network.socket.on('part', this.onPlayerPart.bind(this));
-    this.network.socket.on('end', this.onEndGame.bind(this));
-    this.network.socket.on('starting', this.onStarting.bind(this));
-};
-
 
 WebClient.prototype.decodeKeyCode = function(which) {
     // FIXME: oops. The 3d coordinates are mirror image of 2d coordinates.
@@ -262,18 +237,17 @@ WebClient.prototype.decodeKeyCode = function(which) {
 };
 
 WebClient.prototype.cancelUpdates = function () {
+    Client.prototype.cancelUpdates.apply(this, arguments);
     console.log("cancel animation");
     window.cancelAnimationFrame(this.updateid);
     this.updateid = null;
-    this.network.socket.close();
 };
 
 WebClient.prototype.onKeyDown = function (ev) {
     if (ev.which === 27) this.cancelUpdates();
     var k = this.decodeKeyCode(ev.which);
     if (k) {
-        this.network.hasNewInput = true;
-        this.keyEvents.push([1, k]);
+        this.pressKey(k);
         ev.preventDefault();
         ev.stopPropagation();
     }
@@ -282,8 +256,7 @@ WebClient.prototype.onKeyDown = function (ev) {
 WebClient.prototype.onKeyUp = function (ev) {
     var k = this.decodeKeyCode(ev.which);
     if (k) {
-        this.network.hasNewInput = true;
-        this.keyEvents.push([0, k]);
+        this.releaseKey(k);
         ev.preventDefault();
         ev.stopPropagation();
     }
@@ -342,7 +315,7 @@ WebClient.prototype.createFortressShield = function (radius) {
     geometry.computeFaceNormals();
 
     return geometry;
-}
+};
 
 WebClient.prototype.makeGrid = function () {
     var gridGeom = new THREE.BufferGeometry();
@@ -356,7 +329,7 @@ WebClient.prototype.makeGrid = function () {
     }
     gridGeom.addAttribute( 'position', new THREE.Float32BufferAttribute(vertices, 3));
     return new THREE.LineSegments(gridGeom, new THREE.LineBasicMaterial( { color: 0x770077}));
-}
+};
 
 WebClient.prototype.addPlayerToScene = function (p) {
     material = new THREE.MeshLambertMaterial({color: p.color});
@@ -525,361 +498,66 @@ WebClient.prototype.addWorldToScene = function () {
     // this.scene.add(this.three.rightBorder);
 };
 
-WebClient.prototype.onConnect = function () {
-    console.log('connect');
-    this.network.socket.send('i' + JSON.stringify({id: getWorkerId(), gnum: this.game_number}));
-    $('#status').html('<h1>Identifying Client ...</h1>');
+WebClient.prototype.processServerShellUpdate = function (shell) {
+    this.three.shellCache.add(shell);
 };
 
-WebClient.prototype.onJoined = function (data) {
-    console.log('joined', data);
-    this.id = data.id;
-    this.engine.startLocations = data.startLocations;
-    for (let i=0; i<data.players.length; i++) {
-        this.engine.addPlayer(data.players[i].id);
-        this.engine.players[i].color = data.players[i].color;
-    }
-    this.engine.fortresses = new Array(data.fortresses.length);
-    for (let i=0; i<data.fortresses.length; i++) {
-        this.engine.fortresses[i] = {alive: data.fortresses[i][0],
-                                     position: {x:data.fortresses[i][1],
-                                                y:data.fortresses[i][2]},
-                                     angle: data.fortresses[i][3],
-                                     radius: data.fortresses[i][4]};
-    }
-    this.engine.asteroids = data.asteroids;
-    this.engine.walls = data.walls;
-    this.engine.spheres = data.spheres;
+WebClient.prototype.processServerMissileUpdate = function (missile) {
+    this.three.missileCache.add(missile);
+};
 
+WebClient.prototype.processServerSphereUpdate = function (sphere) {
+    this.three.sphereCache.add(sphere);
+};
+
+WebClient.prototype.processServerShellUpdates = function (shells) {
+    this.three.shellCache.clear();
+    Client.prototype.processServerShellUpdates.apply(this, arguments);
+};
+
+WebClient.prototype.processServerMissileUpdates = function (missiles) {
+    this.three.missileCache.clear();
+    Client.prototype.processServerMissileUpdates.apply(this, arguments);
+};
+
+WebClient.prototype.processServerSphereUpdates = function (spheres) {
+    this.three.sphereCache.clear();
+    Client.prototype.processServerSphereUpdates.apply(this, arguments);
+};
+
+
+WebClient.prototype.onJoined = function () {
+    Client.prototype.onJoined.apply(this,arguments);
     this.addWorldToScene();
-
-    $('#status').html('<h1>Waiting For Other Player ...</h1>');
-};
-
-WebClient.prototype.onStarting = function (data) {
-    $('#status').html('<h1>Game will start in</h1><span style="font-size: 50px; font-weight: bold">'+data.seconds.toString()+'</span>');
 };
 
 WebClient.prototype.onDisconnect = function (data) {
-    // We got disconnected
-    console.log('disconnect', data);
-    this.network.state = 'disconnected';
+    Client.prototype.onDisconnect.apply(this, arguments);
     exp.nextScreen();
 };
 
-
-WebClient.prototype.sendPing = function () {
-    var ts = new Date().getTime();
-    this.network.socket.send('p'+ts.toString());
-};
-
-WebClient.prototype.handlePong = function (ts) {
-    this.network.latency = new Date().getTime() - ts;
-    console.log('latency is ', this.network.latency);
-};
-
-WebClient.prototype.onMessage = function (msg) {
-    console.log('message', msg);
-    var cmd = msg[0];
-    var data = JSON.parse(msg.slice(1));
-    switch (cmd) {
-    case 'p':
-        this.handlePong(data);
-    };
-};
-
 WebClient.prototype.onPlayerJoin = function (data) {
-    console.log('join', data);
-    this.engine.addPlayer(data.id);
+    Client.prototype.onPlayerJoin.apply(this, arguments);
     this.addPlayerToScene(this.engine.getPlayer(data.id));
-    $('#status').html('<h1>Game will start in 5 seconds!</h1>');
 };
 
 WebClient.prototype.onPlayerPart = function (data) {
-    console.log('part', data);
     this.scene.remove(this.engine.getPlayer(data.id).mesh);
-    this.engine.delPlayer(data.id);
+    Client.prototype.onPlayerPart.apply(this, arguments);
 };
 
 WebClient.prototype.onEndGame = function (data) {
-    console.log('end game');
+    Client.prototype.onEndGame.apply(this, arguments);
     exp.nextScreen();
 };
 
 WebClient.prototype.onServerUpdate = function (data) {
-    this.network.serverUpdates.push(data);
-    if (this.network.serverUpdates.length >= this.engine.config.serverUpdateBufferSize) {
-        this.network.serverUpdates.splice(0,1);
-    }
+    Client.prototype.onServerUpdate.apply(this, arguments);
+
     if (!this.updateid) {
         $('#status_area').css('display', 'none');
         this.canvas3d.style.display = 'inline-block';
         this.requestUpdate();
-    }
-};
-
-WebClient.prototype.processKbdInput = function () {
-    var p = this.engine.getPlayer(this.id);
-    this.engine.processPlayerKeys(p, this.keyEvents);
-    this.movementRequestSeq += 1;
-    // console.log('master yah',
-    //             this.engine.players[this.id].missileRequests,
-    //             this.engine.players[this.id].messageRequests);
-    var m = [this.movementRequestSeq,
-             p.thrustFlag,
-             p.turnFlag,
-             p.missileRequests,
-             p.messageRequests];
-    var packet = 'k' + JSON.stringify(m);
-    this.network.socket.send (packet);
-    this.movementRequests.push(m);
-    this.keyEvents = [];
-    if (p.alive)
-        this.engine.applyPlayerMovements(p);
-};
-
-WebClient.prototype.replayMovementRequests = function () {
-    var p = this.engine.getPlayer(this.id);
-
-    if (p.alive) {
-        for (let i=0; i<this.movementRequests.length; i++) {
-            p.thrustFlag = this.movementRequests[i][1];
-            p.turnFlag = this.movementRequests[i][2];
-            p.missileRequests = this.movementRequests[i][3];
-            this.engine.applyPlayerMovements(p);
-        }
-    }
-};
-
-WebClient.prototype.lerpThing = function (thing) {
-    if (thing.lerp.step >= thing.lerp.steps) return;
-
-    thing.lerp.step += 1;
-    thing.position.x += thing.lerp.dx;
-    thing.position.y += thing.lerp.dy;
-    thing.angle += thing.lerp.da;
-};
-
-WebClient.prototype.calcLerp = function (thing, start, end, ticks) {
-    thing.lerp = { step: 0,
-                   steps: ticks,
-                   start: start,
-                   end: end,
-                   dx: (end.x - start.x)/ticks,
-                   dy: (end.y - start.y)/ticks,
-                   da: (end.angle - start.angle)/ticks}
-};
-
-WebClient.prototype.predictPlayer = function (p) {
-    if (p.alive) {
-        if (p.turnFlag === 'left') {
-            p.angle -= p.config.turnRate;
-        } else if (p.turnFlag === 'right') {
-            p.angle += p.config.turnRate;
-        }
-        p.angle = stdAngle(p.angle);
-
-        p.position.x += p.velocity.x;
-        p.position.y += p.velocity.y;
-    }
-};
-
-WebClient.prototype.predictMissile = function (m) {
-    m.position.x += m.velocity.x;
-    m.position.y += m.velocity.y;
-};
-
-WebClient.prototype.predictShell = function (s) {
-    s.position.x += this.engine.config.shell.speed * Math.cos(deg2rad(s.angle));
-    s.position.y += this.engine.config.shell.speed * Math.sin(deg2rad(s.angle));
-};
-
-WebClient.prototype.predictAsteroid = function (a) {
-    a.position.x += a.velocity.x;
-    a.position.y += a.velocity.y;
-    a.angle = stdAngle(a.angle+a.angularVelocity);
-};
-
-WebClient.prototype.predictSphere = function (s) {
-    s.position.x += s.velocity.x;
-    s.position.y += s.velocity.y;
-};
-
-WebClient.prototype.predictiveStep = function () {
-    for (let i=0; i<this.engine.missiles.length;i++)
-        this.predictMissile(this.engine.missiles[i]);
-    for (let i=0; i<this.engine.shells.length;i++)
-        this.predictShell(this.engine.shells[i]);
-    for (let i=0; i<this.engine.asteroids.length;i++)
-        this.predictAsteroid(this.engine.asteroids[i]);
-    for (let i=0; i<this.engine.spheres.length;i++)
-        this.predictSphere(this.engine.spheres[i]);
-};
-
-WebClient.prototype.translateServerDefault = function (local, server) {
-    local.position.x = server[1];
-    local.position.y = server[2];
-    local.angle = server[3];
-};
-
-WebClient.prototype.translateServerMissile = function (local, server) {
-    local.position.x = server[1];
-    local.position.y = server[2];
-    local.velocity.x = server[3];
-    local.velocity.y = server[4];
-    local.angle = server[5];
-};
-
-
-WebClient.prototype.translateServerSphere = function (sphere, server) {
-    sphere.position.x = server[1];
-    sphere.position.y = server[2];
-    sphere.velocity.x = server[3];
-    sphere.velocity.y = server[4];
-    sphere.target = server[5];
-};
-
-WebClient.prototype.processServerThingUpdate = function (thing, things, translateFn, cache) {
-    var match = -1;
-    for (let j=0; j<things.length; j++) {
-        if (things[j].id === thing[0]) {
-            match = j;
-            break;
-        }
-    }
-    if (match >= 0) {
-        translateFn(things[match], thing);
-        things[match].active = true;
-        cache.add(things[match]);
-        return things[match];
-    } else {
-        var o = {position: {x:0, y:0},
-                 velocity: {x:0, y:0},
-                 angle: 0,
-                 id: thing[0],
-                 active: true};
-        translateFn(o, thing);
-        things.push(o);
-        cache.add(o);
-        return o;
-    }
-}
-
-WebClient.prototype.processServerShellUpdate = function (shell) {
-    this.processServerThingUpdate(shell, this.engine.shells,
-                                  this.translateServerDefault.bind(this),
-                                  this.three.shellCache);
-};
-
-WebClient.prototype.processServerMissileUpdate = function (missile) {
-    this.processServerThingUpdate(missile, this.engine.missiles,
-                                  this.translateServerMissile.bind(this),
-                                  this.three.missileCache);
-};
-
-WebClient.prototype.processServerSphereUpdate = function (sphere) {
-    var o = this.processServerThingUpdate(sphere, this.engine.spheres,
-                                          this.translateServerSphere.bind(this),
-                                          this.three.sphereCache);
-};
-
-
-WebClient.prototype.processServerUpdates = function () {
-    if (this.network.serverUpdates.length === 0) {
-        for (let i=0; i<this.engine.players.length; i++) {
-            if (this.engine.players[i].id !== this.id)
-                this.predictPlayer(this.engine.players[i]);
-        }
-        this.predictiveStep();
-    } else {
-        // Scan all updates for messages
-        for (let i=0; i<this.network.serverUpdates.length; i++) {
-            var msg = this.network.serverUpdates[i].msg;
-            for (let i=0; i<msg.length;i++) {
-                this.engine.messages.push({player: this.engine.getPlayer(msg[i][0]), msg: msg[i][1], tick: this.engine.ticks});
-                g_sounds[msg[i][1]].play();
-            }
-        }
-        // We only need the last update
-        var last = this.network.serverUpdates[this.network.serverUpdates.length-1];
-        this.engine.points = last.points;
-        $('#points').html(this.engine.points);
-        var players = last.p;
-        for (let i=0;i<players.length;i++) {
-            // console.log('update', k, players[k], this.engine.players[k])
-            if (this.engine.players[i]) {
-                this.engine.players[i].alive = players[i][0],
-                this.engine.players[i].position.x = players[i][1];
-                this.engine.players[i].position.y = players[i][2];
-                this.engine.players[i].angle = players[i][3];
-                this.engine.players[i].velocity.x = players[i][4];
-                this.engine.players[i].velocity.y = players[i][5];
-                this.engine.players[i].turnFlag = players[i][6];
-            }
-        }
-        var fortresses = last.f;
-        for (let i=0; i<this.engine.fortresses.length;i++) {
-            this.engine.fortresses[i].alive = fortresses[i][0];
-            this.engine.fortresses[i].position.x = fortresses[i][1];
-            this.engine.fortresses[i].position.y = fortresses[i][2];
-            this.engine.fortresses[i].angle = fortresses[i][3];
-        }
-        var shells = last.s;
-        this.three.shellCache.clear();
-        for (let i=this.engine.shells.length-1; i>=0; i--) {
-            this.engine.shells[i].active = false;
-        }
-        for (let i=0; i<shells.length; i++) {
-            this.processServerShellUpdate(shells[i]);
-        }
-        for (let i=this.engine.shells.length-1; i>=0; i--) {
-            if (!this.engine.shells[i].active) this.engine.shells.splice(i,1);
-        }
-
-        var missiles = last.m;
-        this.three.missileCache.clear();
-        for (let i=this.engine.missiles.length-1; i>=0; i--) {
-            this.engine.missiles[i].active = false;
-        }
-        for (let i=0; i<missiles.length; i++) {
-            this.processServerMissileUpdate(missiles[i]);
-        }
-        for (let i=this.engine.missiles.length-1; i>=0; i--) {
-            if (!this.engine.missiles[i].active) this.engine.missiles.splice(i,1);
-        }
-
-        var spheres = last.spheres;
-        this.three.sphereCache.clear();
-        for (let i=this.engine.spheres.length-1; i>=0; i--) {
-            this.engine.spheres[i].active = false;
-        }
-        for (let i=0; i<spheres.length; i++) {
-            this.processServerSphereUpdate(spheres[i]);
-        }
-        for (let i=this.engine.spheres.length-1; i>=0; i--) {
-            if (!this.engine.spheres[i].active) this.engine.spheres.splice(i,1);
-        }
-
-        var asteroids = last.a;
-        for (let i=0; i<this.engine.asteroids.length; i++) {
-            this.engine.asteroids[i].position.x = asteroids[i][0];
-            this.engine.asteroids[i].position.y = asteroids[i][1];
-            this.engine.asteroids[i].angle = asteroids[i][2];
-        }
-
-        var lastMovementRequest = last.lmr;
-        for (let i=0; i<this.movementRequests.length; i++) {
-            if (lastMovementRequest === this.movementRequests[i][0]) {
-                this.movementRequests.splice(0,i+1);
-                break;
-            }
-        }
-        this.replayMovementRequests();
-        // This should reduce rubber-banding when latency is high
-        for (let i=0; i<this.movementRequests.length; i++)
-            this.predictiveStep();
-
-        this.network.serverUpdates.length = 0;
     }
 };
 
@@ -1184,19 +862,9 @@ WebClient.prototype.drawGameState = function () {
 
 };
 
-WebClient.prototype.updateMessages = function () {
-    for (let i=this.engine.messages.length-1; i>=0; i--) {
-        if (this.engine.messages[i].tick + this.engine.config.message.duration <= this.engine.ticks ) {
-            this.engine.messages.splice(i, 1);
-        }
-    }
-};
-
 WebClient.prototype.saveState = function () {
+    Client.prototype.saveState.apply(this);
     exp.log.push(this.engine.dumpState());
-    // This is zero'd out in step_one_tick but the client doesn't call
-    // that so we need to do this manually.
-    this.engine.events.length = 0;
     if (exp.log.length >= exp.logSyncLength) {
         console.log('syncing game state');
         exp.com.synchronizeLog(exp.log);
@@ -1208,28 +876,13 @@ WebClient.prototype.requestUpdate = function () {
 }
 
 WebClient.prototype.update = function (t) {
-    this.dt = this.lastUpdateTime ? (t - this.lastUpdateTime) : 1000/60.0;
-    this.lastUpdateTime = t;
-    // If the frame rate drops below 60fps, we need to catch up by
-    // doing doing multiple game ticks.
-    var ms = this.leftOverDT + this.dt;
-    var ticks = Math.floor(ms / (1000/60.0));
-    this.leftOverDT = ms - ticks * 1000/60.0;
-    // console.log(this.lastUpdateTime, this.dt, ms, ticks, this.leftOverDT);
-    for (let i=0; i<ticks; i++) {
-        this.engine.ticks += 1;
-        this.processKbdInput();
-        this.processServerUpdates();
-        this.saveState();
-    }
-    this.updateScene();
+    Client.prototype.update.apply(this, arguments);
 
+    this.updateScene();
     if (this.cameraMode === '2d')
         this.drawGameState();
     else
         this.drawEgocentric();
     this.updateMessages();
-
-
     this.requestUpdate();
 };

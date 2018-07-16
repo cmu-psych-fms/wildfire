@@ -1,5 +1,5 @@
 var verbose = false,
-    gameport = 3000,
+    gameport = 3100,
     path = require('path'),
     uuid = require('uuid/v1'),
     http = require('http'),

@@ -42,4 +42,6 @@ function Config() {
 
 Config.prototype = {};
 
-exports.Config = Config;
+(function(exports) {
+    exports.Config = Config;
+})(typeof exports === 'undefined' ? this['config']={}:exports);

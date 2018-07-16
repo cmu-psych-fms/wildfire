@@ -530,7 +530,7 @@ GameEngine.prototype.processPlayerKeys = function (p, keys) {
             // else if (keys[i][1] === KEY_3) this.say(p, MESSAGE_3);
             // else if (keys[i][1] === KEY_4) this.say(p, MESSAGE_4);
         } else {
-            if (keys[i][1] === KEY_LEFT || keys[i][1] === KEY_RIGHT) p.turnFlag = null;
+            if (keys[i][1] === KEY_LEFT || keys[i][1] === KEY_RIGHT) p.turnFlag = 0;
             else if (keys[i][1] === KEY_UP) p.thrustFlag = false;
             else if (keys[i][1] === KEY_SPACE) p.missileState = false;
         }
@@ -1145,4 +1145,12 @@ GameEngine.prototype.dumpState = function () {
     return state;
 };
 
-exports.GameEngine = GameEngine;
+(function(exports) {
+    exports.GameEngine = GameEngine;
+    exports.stdAngle = stdAngle;
+
+    exports.KEY_SPACE = KEY_SPACE;
+    exports.KEY_UP = KEY_UP;
+    exports.KEY_LEFT = KEY_LEFT;
+    exports.KEY_RIGHT = KEY_RIGHT;
+})(typeof exports === 'undefined' ? this['gameengine']={}:exports);
