@@ -6,7 +6,9 @@ var verbose = false,
     logging = require('./fileLogging'),
     game_server = require('./gameserver.js');
 
-function ExperimentServer(data_dir, client_dir) {
+function ExperimentServer(data_dir, client_dir, consolefn) {
+    this.consolefn = consolefn;
+
     this.app = require('express')();
     this.server = http.createServer(this.app);
     this.io = require('socket.io')(this.server);
@@ -20,7 +22,7 @@ function ExperimentServer(data_dir, client_dir) {
     this.server.listen(gameport);
 
     this.app.get( '/', function( req, res ){
-        if (verbose) console.log('Sending %s', path.join(client_dir, 'index.html'));
+        if (verbose) consolefn('Sending %s', path.join(client_dir, 'index.html'));
         res.sendFile( '/index.html' , { root:path.join(client_dir) });
     });
 
@@ -29,7 +31,7 @@ function ExperimentServer(data_dir, client_dir) {
         // var body = req.query;
         var body = req.body;
 
-        // console.log(body);
+        // consolefn(body);
 
         if (body.action === 'store-log-block') {
             this.Log.addLogBlock(body.worker_id,
@@ -71,7 +73,7 @@ function ExperimentServer(data_dir, client_dir) {
         var file = req.params[0];
 
         //For debugging, we can track what files are requested.
-        if(verbose) console.log('Sending %s', path.join(client_dir,file));
+        if(verbose) consolefn('Sending %s', path.join(client_dir,file));
 
         //Send the requesting client the file.
         res.sendFile( '/' + file, {root:path.join(client_dir)} );
@@ -80,9 +82,9 @@ function ExperimentServer(data_dir, client_dir) {
 
     this.sio = this.io.listen(this.server);
 
-    console.log("Listening on port", gameport);
+    consolefn("Listening on port", gameport);
 
-    gserver = new game_server.GameServer(this.Log);
+    gserver = new game_server.GameServer(this.Log, consolefn);
     gserver.reset();
 
     this.sio.sockets.on('connection', function (client) {
@@ -91,7 +93,7 @@ function ExperimentServer(data_dir, client_dir) {
         client.state = 'connected';
 
         //Useful to know when someone connects
-        console.log('socket.io:: player connected');
+        consolefn('socket.io:: player connected');
 
         client.on('message', function(m) {
             if (client.state === 'connected') {
@@ -100,7 +102,7 @@ function ExperimentServer(data_dir, client_dir) {
                 if (cmd === 'i') {
                     client.userid = data.id;
                     client.state = 'joined';
-                    console.log('socket.io:: player identified as ' + client.userid);
+                    consolefn('socket.io:: player identified as ' + client.userid);
                     gserver.addPlayer(client, data);
                 }
             } else {
@@ -109,7 +111,7 @@ function ExperimentServer(data_dir, client_dir) {
         });
 
         client.on('disconnect', function () {
-            console.log('socket.io:: player ' + client.userid + ' disconnected');
+            consolefn('socket.io:: player ' + client.userid + ' disconnected');
             gserver.disconnected(client);
         });
     });

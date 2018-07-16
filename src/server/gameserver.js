@@ -1,7 +1,8 @@
 var engine = require('./gameengine');
 var config = require('./config');
 
-function GameServer(logging) {
+function GameServer(logging, consolefn) {
+    this.consolefn = consolefn;
     this.gameNumber = 0;
     this.mode = 'lobby';
     this.logging = logging;
@@ -51,7 +52,7 @@ GameServer.prototype.addPlayer = function (client, joinData) {
                            spheres: this.engine.spheres,
                            startLocations: this.engine.startLocations});
 
-    console.log('num players', this.players.length);
+    this.consolefn('num players', this.players.length);
     if (this.players.length >= 2) {
         this.countDownToStart(5);
     }
@@ -68,7 +69,7 @@ GameServer.prototype.countDownToStart = function (nsecs) {
 };
 
 GameServer.prototype.disconnected = function (client) {
-    console.log("someone disconnected. abort game.");
+    this.consolefn("someone disconnected. abort game.");
     if (this.mode === 'game') this.endGameMode();
 };
 
@@ -89,7 +90,7 @@ GameServer.prototype.startGameMode = function () {
     this.mode = 'game';
     this.gameNumber += 1;
     this.startGameTimers();
-    console.log('game mode');
+    this.consolefn('game mode');
 };
 
 GameServer.prototype.endGameMode = function () {
@@ -103,7 +104,7 @@ GameServer.prototype.endGameMode = function () {
         this.engine.delPlayer(this.players[i].id);
     }
     this.reset();
-    console.log('lobby mode');
+    this.consolefn('lobby mode');
 };
 
 GameServer.prototype.handlePing = function (client, ts) {
@@ -112,7 +113,7 @@ GameServer.prototype.handlePing = function (client, ts) {
 
 GameServer.prototype.onMessage = function (client, m) {
     var p = this.engine.getPlayer(client.userid);
-    // console.log('message', m);
+    // this.consolefn('message', m);
     if (p) {
         var cmd = m[0];
         var data = JSON.parse(m.slice(1));
@@ -146,7 +147,7 @@ GameServer.prototype.startGameTimers = function () {
         asteroids[i] = this.engine.asteroids[i];
     }
 
-    console.log('game number', this.gameNumber);
+    this.consolefn('game number', this.gameNumber);
     this.logging.startGame(this.gameNumber, {gnum: this.gameNumber,
                                              client_gnums: this.clientGameNumbers,
                                              titles: this.engine.gameStateColumnTitles(),

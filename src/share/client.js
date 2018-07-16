@@ -1,6 +1,6 @@
 if (typeof Config === 'undefined') Config = require('./config').Config;
 if (typeof GameEngineLib === 'undefined') GameEngineLib = require('./gameengine');
-if (typeof GameEngine === 'undefined') GameEngineLib.GameEngine;
+if (typeof GameEngine === 'undefined') GameEngine = GameEngineLib.GameEngine;
 
 
 function Client (gnum, requestedId) {
