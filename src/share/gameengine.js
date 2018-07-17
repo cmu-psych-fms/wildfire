@@ -701,8 +701,8 @@ GameEngine.prototype.updateMissiles = function () {
                     this.killMissile(m);
                     var to = angleTo(f.position, m.position);
                     var a = angle_diff(f.angle, to);
-                    // if (a > 120 || a < -120) {
-                    if (true) {
+                    if (a > 120 || a < -120) {
+                    // if (true) {
                         this.reward(this.config.rewards.fortressDestroy);
                         f.alive = false;
                         this.spawnSpheres(f);
@@ -1148,6 +1148,7 @@ GameEngine.prototype.dumpState = function () {
 (function(exports) {
     exports.GameEngine = GameEngine;
     exports.stdAngle = stdAngle;
+    exports.deg2rad = deg2rad;
 
     exports.KEY_SPACE = KEY_SPACE;
     exports.KEY_UP = KEY_UP;

@@ -256,8 +256,8 @@ Client.prototype.predictMissile = function (m) {
 };
 
 Client.prototype.predictShell = function (s) {
-    s.position.x += this.engine.config.shell.speed * Math.cos(deg2rad(s.angle));
-    s.position.y += this.engine.config.shell.speed * Math.sin(deg2rad(s.angle));
+    s.position.x += this.engine.config.shell.speed * Math.cos(GameEngineLib.deg2rad(s.angle));
+    s.position.y += this.engine.config.shell.speed * Math.sin(GameEngineLib.deg2rad(s.angle));
 };
 
 Client.prototype.predictAsteroid = function (a) {
