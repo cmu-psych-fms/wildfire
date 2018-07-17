@@ -78,7 +78,7 @@ var eslog = function () {
 }
 
 for (let i=0; i<interfaces.length; i++) {
-    eslog('Server running at http://'+interfaces[i][1]+':3000');
+    eslog('Server running at http://'+interfaces[i][1]+':3100');
 }
 
 var server = new es.ExperimentServer(settings.get('datadir'),
