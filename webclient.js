@@ -854,8 +854,8 @@ WebClient.prototype.drawPlayersOnHUD = function () {
 WebClient.prototype.drawGameState = function () {
     this.ctx.save();
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-    this.ctx.translate(-this.players[this.id].position.x+this.canvas.width/2,
-                       -this.players[this.id].position.y+this.canvas.height/2);
+    this.ctx.translate(Math.round(-this.players[this.id].position.x+this.canvas.width/2),
+                       Math.round(-this.players[this.id].position.y+this.canvas.height/2));
     // this.ctx.strokeStyle = '#003300';
     var maxx = this.engine.map.width * this.engine.config.map.cellSize;
     var maxy = this.engine.map.height * this.engine.config.map.cellSize;
