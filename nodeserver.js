@@ -3,14 +3,15 @@ var verbose = false,
     uuid = require('uuid/v1'),
     app = require('express')(),
     server = require('http').createServer(app),
-    io = require('socket.io')(server);
+    io = require('socket.io')(server),
+    path = require('path');
 
 
 server.listen(gameport);
 
 app.get( '/', function( req, res ){
-    if (verbose) console.log('Sending %s', __dirname + '/index.html');
-    res.sendFile( '/index.html' , { root:__dirname });
+    if (verbose) console.log('Sending %s', path.join(__dirname, 'index.html'));
+    res.sendFile( path.join(__dirname, 'index.html' ));
 });
 
 app.get( '/*' , function( req, res, next ) {
@@ -19,10 +20,10 @@ app.get( '/*' , function( req, res, next ) {
     var file = req.params[0];
 
     //For debugging, we can track what files are requested.
-    if(verbose) console.log('Sending %s', __dirname + '/' + file);
+    if(verbose) console.log('Sending %s', path.join(__dirname, file));
 
     //Send the requesting client the file.
-    res.sendFile( '/' + file, {root:__dirname} );
+    res.sendFile( path.join(__dirname, file ));
 
 });
 
@@ -46,7 +47,7 @@ var game_server = require('./gameserver.js');
 var server = new game_server.GameServer();
 
 // server.readMap('sprites/map.png');
-server.readMap('sprites/bigmap.png');
+server.readMap(path.join(__dirname, 'sprites/bigmap.png'));
 
 sio.sockets.on('connection', function (client) {
     //Generate a new UUID, looks something like
