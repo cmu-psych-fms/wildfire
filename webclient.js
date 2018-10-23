@@ -96,12 +96,110 @@ WebClient.prototype.begin = function () {
     document.addEventListener('keyup', this.onKeyUp.bind(this));
 
     this.canvas = document.getElementById('gamecanvas');
-    // this.canvas.width = 710;
-    // this.canvas.height = 630;
-    this.canvas.width = 600;
-    this.canvas.height = 500;
-
+    this.resizeCanvas();
+    window.addEventListener('resize', this.resizeCanvas.bind(this));
     this.ctx = this.canvas.getContext('2d');
+
+    this.setupGamepads();
+};
+
+WebClient.prototype.resizeCanvas = function () {
+    console.log('resize');
+    if (this.canvas) {
+        // this.canvas.width = 710;
+        // this.canvas.height = 630;
+        // this.canvas.width = 600;
+        // this.canvas.height = 500;
+        this.canvas.width = 600;
+        this.canvas.height = 500;
+        this.canvas.width = Math.min(window.innerWidth, window.innerHeight);
+        this.canvas.height = Math.min(window.innerWidth, window.innerHeight);
+    }
+};
+
+WebClient.prototype.scanForGamepads = function () {
+    var gp = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+    this.gamePads = [];
+    for (let i=0; i<gp.length; i++)
+        if (gp[i]) {
+            if (gp[i].index in this.gamePads) this.gamePads[i] = gp[i];
+            else this.gamePads.push(gp[i]);
+        }
+    this.gamePadState = new Array(this.gamePads.length);
+    for (let i=0; i<this.gamePadState.length; i++)
+        this.gamePadState[i] = {KEY_LEFT: false,
+                                KEY_RIGHT: false,
+                                KEY_UP: false,
+                                KEY_DOWN: false,
+                                KEY_SPACE: false,
+                                KEY_WP_WATER: false}
+    console.log('gamepads', this.gamePadState.length);
+}
+
+WebClient.prototype.connectGamepad = function (gamepad) {
+    console.log('connect gp');
+    this.scanForGamepads();
+}
+
+WebClient.prototype.disconnectGamepad = function (gamepad) {
+    console.log('disconnect gp');
+    this.scanForGamepads();
+}
+
+WebClient.prototype.setupGamepads = function () {
+    var haveEvents = 'GamepadEvent' in window;
+    var haveWebkitEvents = 'WebKitGamepadEvent' in window;
+    this.scanForGamepads();
+    if (haveEvents) {
+        window.addEventListener("gamepadconnected", this.connectGamepad.bind(this));
+        window.addEventListener("gamepaddisconnected", this.disconnectGamepad.bind(this));
+    } else if (haveWebkitEvents) {
+        window.addEventListener("webkitgamepadconnected", this.connectGamepad.bind(this));
+        window.addEventListener("webkitgamepaddisconnected", this.disconnectGamepad.bind(this));
+    } else {
+        setInterval(scangamepads, 500);
+    }
+}
+
+WebClient.prototype.pollGamepads = function () {
+    var gp = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+    for (let i=0; i<gp.length; i++)
+        if (gp[i] && gp[i].index in this.gamePads) this.gamePads[i] = gp[i];
+
+    // for (let i=0; i<this.gamePads.length; i++) {
+    //     for (j=0; j<this.gamePads[i].buttons.length; j++) {
+    //         var val = this.gamePads[i].buttons[j];
+    //         var pressed = val == 1.0;
+    //         if (typeof(val) == "object") {
+    //             pressed = val.pressed;
+    //             val = val.value;
+    //         }
+    //         if (pressed) console.log('pressed', i, j);
+    //     }
+    // }
+
+    for (let i=0; i<this.gamePads.length; i++) {
+        if (this.gamePads[i].buttons[14].pressed && !this.gamePadState[i][KEY_LEFT]) this.pressGameKey(KEY_LEFT);
+        if (this.gamePads[i].buttons[15].pressed && !this.gamePadState[i][KEY_RIGHT]) this.pressGameKey(KEY_RIGHT);
+        if (this.gamePads[i].buttons[12].pressed && !this.gamePadState[i][KEY_UP]) this.pressGameKey(KEY_UP);
+        if (this.gamePads[i].buttons[13].pressed && !this.gamePadState[i][KEY_DOWN]) this.pressGameKey(KEY_DOWN);
+        if ((this.gamePads[i].buttons[0].pressed || this.gamePads[i].buttons[1].pressed || this.gamePads[i].buttons[2].pressed) && !this.gamePadState[i][KEY_SPACE]) this.pressGameKey(KEY_SPACE);
+        if (this.gamePads[i].buttons[3].pressed && !this.gamePadState[i][KEY_WP_WATER]) this.pressGameKey(KEY_WP_WATER);
+
+        if (!this.gamePads[i].buttons[14].pressed && this.gamePadState[i][KEY_LEFT]) this.releaseGameKey(KEY_LEFT);
+        if (!this.gamePads[i].buttons[15].pressed && this.gamePadState[i][KEY_RIGHT]) this.releaseGameKey(KEY_RIGHT);
+        if (!this.gamePads[i].buttons[12].pressed && this.gamePadState[i][KEY_UP]) this.releaseGameKey(KEY_UP);
+        if (!this.gamePads[i].buttons[13].pressed && this.gamePadState[i][KEY_DOWN]) this.releaseGameKey(KEY_DOWN);
+        if (!(this.gamePads[i].buttons[0].pressed || this.gamePads[i].buttons[1].pressed || this.gamePads[i].buttons[2].pressed) && this.gamePadState[i][KEY_SPACE]) this.releaseGameKey(KEY_SPACE);
+        if (!this.gamePads[i].buttons[3].pressed && this.gamePadState[i][KEY_WP_WATER]) this.releaseGameKey(KEY_WP_WATER);
+
+        this.gamePadState[i][KEY_LEFT] = this.gamePads[i].buttons[14].pressed;
+        this.gamePadState[i][KEY_RIGHT] = this.gamePads[i].buttons[15].pressed;
+        this.gamePadState[i][KEY_UP] = this.gamePads[i].buttons[12].pressed;
+        this.gamePadState[i][KEY_DOWN] = this.gamePads[i].buttons[13].pressed;
+        this.gamePadState[i][KEY_SPACE] = this.gamePads[i].buttons[0].pressed || this.gamePads[i].buttons[1].pressed || this.gamePads[i].buttons[2].pressed;
+        this.gamePadState[i][KEY_WP_WATER] = this.gamePads[i].buttons[3].pressed;
+    }
 };
 
 WebClient.prototype.decodeKeyCode = function(which) {
@@ -117,10 +215,10 @@ WebClient.prototype.decodeKeyCode = function(which) {
         return KEY_SPACE;
     else if (which === 49)
         return KEY_WP_WATER;
-    else if (which === 50)
-        return KEY_WP_HOUSE;
-    else if (which === 51)
-        return KEY_WP_FIRE;
+    // else if (which === 50)
+    //     return KEY_WP_HOUSE;
+    // else if (which === 51)
+    //     return KEY_WP_FIRE;
     else
         return undefined;
 };
@@ -131,6 +229,23 @@ WebClient.prototype.cancelUpdates = function () {
     this.stopGameTickTimer();
     this.network.socket.close();
 };
+
+WebClient.prototype.pressGameKey = function (k) {
+    if (!this.keyState[k]) {
+        this.network.hasNewInput = true;
+        this.keyEvents.push([1, k]);
+        this.keyState[k] = 1;
+    }
+};
+
+WebClient.prototype.releaseGameKey = function (k) {
+    if (this.keyState[k]) {
+        this.network.hasNewInput = true;
+        this.keyEvents.push([0, k]);
+        this.keyState[k] = 0;
+    }
+};
+
 
 WebClient.prototype.onKeyDown = function (ev) {
     if (ev.which === 27) this.cancelUpdates();
@@ -721,6 +836,21 @@ WebClient.prototype.drawWayPointsOnHUD = function () {
     }
 };
 
+WebClient.prototype.drawPlayersOnHUD = function () {
+    for (var id in this.players) {
+        if (id === this.id) continue;
+        if (Math.abs(this.players[this.id].position.x - this.players[id].position.x) < this.canvas.width/2 &&
+            Math.abs(this.players[this.id].position.y - this.players[id].position.y) < this.canvas.height/2)
+            continue;
+
+        var pos = this.HUDDirection(this.players[this.id].position, this.players[id].position);
+        this.ctx.beginPath();
+        this.ctx.fillStyle = "#BC9058";
+        this.ctx.fillRect(pos.x-4, pos.y-4,8,8);
+        // this.ctx.fillRect(pos.x-5, pos.y-5,10,10);
+    }
+}
+
 WebClient.prototype.drawGameState = function () {
     this.ctx.save();
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
@@ -882,21 +1012,29 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.restore();
 
     // HUD
-    this.drawWayPointsOnHUD()
+    this.ctx.fillStyle = '#000000';
+    this.ctx.fillRect(0,0,this.canvas.width,10);
+    this.ctx.fillRect(0,this.canvas.height-10,this.canvas.width,10);
+    this.ctx.fillRect(0,10,10,this.canvas.height-20);
+    this.ctx.fillRect(this.canvas.width-10,10,10,this.canvas.height-20);
+
+    this.drawWayPointsOnHUD();
+    this.drawPlayersOnHUD();
 
     var water_w = 200;
+    var water_y = 20;
     var water_x = (this.canvas.clientWidth - water_w)/2;
     this.ctx.strokeStyle = "#3333FF";
-    this.ctx.strokeRect(water_x, 10, water_w, 20);
+    this.ctx.strokeRect(water_x, water_y, water_w, 20);
     this.ctx.fillStyle = "#AAAAFF";
-    this.ctx.fillRect(water_x, 11, water_w, 18);
+    this.ctx.fillRect(water_x, water_y+1, water_w, 18);
     this.ctx.fillStyle = "#3333FF";
-    this.ctx.fillRect(water_x, 11, water_w * this.players[this.id].water / this.engine.config.player.maxWater , 18);
+    this.ctx.fillRect(water_x, water_y+1, water_w * this.players[this.id].water / this.engine.config.player.maxWater , 18);
 
     this.ctx.fillStyle = "#FF0000"
     this.ctx.font = "14pt sans-serif";
     this.ctx.textAlign = "center";
-    this.ctx.fillText(this.engine.map.fire.length.toString(), this.canvas.clientWidth/2, this.canvas.clientHeight-7);
+    this.ctx.fillText(this.engine.map.fire.length.toString(), this.canvas.clientWidth/2, this.canvas.clientHeight-17);
 
 
     // for (let i=1; i<= this.engine.config.player.maxWater; i++) {
@@ -921,6 +1059,7 @@ WebClient.prototype.gameLogicUpdate = function () {
 
     this.processServerUpdates();
     this.processKbdInput();
+    this.pollGamepads();
 
     this.placeMovementRequest();
     this.stepPlayer(this.players[this.id]);

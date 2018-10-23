@@ -18,6 +18,30 @@ function reset_game () {
     if (game) game.sendReset();
 };
 
+function show_instructions () {
+    var elem = document.getElementById('instructions_area');
+    elem.style.display = 'block';
+};
+
+function hide_instructions () {
+    document.getElementById('instructions_area').style.display = 'none';
+};
+
+function fullscreen () {
+    // var elem = document.getElementById('gamearea');
+    var elem = document.body;
+    if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+    } else if (elem.mozRequestFullScreen) { /* Firefox */
+        elem.mozRequestFullScreen();
+    } else if (elem.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
+        elem.webkitRequestFullscreen();
+    } else if (elem.msRequestFullscreen) { /* IE/Edge */
+        elem.msRequestFullscreen();
+    }
+    game.resizeCanvas();
+};
+
 window.onload = function(){
     load_image('fire');
     load_image('ash');
@@ -37,4 +61,6 @@ window.onload = function(){
     load_image('flame2');
 
     imagesLoaded(g_jq, {}, start_game);
+
+    hide_instructions();
 };
