@@ -82,8 +82,7 @@ WebClient.prototype.connect = function () {
     this.network.socket.on('connected', this.onConnect.bind(this));
 
     this.network.socket.on('disconnect', this.onDisconnect.bind(this));
-    this.network.socket.on('message', this.onMessage.bind(this));
-    this.network.socket.on('serverupdate', this.onServerUpdate.bind(this));
+    this.network.socket.on('serverUpdate', this.onServerUpdate.bind(this));
     this.network.socket.on('join', this.onPlayerJoin.bind(this));
     this.network.socket.on('part', this.onPlayerPart.bind(this));
     this.network.socket.on('reset', this.onReset.bind(this));
@@ -369,7 +368,8 @@ WebClient.prototype.onConnect = function (data) {
         p.position.y = data.players[k][2];
         p.angle = data.players[k][3];
         p.speed = data.players[k][4];
-        p.water = data.players[k][5];
+        p.turnFlag = data.players[k][5];
+        p.water = data.players[k][6];
 
         p.last.position.x = p.position.x;
         p.last.position.y = p.position.y;
@@ -405,27 +405,18 @@ WebClient.prototype.onDisconnect = function (data) {
 
 
 WebClient.prototype.sendReset = function () {
-    this.network.socket.send('r0');
+    this.network.socket.emit('reset');
 }
 
 WebClient.prototype.sendPing = function () {
     var ts = new Date().getTime();
-    this.network.socket.send('p'+ts.toString());
+    this.network.socket.emit('ping', ts);
 };
 
-WebClient.prototype.handlePong = function (ts) {
+WebClient.prototype.onPing = function (ts) {
+    console.log('ping', ts);
     this.network.latency = new Date().getTime() - ts;
     console.log('latency is ', this.network.latency);
-};
-
-WebClient.prototype.onMessage = function (msg) {
-    console.log('message', msg);
-    var cmd = msg[0];
-    var data = JSON.parse(msg.slice(1));
-    switch (cmd) {
-    case 'p':
-        this.handlePong(data);
-    };
 };
 
 WebClient.prototype.onPlayerJoin = function (data) {
@@ -499,8 +490,7 @@ WebClient.prototype.placeMovementRequest = function () {
         var k = [ this.curMovementRequestSeq, p.turnFlag, p.thrustFlag, p.dumpFlag, p.wayPointFlags ];
         // console.log(k);
         this.movementRequests.push(k);
-        var packet = 'k' + JSON.stringify(k);
-        this.network.socket.send (packet);
+        this.network.socket.emit('movementRequest', k);
         p.wayPointFlags.length = 0;
     }
 };

@@ -62,6 +62,7 @@ GameServer.prototype.getConnectPayload = function (client) {
                               this.engine.players[k].position.y,
                               this.engine.players[k].angle,
                               this.engine.players[k].speed,
+                              this.engine.players[k].turnFlag,
                               this.engine.players[k].water];
     }
     return payload;
@@ -98,45 +99,38 @@ GameServer.prototype.delPlayer = function (client) {
 };
 
 GameServer.prototype.handlePing = function (client, ts) {
-    client.emit('message', 'p'+JSON.stringify(ts));
-}
-
-GameServer.prototype.handleReset = function () {
-    this.engine.map.fire.length = 0;
-    this.engine.map.fireUpdates.length = 0;
-    this.engine.map.wayPoints.length = 0;
-    this.engine.map.wayPointUpdates.length = 0;
-    this.engine.map.retardant.length = 0;
-    this.engine.map.retardantUpdates.length = 0;
-    this.engine.map.timeout = this.engine.config.map.resizeDuration;
-    this.readMap(this.mapFileName);
-
-    for (k in this.engine.players) {
-        this.engine.resetPlayer(this.engine.players[k]);
-    }
-    for (k in this.players) {
-        var pl = this.getConnectPayload(this.players[k]);
-        this.players[k].emit('reset', pl);
+    if (this.engine.players[client.userid]) {
+        console.log('ping from client', ts);
+        client.emit('ping', ts);
     }
 }
 
-GameServer.prototype.onMessage = function (client, m) {
-    var p = this.engine.players[client.userid];
-    // console.log('message', m);
-    if (p) {
-        var cmd = m[0];
-        var data = JSON.parse(m.slice(1));
-        switch (cmd) {
-        case 'k':
-            this.engine.processPlayerKeys(p, data);
-            break;
-        case 'p':
-            this.handlePing(client, data);
-            break;
-        case 'r':
-            this.handleReset();
-            break;
+GameServer.prototype.handleReset = function (client) {
+    if (this.engine.players[client.userid]) {
+        this.engine.map.fire.length = 0;
+        this.engine.map.fireUpdates.length = 0;
+        this.engine.map.wayPoints.length = 0;
+        this.engine.map.wayPointUpdates.length = 0;
+        this.engine.map.retardant.length = 0;
+        this.engine.map.retardantUpdates.length = 0;
+        this.engine.map.timeout = this.engine.config.map.resizeDuration;
+        this.readMap(this.mapFileName);
+
+        for (k in this.engine.players) {
+            this.engine.resetPlayer(this.engine.players[k]);
         }
+        for (k in this.players) {
+            var pl = this.getConnectPayload(this.players[k]);
+            this.players[k].emit('reset', pl);
+        }
+    }
+};
+
+
+GameServer.prototype.handleMovementRequest = function (client, data) {
+    var p = this.engine.players[client.userid];
+    if (p) {
+        this.engine.processPlayerKeys(p, data);
     }
 };
 
@@ -190,7 +184,7 @@ GameServer.prototype.sendServerUpdate = function () {
 
     for (let k in this.players) {
         full.lk = this.engine.players[k].lastKey;
-        this.players[k].emit('serverupdate', full);
+        this.players[k].emit('serverUpdate', full);
     }
 
     this.engine.map.updates.length = 0;

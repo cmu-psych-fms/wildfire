@@ -61,9 +61,8 @@ sio.sockets.on('connection', function (client) {
     //tell the player they connected, giving them their id
     server.addPlayer(client);
 
-    client.on('message', function(m) {
-        server.onMessage(client, m);
-    });
+    client.on('movementRequest', function(m) { server.handleMovementRequest(client, m); });
+    client.on('reset', function(m) { server.handleReset(client); });
 
     client.on('disconnect', function () {
         console.log('\t socket.io:: player ' + client.userid + ' disconnected');
