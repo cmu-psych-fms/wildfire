@@ -14,8 +14,16 @@
     "socket.io": "^2.0.4",
     "uuid": "^3.2.1"
   },
-    "pkg": {
-        "assets": ["index.html", "index.css", "imagesloaded.pkgd.min.js", "wireframe.js", "webclient.js", "webmain.js", "wireframe.js", "sprites/*.png"]
-    }
-
+  "pkg": {
+    "assets": [
+      "index.html",
+      "index.css",
+      "imagesloaded.pkgd.min.js",
+      "wireframe.js",
+      "webclient.js",
+      "webmain.js",
+      "wireframe.js",
+      "sprites/*.png"
+    ]
+  }
 }
