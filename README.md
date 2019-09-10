@@ -107,6 +107,114 @@ and receive data to and from the wildfire server.
 
 ### Client/Server Communication
 
+The following documents the communication protocol. The clients and
+server communicate via "events" that are emitted using the `socket.io`
+library. Each event has a name and data.
+
+#### Messages From the Server to the Client
+
+##### "start" { ... }
+
+The start event is sent to a newly connected client It contains a snapshot of the game state.
+
+The "player" property contains a 6 element array for each player:
+
+    [ alive, x, y, angle, speed, turnFlag, water ]
+
+The "map" property contains the width and height of the map, and the
+entire map in a 1-dimensional array. Each element is a number
+representing a map tile (forest, mountain, water, grass, etc). In
+addition "map" contains the locations of all fires, fire retardant,
+and waypoints.
+
+The map's "viewPort" is the currently visible portion of the map.
+
+##### "join" {"id": &lt;player id&gt;}
+
+A new player has joined the game. The next "update" event will contain information about this player.
+
+##### "part" {"id": &lt;player id&gt;}
+
+A player has left the game. Subsequence "update" events will not
+contain information about this player anymore.
+
+##### "update" { ... }
+
+This is sent every 100ms. It contains information about what has
+changed in the game state as well as player attributes (position,
+angle, etc).
+
+properties:
+
+`"t"` The game tick on the server at the time of the update.
+
+`"p"` The player attributes. See "start" for the meaning of the players'
+6 element array.
+
+`"m"` An array containing the changes to the map. Each element is a
+2-element array. The first element is the map location and the second
+element is the new tile ID for that location. Currently the only thing
+that changes on the map is tiles that turn to ash after being burned.
+
+`"f"` An array containing changes to the map's fire list. Each element is a
+2-element array. The first element is a number (1=add, 2=delete). The
+second element contains the fire object that is being added or deleted
+from the map's "fire" list.
+
+`"r"` An array containing changes to the map's retardant list. Similar to
+`"f"` but for the white squares that airplanes drop to put out fires.
+
+`"wp"` An array containing new waypoints. Similar to `"r"` and `"f"`
+but for waypoints. Waypoints can only be added.
+
+`"lms"` Stands for "last movement sequence". This contains the last
+movement sequence received by the server at the time of the
+update. see `"movementRequest"` below for more info.
+
+##### "reset" { ... }
+
+A player or observer has reset the game. This restarts the game from
+the beginning. It comes with a game state snapshot in the same format
+as the `"start"` event.
+
+#### Messages From client to the Server
+
+##### "greet" { "mode": &lt;mode&gt; }
+
+Upon connecting to the server, the client sends this event to announce
+what mode it would like to be in: "player" or "observer".
+
+##### "reset"
+
+The client sends this event to request a game restart.
+
+##### "movementRequest" [ &lt;seq&gt;, &lt;turn&gt;, &lt;thrust&gt;, &lt;dump&gt;, &lt;waypoints&gt; ]
+
+The client must send a movement request every game tick. The movement
+request contains a 5 element array.
+
+The first element is the sequence counter. Every movement request that
+is sent, this counter goes up by one. The "update" events include the
+last `seq` number that the server received at the time of the
+update. This is used by the client for movement prediction, which
+gives players lag-free control of their own airplane.
+
+The second element is the turn flag. This can be `0` for no turning,
+`"l"` for turning counter-clockwise, and `"r"` for clockwise.
+
+Third element is acceleration. `0` means maintain current speed, `"f"`
+means go faster, `"s"` means go slower.
+
+Fourth element controls dumping and refilling water. `0` means do not dump
+or refill and `1` means dump or refill.
+
+The Fifth element tells the server to place waypoints at the current
+location. There is currently only a water waypoint. So to place a
+water waypoint at the airplane's current position, this parameter
+should be `[1]`.
+
+#### Example
+
 The following is an example of the messages and JSON strings passed
 between the client and server. Some of the repetitive communications
 and large arrays have been truncated for clarity and brevity (anywhere
