@@ -1,22 +1,54 @@
+import argparse
 import random
 import socketio
 
 class Model(object):
     def __init__(self):
+        self.debug = 1
         self.sio = socketio.Client()
+        # There are the events we must listen for from the server.
         self.sio.on('connect', self.on_connect)
+        # The server sends this event when the server is ready for the
+        # client to start playing.
         self.sio.on('start', self.on_start)
-        self.sio.on('serverUpdate', self.on_server_update)
+        # The server sends this event every 100ms. It contains a
+        # everything the client needs to create the current game
+        # state.
+        self.sio.on('update', self.on_server_update)
+        # The server sends this event when another player joins
         self.sio.on('join', self.on_player_join)
+        # The server sends this event when another player leaves
         self.sio.on('part', self.on_player_part)
+        # Players and observers can restart the game from the
+        # beginning. This event is sent in such a case.
         self.sio.on('reset', self.on_game_reset)
+        # If the connection to the server closes
+        self.sio.on('disconnect', self.on_disconnect)
+
+    def debug_recv(self, event, data):
+        if self.debug >= 2:
+            print('<<<', event, data)
+
+    def debug_send(self, event, data):
+        if self.debug >= 2:
+            print('>>>', event, data)
+
+    def announce(self, msg, *args):
+        if self.debug >= 1:
+            print('---', msg, *args)
+
+    def emit(self, event, data):
+        self.debug_send(event, data)
+        self.sio.emit(event, data)
 
     def connect_to_server(self, url):
         self.sio.connect(url)
 
     def on_connect(self):
-        print('Connected to server.')
-        self.sio.emit('greet', {'mode': 'player'});
+        self.debug_recv('connected', None)
+        self.announce('connected')
+        # Tell the server what mode this client wants to use
+        self.emit('greet', {'mode': 'player'});
 
     def update_player(self, player_id, data):
         self.players[player_id]['alive'] = data[0]
@@ -28,7 +60,10 @@ class Model(object):
         self.players[player_id]['water'] = data[6]
 
     def on_start(self, data):
-        print('start')
+        self.debug_recv('start', data)
+        self.announce('start')
+        # The data contains a snapshot of the game state: the map,
+        # players, fires, retardant, and waypoints.
         self.id = data['id']
         self.server_game_tick = None
         self.map = data['map']
@@ -59,8 +94,8 @@ class Model(object):
         # To create the illusion of smooth flying for humans, the web
         # client uses linear interpolation to smoothly move the other
         # airplanes' positions between updates.
+        self.debug_recv('update', data)
         # Update the state of the players.
-        # print('server update', data)
         for player_id in data['p']:
             self.update_player(player_id, data['p'][player_id])
         # Update the current game tick
@@ -94,7 +129,7 @@ class Model(object):
         # Changes to the way-point list
         for wp in data['wp']:
             if wp[0] == 1: # add a waypoint
-                self.map.wayPoints.append(f[1])
+                self.map['wayPoints'].append(f[1])
         # The most recent movement sequence that the server has
         # received as of this server update. This is needed by the web
         # client to provide the illusion of lag-free movement for
@@ -111,25 +146,31 @@ class Model(object):
             #
             # Every time the map grows, the server includes the new
             # visible portion of the map in the next update.
-            pass
+            self.map['viewPort'] = data['vp']
 
     def on_player_join(self, data):
-        print('player join', data['id'])
+        self.debug_recv('join', data)
+        self.announce('join', data['id']);
         # Player data will be filled in on the next server update.
         self.players[data['id']] = {}
 
     def on_player_part(self, data):
-        print('player part', data['id'])
+        self.debug_recv('part', data)
+        self.announce('part', data['id']);
         # The player has disconnected from the game. Clean up their
         # data.
         del self.players[data['id']]
 
     def on_game_reset(self, data):
-        print('game reset');
+        self.debug_recv('reset', data)
+        self.announce('game reset');
         # A player has requested that the game be reset to the
         # starting state.
         self.on_start(data)
 
+    def on_disconnect(self):
+        self.debug_recv('disconnect', None)
+        self.announce('disconnected')
 
     def send_movement_request(self, turn, thrust, dump, waypoints=[]):
         # Tell the server you'd like to move your water bomber. This
@@ -146,11 +187,11 @@ class Model(object):
         # * A list of way points that you'd like to add (currenty
         # there is only 1=water). So if you want to place a water
         # waypoint, then waypoints should be [1].
-        self.sio.emit('movementRequest', [self.movement_request_sequence,
-                                          turn,
-                                          thrust,
-                                          dump,
-                                          waypoints])
+        self.emit('movementRequest', [self.movement_request_sequence,
+                                      turn,
+                                      thrust,
+                                      dump,
+                                      waypoints])
         self.movement_request_sequence += 1
 
     def client_game_loop(self):
@@ -187,8 +228,13 @@ class Model(object):
             self.sio.sleep(1/60.0)
             ticks += 1
 
-
 if __name__ == '__main__':
-    m = Model()
-    m.connect_to_server('http://localhost:3000')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--server', metavar="URL", default="http://localhost:3000", help="The server to connect to")
+    parser.add_argument('--debug', help="Print verbose debug output", action='store_true')
+    args = parser.parse_args()
 
+    m = Model()
+    if args.debug:
+        m.debug = 2
+    m.connect_to_server(args.server)

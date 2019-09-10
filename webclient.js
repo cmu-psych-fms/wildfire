@@ -94,7 +94,7 @@ WebClient.prototype.connect = function () {
     this.network.socket.on('start', this.onStart.bind(this));
 
     this.network.socket.on('disconnect', this.onDisconnect.bind(this));
-    this.network.socket.on('serverUpdate', this.onServerUpdate.bind(this));
+    this.network.socket.on('update', this.onServerUpdate.bind(this));
     this.network.socket.on('join', this.onPlayerJoin.bind(this));
     this.network.socket.on('part', this.onPlayerPart.bind(this));
     this.network.socket.on('reset', this.onReset.bind(this));

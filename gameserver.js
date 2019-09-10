@@ -55,8 +55,12 @@ GameServer.prototype.readMap = function (file) {
 
 GameServer.prototype.getConnectPayload = function (userid) {
     var payload = { id: userid,
-                    map: this.engine.map,
+                    map: {},
                     players:{} };
+    var mapKeys = ['width', 'height', 'retardant', 'fire', 'wayPoints', 'viewPort', 'data'];
+    for (let i=0; i<mapKeys.length; i++) {
+        payload.map[mapKeys[i]] = this.engine.map[mapKeys[i]]
+    }
     for (let k in this.players) {
         payload.players[k] = [this.engine.players[k].alive?1:0,
                               this.engine.players[k].position.x,
@@ -88,7 +92,7 @@ GameServer.prototype.addPlayer = function (client, data) {
         this.players[client.userid].on('reset', function(m) { _this.handleReset(); });
 
         this.players[client.userid].on('disconnect', function () {
-            console.log('\t socket.io:: player ' + client.userid + ' disconnected');
+            console.log('del player ' + client.userid);
             _this.delPlayer(client);
         });
 
@@ -98,7 +102,7 @@ GameServer.prototype.addPlayer = function (client, data) {
         this.numConnected += 1;
         this.observers[client.userid].on('reset', function(m) { _this.handleReset(); });
         this.observers[client.userid].on('disconnect', function () {
-            console.log('\t socket.io:: observer ' + client.userid + ' disconnected');
+            console.log('del observer ' + client.userid);
             _this.delObserver(client);
         });
         this.observers[client.userid].emit('start', this.getConnectPayload());
@@ -228,12 +232,12 @@ GameServer.prototype.sendServerUpdate = function () {
 
     for (let k in this.players) {
         full.lk = this.engine.players[k].lastKey;
-        this.players[k].emit('serverUpdate', full);
+        this.players[k].emit('update', full);
     }
 
     full.lk = undefined;
     for (let k in this.observers) {
-        this.observers[k].emit('serverUpdate', full);
+        this.observers[k].emit('update', full);
     }
 
     this.engine.map.updates.length = 0;

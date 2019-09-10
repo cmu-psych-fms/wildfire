@@ -56,7 +56,7 @@ sio.sockets.on('connection', function (client) {
     client.userid = uuid();
 
     //Useful to know when someone connects
-    console.log('\t socket.io:: player ' + client.userid + ' connected');
+    console.log('connected ' + client.userid);
 
     // Wait for the player to announce what mode they want to use
     client.on('greet', function (m) { server.addPlayer(client, m); });
