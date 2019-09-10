@@ -5,17 +5,19 @@ fires by dumping fire retardant on them.
 
 Players control a waterbomber flying over a 2D map.
 
-Use W to increase flying speed
+Use Up or W to increase flying speed
 
-Use S to decrease flying speed
+Use Down or S to decrease flying speed
 
-Use A to rotate counter-clockwise
+Use Left or A to rotate counter-clockwise
 
-Use D to rotate clockwise
+Use Right or D to rotate clockwise
 
 Use SPACE to dump fire retardant and pick up water
 
 Use 1 to drop a water beacon at the current location.
+
+Gamepads are also supported.
 
 The blue bar at the top of the game area indicates how much water your
 plane is carrying. When it runs out you must refill at the nearest
