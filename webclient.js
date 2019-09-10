@@ -788,7 +788,7 @@ WebClient.prototype.processServerUpdates = function () {
         }
         // Erase uneeded key events
         for (let i=0; i<this.movementRequests.length; i++) {
-            if (this.movementRequests[i][0] === this.currentServerUpdate.lk.seq) {
+            if (this.movementRequests[i][0] === this.currentServerUpdate.lms) {
                 this.movementRequests.splice(0,i+1);
                 break;
             }

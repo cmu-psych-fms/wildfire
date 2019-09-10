@@ -135,7 +135,7 @@ class Model(object):
         # client to provide the illusion of lag-free movement for
         # human players. See the web client source code for how it is
         # used.
-        self.last_confirmed_movement_sequence = data['lk']['seq']
+        self.last_confirmed_movement_sequence = data['lms']
         if 'vp' in data:
             # The amount of the map that is currently visible (aka
             # "viewport") has changed. This is an experimental feature

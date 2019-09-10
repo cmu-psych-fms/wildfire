@@ -231,11 +231,11 @@ GameServer.prototype.sendServerUpdate = function () {
     }
 
     for (let k in this.players) {
-        full.lk = this.engine.players[k].lastKey;
+        full.lms = this.engine.players[k].lastKey.seq;
         this.players[k].emit('update', full);
     }
 
-    full.lk = undefined;
+    full.lms = undefined;
     for (let k in this.observers) {
         this.observers[k].emit('update', full);
     }
