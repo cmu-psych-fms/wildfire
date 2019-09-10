@@ -397,8 +397,11 @@ GameEngine.prototype.processPlayerKeysHelper = function (p, keys) {
             else if (keys[i][1] === KEY_WP_HOUSE) p.wayPointFlags.push(MAP_HOUSE);
             else if (keys[i][1] === KEY_WP_FIRE) p.wayPointFlags.push(MAP_FIRE);
         } else {
-            if (keys[i][1] === KEY_LEFT || keys[i][1] === KEY_RIGHT) p.turnFlag = 0;
-            else if (keys[i][1] === KEY_UP) p.thrustFlag = 0;
+            if (keys[i][1] === KEY_LEFT) {
+                if (p.turnFlag == 'l') p.turnFlag = 0;
+            } else if (keys[i][1] === KEY_RIGHT) {
+                if (p.turnFlag == 'r') p.turnFlag = 0;
+            } else if (keys[i][1] === KEY_UP) p.thrustFlag = 0;
             else if (keys[i][1] === KEY_DOWN) p.thrustFlag = 0;
             else if (keys[i][1] === KEY_SPACE) p.dumpFlag = 0;
         }
