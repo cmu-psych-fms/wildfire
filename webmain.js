@@ -9,9 +9,22 @@ function load_image(name) {
     g_jq.push(g_images[name]);
 }
 
-function start_game () {
-    game = new WebClient();
-    game.begin();
+function start_player_client () {
+    imagesLoaded(g_jq, {}, function () {
+        game = new WebClient('player');
+        game.begin();
+        show_menu();
+        hide_join_buttons();
+    });
+}
+
+function start_observer_client () {
+    imagesLoaded(g_jq, {}, function () {
+        game = new WebClient('observer');
+        game.begin();
+        show_menu();
+        hide_join_buttons();
+    });
 }
 
 function reset_game () {
@@ -25,6 +38,18 @@ function show_instructions () {
 
 function hide_instructions () {
     document.getElementById('instructions_area').style.display = 'none';
+};
+
+function hide_menu () {
+    document.getElementById('menu').style.display = 'none';
+};
+
+function show_menu () {
+    document.getElementById('menu').style.display = 'block';
+};
+
+function hide_join_buttons () {
+    document.getElementById('join').style.display = 'none';
 };
 
 function fullscreen () {
@@ -60,7 +85,6 @@ window.onload = function(){
     load_image('flame');
     load_image('flame2');
 
-    imagesLoaded(g_jq, {}, start_game);
-
     hide_instructions();
+    hide_menu();
 };

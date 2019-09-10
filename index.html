@@ -18,6 +18,14 @@
       <canvas id="gamecanvas" style="background: #000000"></canvas>
     </div>
 
+    <div id="join" style="text-align:center;">
+      <div style="color:lightgray">Welcome to Wildfire</div>
+      <div style="display:inline-block; background: gray; padding: 20px;">
+        <button onclick="start_observer_client()">Join as an Observer</button> 
+        <button onclick="start_player_client()">Join as a Player</button>
+      </div>
+    </div>
+
     <div id="instructions_area">
       <div class="instructions">
         <h3 style="text-align: center">Instructions</h3>
@@ -42,11 +50,11 @@
 
     <div id="menu">
       <button id="reset" onclick="reset_game()">Reset Game</button><br>
-      <button id="reset" onclick="fullscreen()">Fullscreen</button><br>
+      <button id="fullscreen" onclick="fullscreen()">Fullscreen</button><br>
       <!-- <button id="reset" onclick="small_game_area()">Small Game Area</button><br> -->
       <!-- <button id="reset" onclick="medium_game_area()">Med Game Area</button><br> -->
       <!-- <button id="reset" onclick="big_game_area()">Big Game Area</button><br> -->
-      <button id="reset" onclick="show_instructions()">Instructions</button>
+      <button id="instructions" onclick="show_instructions()">Instructions</button>
     </div>
 
 

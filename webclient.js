@@ -31,7 +31,8 @@
 
 }() );
 
-function WebClient (engine) {
+function WebClient (mode) {
+    this.mode = mode;
     this.engine = new GameEngine(new Config());
     this.network = {serverUpdates: [],
                     latency: 0};
@@ -73,13 +74,24 @@ function WebClient (engine) {
 
     this.lastServerUpdate = null;
     this.currentServerUpdate = null;
+
+    // Observer
+    this.observer = {};
+    this.observer.mode = 'ghost';
+    this.observer.ghost = {};
+    this.observer.ghost.x = 0;
+    this.observer.ghost.y = 0;
+    this.observer.ghost.dx = 0;
+    this.observer.ghost.dy = 0;
+    this.observer.follow = 0;
 }
 
 WebClient.prototype = {};
 
 WebClient.prototype.connect = function () {
     this.network.socket = io.connect();
-    this.network.socket.on('connected', this.onConnect.bind(this));
+    this.network.socket.on('connect', this.onConnect.bind(this));
+    this.network.socket.on('start', this.onStart.bind(this));
 
     this.network.socket.on('disconnect', this.onDisconnect.bind(this));
     this.network.socket.on('serverUpdate', this.onServerUpdate.bind(this));
@@ -222,6 +234,22 @@ WebClient.prototype.decodeKeyCode = function(which) {
         return undefined;
 };
 
+
+WebClient.prototype.setObserverMode = function (mode, follow) {
+    if (mode === 'ghost') {
+        if (this.observer.mode === 'follow') {
+            this.observer.ghost.x = this.players[this.observer.follow].position.x;
+            this.observer.ghost.y = this.players[this.observer.follow].position.y;
+        }
+        this.observer.mode = 'ghost';
+        this.observer.ghost.dx = 0;
+        this.observer.ghost.dy = 0;
+    } else if (mode === 'follow') {
+        this.observer.mode = 'follow';
+        this.observer.follow = follow;
+    }
+};
+
 WebClient.prototype.cancelUpdates = function () {
     console.log("cancel animation");
     window.cancelAnimationFrame(this.updateid);
@@ -248,28 +276,102 @@ WebClient.prototype.releaseGameKey = function (k) {
 
 WebClient.prototype.onKeyDown = function (ev) {
     if (ev.which === 27) this.cancelUpdates();
-    var k = this.decodeKeyCode(ev.which);
-    if (k) {
-        if (!this.keyState[k]) {
-            this.network.hasNewInput = true;
-            this.keyEvents.push([1, k]);
+
+    if (this.mode === 'observer') {
+        var used = false;
+        if (ev.which === 65 || ev.which === 37) {
+            if (this.observer.mode === 'ghost')
+                this.observer.ghost.dx = -1;
+            used = true;
+        } else if (ev.which === 68 || ev.which === 39) {
+            if (this.observer.mode === 'ghost')
+                this.observer.ghost.dx = 1;
+            used = true;
+        } else if (ev.which === 87 || ev.which === 38) {
+            if (this.observer.mode === 'ghost')
+                this.observer.ghost.dy = -1;
+            used = true;
+        } else if (ev.which === 83 || ev.which === 40) {
+            if (this.observer.mode === 'ghost')
+                this.observer.ghost.dy = 1;
+            used = true;
+        } else if (ev.which >= 49 && ev.which <= 59) {
+            // follow the player
+            var i = ev.which - 49;
+            var f = Object.keys(this.players)[i];
+            if (f) this.setObserverMode('follow', f);
+            used = true;
+        } else if (ev.which === 48) {
+            this.setObserverMode('ghost');
+            used = true;
         }
-        ev.preventDefault();
-        ev.stopPropagation();
-        this.keyState[k] = 1;
+        if (used) {
+            ev.preventDefault();
+            ev.stopPropagation();
+        }
+    } else {
+        var k = this.decodeKeyCode(ev.which);
+        if (k) {
+            if (!this.keyState[k]) {
+                this.network.hasNewInput = true;
+                this.keyEvents.push([1, k]);
+            }
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.keyState[k] = 1;
+        }
     }
 };
 
 WebClient.prototype.onKeyUp = function (ev) {
-    var k = this.decodeKeyCode(ev.which);
-    if (k) {
-        if (this.keyState[k]) {
-            this.network.hasNewInput = true;
-            this.keyEvents.push([0, k]);
+    if (this.mode === 'observer') {
+        var used = false;
+        if (ev.which === 65 || ev.which === 37) {
+            if (this.observer.mode === 'ghost' && this.observer.ghost.dx === -1)
+                this.observer.ghost.dx = 0;
+            used = true;
+        } else if (ev.which === 68 || ev.which === 39) {
+            if (this.observer.mode === 'ghost' && this.observer.ghost.dx === 1)
+                this.observer.ghost.dx = 0;
+            used = true;
+        } else if (ev.which === 87 || ev.which === 38) {
+            if (this.observer.mode === 'ghost' && this.observer.ghost.dy === -1)
+                this.observer.ghost.dy = 0;
+            used = true;
+        } else if (ev.which === 83 || ev.which === 40) {
+            if (this.observer.mode === 'ghost' && this.observer.ghost.dy === 1)
+                this.observer.ghost.dy = 0;
+            used = true;
+        } else if (ev.which >= 49 && ev.which < 59) {
+            // follow the player
+            var i = ev.which - 49;
+            var f = Object.keys(this.players)[i];
+            if (f) {
+                this.observer.mode = 'follow';
+                this.observer.follow = f;
+            }
+            used = true;
+        } else if (ev.which === 59) {
+            this.observer.mode = 'ghost';
+            this.observer.ghost.dx = 0;
+            this.observer.ghost.dy = 0;
+            used = true;
         }
-        ev.preventDefault();
-        ev.stopPropagation();
-        this.keyState[k] = 0;
+        if (used) {
+            ev.preventDefault();
+            ev.stopPropagation();
+        }
+    } else {
+        var k = this.decodeKeyCode(ev.which);
+        if (k) {
+            if (this.keyState[k]) {
+                this.network.hasNewInput = true;
+                this.keyEvents.push([0, k]);
+            }
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.keyState[k] = 0;
+        }
     }
 };
 
@@ -354,10 +456,12 @@ WebClient.prototype.setPlayerCurrent = function (p) {
     p.water = p.latest.water;
 };
 
-WebClient.prototype.onConnect = function (data) {
-    // console.log('connect', data);
+WebClient.prototype.onConnect = function () {
+    this.network.socket.emit('greet', {'mode': this.mode});
+};
 
-    this.id = data.id;
+WebClient.prototype.onStart = function (data) {
+    // console.log('start', data);
     for (let k in data.players) {
         this.initPlayer(k);
         var p = this.players[k];
@@ -390,6 +494,14 @@ WebClient.prototype.onConnect = function (data) {
     // this.engine.smoke = data.smoke;
     this.engine.map = data.map;
     console.log('map', this.engine.map.width, this.engine.map.height, this.engine.map.fire.length);
+
+    if (this.mode === 'observer') {
+        this.observer.mode = 'ghost';
+        this.observer.ghost.x = this.engine.map.width * this.engine.config.map.cellSize / 2;
+        this.observer.ghost.y = this.engine.map.width * this.engine.config.map.cellSize / 2;
+    } else {
+        this.id = data.id;
+    }
 
     this.startGameTickTimer();
 
@@ -426,6 +538,12 @@ WebClient.prototype.onPlayerJoin = function (data) {
 
 WebClient.prototype.onPlayerPart = function (data) {
     console.log('part', data);
+    if (this.mode === 'observer' &&
+        this.observer.mode === 'follow' &&
+        this.observer.follow === data.id) {
+        this.setObserverMode('ghost');
+    }
+
     delete this.players[data.id];
 };
 
@@ -458,13 +576,16 @@ WebClient.prototype.lerpOtherPlayers = function () {
         var ofs = this.ticks - p.latest.c_tick;
         var dist = p.latest.s_tick-p.last.s_tick;
 
-        // console.log(ofs, dist);
-        if (ofs > dist) {
+        // console.log('lerp', ofs, dist);
+
+        if (ofs >= dist) {
             this.setPlayerCurrent(p);
-        } else {
+        } else if (dist > 0) {
             p.position.x = p.last.position.x + (p.latest.position.x - p.last.position.x) * ofs / dist;
             p.position.y = p.last.position.y + (p.latest.position.y - p.last.position.y) * ofs / dist;
             p.angle = stdAngle(p.last.angle + angle_diff(p.latest.angle,p.last.angle) * ofs / dist);
+            // Not sure how to lerp water usage.
+            p.water = p.latest.water;
         }
     }
 };
@@ -673,16 +794,20 @@ WebClient.prototype.processServerUpdates = function () {
             }
         }
         this.retardantPredictions.length = 0;
-        this.predictedRetardantLevel = this.players[this.id].latest.water;
 
-        this.players[this.id].backup_x = this.players[this.id].position.x;
-        this.players[this.id].backup_y = this.players[this.id].position.y;
-        this.players[this.id].backup_a = this.players[this.id].angle;
-        this.players[this.id].backup_speed = this.players[this.id].speed;
+        if (this.mode === 'player') {
 
-        this.setPlayerCurrent(this.players[this.id]);
-        // replay our key events from the last authoritative game state.
-        this.replayPlayerKeys();
+            this.predictedRetardantLevel = this.players[this.id].latest.water;
+
+            this.players[this.id].backup_x = this.players[this.id].position.x;
+            this.players[this.id].backup_y = this.players[this.id].position.y;
+            this.players[this.id].backup_a = this.players[this.id].angle;
+            this.players[this.id].backup_speed = this.players[this.id].speed;
+
+            this.setPlayerCurrent(this.players[this.id]);
+            // replay our key events from the last authoritative game state.
+            this.replayPlayerKeys();
+        }
 
         this.network.serverUpdates.length = 0;
 
@@ -795,10 +920,10 @@ WebClient.prototype.drawWayPointsOnMap = function () {
     }
 };
 
-WebClient.prototype.drawWayPointsOnHUD = function () {
+WebClient.prototype.drawWayPointsOnHUD = function (centerPos) {
     for (let i=0; i<this.engine.map.wayPoints.length; i++) {
-        if (Math.abs(this.players[this.id].position.x - this.engine.map.wayPoints[i].x) < this.canvas.width/2 &&
-            Math.abs(this.players[this.id].position.y - this.engine.map.wayPoints[i].y) < this.canvas.height/2)
+        if (Math.abs(centerPos.x - this.engine.map.wayPoints[i].x) < this.canvas.width/2 &&
+            Math.abs(centerPos.y - this.engine.map.wayPoints[i].y) < this.canvas.height/2)
             continue;
         switch(this.engine.map.wayPoints[i].type) {
         case MAP_WATER:
@@ -819,21 +944,21 @@ WebClient.prototype.drawWayPointsOnHUD = function () {
             break;
         }
 
-        var pos = this.HUDDirection(this.players[this.id].position, this.engine.map.wayPoints[i]);
+        var pos = this.HUDDirection(centerPos, this.engine.map.wayPoints[i]);
         this.ctx.beginPath();
         this.ctx.arc(pos.x, pos.y, 5, 0, Math.PI*2);
         this.ctx.fill();
     }
 };
 
-WebClient.prototype.drawPlayersOnHUD = function () {
+WebClient.prototype.drawPlayersOnHUD = function (centerPos, thisPlayerId) {
     for (var id in this.players) {
-        if (id === this.id) continue;
-        if (Math.abs(this.players[this.id].position.x - this.players[id].position.x) < this.canvas.width/2 &&
-            Math.abs(this.players[this.id].position.y - this.players[id].position.y) < this.canvas.height/2)
+        if (id === thisPlayerId) continue;
+        if (Math.abs(this.players[id].position.x - centerPos.x) < this.canvas.width/2 &&
+            Math.abs(this.players[id].position.y - centerPos.y) < this.canvas.height/2)
             continue;
 
-        var pos = this.HUDDirection(this.players[this.id].position, this.players[id].position);
+        var pos = this.HUDDirection(centerPos, this.players[id].position);
         this.ctx.beginPath();
         this.ctx.fillStyle = "#BC9058";
         this.ctx.fillRect(pos.x-4, pos.y-4,8,8);
@@ -841,11 +966,35 @@ WebClient.prototype.drawPlayersOnHUD = function () {
     }
 }
 
+WebClient.prototype.reportNaN = function(where) {
+    for (let id in this.players) {
+        if (isNaN(this.players[id].position.x) || isNaN(this.players[id].position.y))
+            console.log(where, 'NaN', id, this.players[id].position.x, this.players[id].position.y);
+    }
+};
+
 WebClient.prototype.drawGameState = function () {
+    var thisPlayerId, centerPos;
+
+
+    if (this.mode === 'observer') {
+        if (this.observer.mode === 'ghost') {
+            centerPos = this.observer.ghost;
+        } else if (this.observer.mode === 'follow') {
+            centerPos = this.players[this.observer.follow].position;
+            thisPlayerId = this.observer.follow;
+        } else {
+            centerPos = {x:0,y:0};
+        }
+    } else {
+        centerPos = this.players[this.id].position;
+        thisPlayerId = this.id;
+    }
+
     this.ctx.save();
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-    this.ctx.translate(Math.round(-this.players[this.id].position.x+this.canvas.width/2),
-                       Math.round(-this.players[this.id].position.y+this.canvas.height/2));
+    this.ctx.translate(Math.round(-centerPos.x+this.canvas.width/2),
+                       Math.round(-centerPos.y+this.canvas.height/2));
     // this.ctx.strokeStyle = '#003300';
     var maxx = this.engine.map.width * this.engine.config.map.cellSize;
     var maxy = this.engine.map.height * this.engine.config.map.cellSize;
@@ -859,8 +1008,8 @@ WebClient.prototype.drawGameState = function () {
     // }
     // this.ctx.stroke();
 
-    var startx = Math.round((this.players[this.id].position.x - this.canvas.width/2)/this.engine.config.map.cellSize);
-    var starty = Math.round((this.players[this.id].position.y - this.canvas.height/2)/this.engine.config.map.cellSize);
+    var startx = Math.round((centerPos.x - this.canvas.width/2)/this.engine.config.map.cellSize);
+    var starty = Math.round((centerPos.y - this.canvas.height/2)/this.engine.config.map.cellSize);
     var endx = startx+Math.round(this.canvas.width/this.engine.config.map.cellSize);
     var endy = starty+Math.round(this.canvas.height/this.engine.config.map.cellSize);
 
@@ -1008,24 +1157,25 @@ WebClient.prototype.drawGameState = function () {
     this.ctx.fillRect(0,10,10,this.canvas.height-20);
     this.ctx.fillRect(this.canvas.width-10,10,10,this.canvas.height-20);
 
-    this.drawWayPointsOnHUD();
-    this.drawPlayersOnHUD();
+    this.drawWayPointsOnHUD(centerPos);
+    this.drawPlayersOnHUD(centerPos, thisPlayerId);
 
-    var water_w = 200;
-    var water_y = 20;
-    var water_x = (this.canvas.clientWidth - water_w)/2;
-    this.ctx.strokeStyle = "#3333FF";
-    this.ctx.strokeRect(water_x, water_y, water_w, 20);
-    this.ctx.fillStyle = "#AAAAFF";
-    this.ctx.fillRect(water_x, water_y+1, water_w, 18);
-    this.ctx.fillStyle = "#3333FF";
-    this.ctx.fillRect(water_x, water_y+1, water_w * this.players[this.id].water / this.engine.config.player.maxWater , 18);
+    if (thisPlayerId) {
+        var water_w = 200;
+        var water_y = 20;
+        var water_x = (this.canvas.clientWidth - water_w)/2;
+        this.ctx.strokeStyle = "#3333FF";
+        this.ctx.strokeRect(water_x, water_y, water_w, 20);
+        this.ctx.fillStyle = "#AAAAFF";
+        this.ctx.fillRect(water_x, water_y+1, water_w, 18);
+        this.ctx.fillStyle = "#3333FF";
+        this.ctx.fillRect(water_x, water_y+1, water_w * this.players[thisPlayerId].water / this.engine.config.player.maxWater , 18);
 
-    this.ctx.fillStyle = "#FF0000"
-    this.ctx.font = "14pt sans-serif";
-    this.ctx.textAlign = "center";
-    this.ctx.fillText(this.engine.map.fire.length.toString(), this.canvas.clientWidth/2, this.canvas.clientHeight-17);
-
+        this.ctx.fillStyle = "#FF0000"
+        this.ctx.font = "14pt sans-serif";
+        this.ctx.textAlign = "center";
+        this.ctx.fillText(this.engine.map.fire.length.toString(), this.canvas.clientWidth/2, this.canvas.clientHeight-17);
+    }
 
     // for (let i=1; i<= this.engine.config.player.maxWater; i++) {
     //     var full = i<=this.players[this.id].water;
@@ -1041,6 +1191,13 @@ WebClient.prototype.drawGameState = function () {
 
 };
 
+WebClient.prototype.moveObserver = function () {
+    if (this.observer.mode === 'ghost') {
+        this.observer.ghost.x += this.observer.ghost.dx * 5;
+        this.observer.ghost.y += this.observer.ghost.dy * 5;
+    }
+};
+
 WebClient.prototype.gameLogicUpdate = function () {
     var t = new Date().getTime();
     this.dt = this.lastUpdateTime ? (t - this.lastUpdateTime) : 1000/60.0;
@@ -1051,8 +1208,12 @@ WebClient.prototype.gameLogicUpdate = function () {
     this.processKbdInput();
     this.pollGamepads();
 
-    this.placeMovementRequest();
-    this.stepPlayer(this.players[this.id]);
+    if (this.mode === 'observer') {
+        this.moveObserver();
+    } else {
+        this.placeMovementRequest();
+        this.stepPlayer(this.players[this.id]);
+    }
 
     this.lerpOtherPlayers();
 };

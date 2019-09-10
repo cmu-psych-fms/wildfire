@@ -5,7 +5,8 @@ var fs = require('fs');
 var PNG = require('pngjs').PNG;
 
 function GameServer() {
-    this.numPlayers = 0;
+    this.numConnected = 0;
+    this.observers = {};
     this.players = {};
     this.engine = new engine.GameEngine(new config.Config());
     // this.engine.placeFortresses(10, 50);
@@ -52,8 +53,8 @@ GameServer.prototype.readMap = function (file) {
     this.engine.startSomeFires();
 }
 
-GameServer.prototype.getConnectPayload = function (client) {
-    var payload = { id: client.userid,
+GameServer.prototype.getConnectPayload = function (userid) {
+    var payload = { id: userid,
                     map: this.engine.map,
                     players:{} };
     for (let k in this.players) {
@@ -68,25 +69,53 @@ GameServer.prototype.getConnectPayload = function (client) {
     return payload;
 };
 
-GameServer.prototype.addPlayer = function (client) {
-    if (this.numPlayers <= 0) {
+GameServer.prototype.addPlayer = function (client, data) {
+    var _this = this;
+    // client.off('mode');
+    console.log('add', data.mode, client.userid);
+    if (data.mode === 'player') {
+        for (let k in this.players) {
+            this.players[k].emit('join', {id: client.userid});
+        }
+        for (let k in this.observers) {
+            this.observers[k].emit('join', {id: client.userid});
+        }
+        this.players[client.userid] = client;
+        this.engine.addPlayer(client.userid);
+        this.numConnected += 1;
+
+        this.players[client.userid].on('movementRequest', function(m) { _this.handleMovementRequest(client, m); });
+        this.players[client.userid].on('reset', function(m) { _this.handleReset(); });
+
+        this.players[client.userid].on('disconnect', function () {
+            console.log('\t socket.io:: player ' + client.userid + ' disconnected');
+            _this.delPlayer(client);
+        });
+
+        this.players[client.userid].emit('start', this.getConnectPayload(client.userid));
+    } else if (data.mode === 'observer') {
+        this.observers[client.userid] = client;
+        this.numConnected += 1;
+        this.observers[client.userid].on('reset', function(m) { _this.handleReset(); });
+        this.observers[client.userid].on('disconnect', function () {
+            console.log('\t socket.io:: observer ' + client.userid + ' disconnected');
+            _this.delObserver(client);
+        });
+        this.observers[client.userid].emit('start', this.getConnectPayload());
+    } else {
+        console.log('unknown mode "'+data.mode+'" from client '+client.userid);
+    }
+
+    if (this.numConnected === 1) {
         this.startServerUpdates();
         this.startGameTickTimer();
         console.log('start timers');
     }
-    for (let k in this.players) {
-        this.players[k].emit('join', {id: client.userid});
-    }
-    this.players[client.userid] = client;
-    this.engine.addPlayer(client.userid);
-    this.numPlayers += 1;
-
-    this.players[client.userid].emit('connected', this.getConnectPayload(client));
 };
 
 GameServer.prototype.delPlayer = function (client) {
-    this.numPlayers -= 1;
-    if (this.numPlayers <= 0) {
+    this.numConnected -= 1;
+    if (this.numConnected <= 0) {
         this.stopServerUpdates();
         this.stopGameTickTimer();
         console.log('shutdown timers');
@@ -96,6 +125,19 @@ GameServer.prototype.delPlayer = function (client) {
     for (let k in this.players) {
         this.players[k].emit('part', {id:client.userid});
     }
+    for (let k in this.observers) {
+        this.observers[k].emit('part', {id:client.userid});
+    }
+};
+
+GameServer.prototype.delObserver = function (client) {
+    this.numConnected -= 1;
+    if (this.numConnected <= 0) {
+        this.stopServerUpdates();
+        this.stopGameTickTimer();
+        console.log('shutdown timers');
+    }
+    delete this.observers[client.userid];
 };
 
 GameServer.prototype.handlePing = function (client, ts) {
@@ -105,25 +147,27 @@ GameServer.prototype.handlePing = function (client, ts) {
     }
 }
 
-GameServer.prototype.handleReset = function (client) {
-    if (this.engine.players[client.userid]) {
-        this.engine.map.fire.length = 0;
-        this.engine.map.fireUpdates.length = 0;
-        this.engine.map.wayPoints.length = 0;
-        this.engine.map.wayPointUpdates.length = 0;
-        this.engine.map.retardant.length = 0;
-        this.engine.map.retardantUpdates.length = 0;
-        this.engine.map.timeout = this.engine.config.map.resizeDuration;
-        this.readMap(this.mapFileName);
+GameServer.prototype.handleReset = function () {
+    this.engine.map.fire.length = 0;
+    this.engine.map.fireUpdates.length = 0;
+    this.engine.map.wayPoints.length = 0;
+    this.engine.map.wayPointUpdates.length = 0;
+    this.engine.map.retardant.length = 0;
+    this.engine.map.retardantUpdates.length = 0;
+    this.engine.map.timeout = this.engine.config.map.resizeDuration;
+    this.readMap(this.mapFileName);
 
-        for (k in this.engine.players) {
-            this.engine.resetPlayer(this.engine.players[k]);
-        }
-        for (k in this.players) {
-            var pl = this.getConnectPayload(this.players[k]);
-            this.players[k].emit('reset', pl);
-        }
+    for (k in this.engine.players) {
+        this.engine.resetPlayer(this.engine.players[k]);
     }
+    var pl = this.getConnectPayload();
+    for (k in this.players) {
+        pl.id = k;
+        this.players[k].emit('reset', pl);
+    }
+    pl.id = undefined;
+    for (k in this.observers)
+        this.observers[k].emit('reset', pl);
 };
 
 
@@ -185,6 +229,11 @@ GameServer.prototype.sendServerUpdate = function () {
     for (let k in this.players) {
         full.lk = this.engine.players[k].lastKey;
         this.players[k].emit('serverUpdate', full);
+    }
+
+    full.lk = undefined;
+    for (let k in this.observers) {
+        this.observers[k].emit('serverUpdate', full);
     }
 
     this.engine.map.updates.length = 0;

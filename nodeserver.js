@@ -58,14 +58,7 @@ sio.sockets.on('connection', function (client) {
     //Useful to know when someone connects
     console.log('\t socket.io:: player ' + client.userid + ' connected');
 
-    //tell the player they connected, giving them their id
-    server.addPlayer(client);
+    // Wait for the player to announce what mode they want to use
+    client.on('greet', function (m) { server.addPlayer(client, m); });
 
-    client.on('movementRequest', function(m) { server.handleMovementRequest(client, m); });
-    client.on('reset', function(m) { server.handleReset(client); });
-
-    client.on('disconnect', function () {
-        console.log('\t socket.io:: player ' + client.userid + ' disconnected');
-        server.delPlayer(client);
-    });
 });
