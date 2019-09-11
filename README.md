@@ -86,7 +86,7 @@ server.
 
 I have written a demo python model player in `model_client.py` that
 provides more information about how one might do this. To try it you
-will need the `socketio` python package and python 3:
+will need the `python-socketio` python package and python 3:
 
     $ python3 model_client.py
 
