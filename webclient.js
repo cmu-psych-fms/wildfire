@@ -39,6 +39,7 @@ function WebClient (mode) {
     this.id = null;
 
     this.ticks = 0;
+    this.time_debt = 0;
 
     this.keyState = {KEY_LEFT: 0,
                      KEY_RIGHT: 0,
@@ -1202,20 +1203,43 @@ WebClient.prototype.gameLogicUpdate = function () {
     var t = new Date().getTime();
     this.dt = this.lastUpdateTime ? (t - this.lastUpdateTime) : 1000/60.0;
     this.lastUpdateTime = t;
-    this.ticks += 1;
-
-    this.processServerUpdates();
-    this.processKbdInput();
-    this.pollGamepads();
 
     if (this.mode === 'observer') {
+        this.ticks += 1;
+
+        this.processServerUpdates();
+        this.processKbdInput();
+        this.pollGamepads();
+        this.lerpOtherPlayers();
         this.moveObserver();
     } else {
-        this.placeMovementRequest();
-        this.stepPlayer(this.players[this.id]);
-    }
+        var ms = this.dt + this.time_debt;
+        var dur = 15;
+        // run multiple game steps if needed to maintain a 15ms game
+        // tick rate.
+        var count = 0;
+        // Limit the number of steps to 60. any more and there may be
+        // responsiveness issues.
+        while (ms > 0 && count < 60) {
+            this.ticks += 1;
 
-    this.lerpOtherPlayers();
+            this.processServerUpdates();
+            this.processKbdInput();
+            this.pollGamepads();
+            this.placeMovementRequest();
+            this.stepPlayer(this.players[this.id]);
+            this.lerpOtherPlayers();
+            ms -= dur;
+            count += 1;
+        }
+        // Limit the time debt to 1 second. There's only so much we
+        // can do to try and catch up.
+        if (ms > 1000) ms = 1000;
+        this.time_debt = ms;
+
+        if (count > 3) console.log('updates', count);
+
+    }
 };
 
 WebClient.prototype.updateDisplay = function (t) {
