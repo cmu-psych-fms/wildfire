@@ -10,6 +10,7 @@
     <script type="text/javascript" src="config.js"></script>
     <script type="text/javascript" src="gameengine.js"></script>
     <script type="text/javascript" src="webclient.js"></script>
+    <script type="text/javascript" src="weblobby.js"></script>
     <script type="text/javascript" src="webmain.js"></script>
 
   </head>
@@ -20,9 +21,13 @@
 
     <div id="join" style="text-align:center;">
       <div style="color:lightgray">Welcome to Wildfire</div>
-      <div style="display:inline-block; background: gray; padding: 20px;">
-        <button onclick="start_observer_client()">Join as an Observer</button> 
-        <button onclick="start_player_client()">Join as a Player</button>
+      <div id="lobby">
+        <!-- <div id="lobby_players"></div> -->
+        <!-- <div id="lobby_observers"></div> -->
+        <!-- <div id="choose_observer">Observer</div> -->
+        <!-- <div id="choose_player">Player</div> -->
+        <!-- <button onclick="start_observer_client()">Join as an Observer</button>  -->
+        <!-- <button onclick="start_player_client()">Join as a Player</button> -->
       </div>
     </div>
 
@@ -43,13 +48,13 @@
         <p>The blue bar at the top of the game area indicates how much water your plane is carrying. When it runs out you must refill at the nearest body of water. To refill, reduce your flight speed all the way down and hold down SPACE while flying over the water.
         <p>To help you return to a body of water, press 1 when flying over the water to drop a beacon. A blue dot will appear at the edge of the game area indicating the direction of the body of water from your current position.
         <p>Brown rectangles at the edge of the game area indicate the direction to other players.
-        <p>Click Reset Game to reset the map for all players.
+        <p>Click Abort Game to stop the game and return to the lobby.
           <p style="text-align:center"><button onclick="hide_instructions()">Back to the Game</button>
       </div>
     </div>
 
     <div id="menu">
-      <button id="reset" onclick="reset_game()">Reset Game</button><br>
+      <button id="abort">Abort Game</button><br>
       <button id="fullscreen" onclick="fullscreen()">Fullscreen</button><br>
       <!-- <button id="reset" onclick="small_game_area()">Small Game Area</button><br> -->
       <!-- <button id="reset" onclick="medium_game_area()">Med Game Area</button><br> -->

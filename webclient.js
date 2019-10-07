@@ -1,36 +1,3 @@
-//Code below is from Three.js, and sourced from links below
-
-    // http://paulirish.com/2011/requestanimationframe-for-smart-animating/
-    // http://my.opera.com/emoller/blog/2011/12/20/requestanimationframe-for-smart-er-animating
-
-    // requestAnimationFrame polyfill by Erik Möller
-    // fixes from Paul Irish and Tino Zijdel
-
-( function () {
-    var frame_time = 60/1000;
-    var lastTime = 0;
-    var vendors = [ 'ms', 'moz', 'webkit', 'o' ];
-
-    for ( var x = 0; x < vendors.length && !window.requestAnimationFrame; ++ x ) {
-        window.requestAnimationFrame = window[ vendors[ x ] + 'RequestAnimationFrame' ];
-        window.cancelAnimationFrame = window[ vendors[ x ] + 'CancelAnimationFrame' ] || window[ vendors[ x ] + 'CancelRequestAnimationFrame' ];
-    }
-
-    if ( !window.requestAnimationFrame ) {
-        window.requestAnimationFrame = function ( callback, element ) {
-            var currTime = Date.now(), timeToCall = Math.max( 0, frame_time - ( currTime - lastTime ) );
-            var id = window.setTimeout( function() { callback( currTime + timeToCall ); }, timeToCall );
-            lastTime = currTime + timeToCall;
-            return id;
-        };
-    }
-
-    if ( !window.cancelAnimationFrame ) {
-        window.cancelAnimationFrame = function ( id ) { clearTimeout( id ); };
-    }
-
-}() );
-
 function WebClient (mode) {
     this.mode = mode;
     this.engine = new GameEngine(new Config());
@@ -85,27 +52,45 @@ function WebClient (mode) {
     this.observer.ghost.dx = 0;
     this.observer.ghost.dy = 0;
     this.observer.follow = 0;
+
+    // listeners
+    this.listeners = {};
 }
 
 WebClient.prototype = {};
 
-WebClient.prototype.connect = function () {
-    this.network.socket = io.connect();
-    this.network.socket.on('connect', this.onConnect.bind(this));
-    this.network.socket.on('start', this.onStart.bind(this));
+// WebClient.prototype.connect = function () {
+//     this.network.socket = io.connect();
+//     this.network.socket.on('connect', this.onConnect.bind(this));
+//     this.network.socket.on('start', this.onStart.bind(this));
 
-    this.network.socket.on('disconnect', this.onDisconnect.bind(this));
-    this.network.socket.on('update', this.onServerUpdate.bind(this));
-    this.network.socket.on('join', this.onPlayerJoin.bind(this));
-    this.network.socket.on('part', this.onPlayerPart.bind(this));
-    this.network.socket.on('reset', this.onReset.bind(this));
-    this.network.socket.on('viewport', this.onViewPort.bind(this));
+// };
+
+WebClient.prototype.on = function (event, fn) {
+    if (this.listeners[event]) {
+        this.listeners[event].push = fn;
+    } else {
+        this.listeners[event] = [fn];
+    }
 };
 
-WebClient.prototype.begin = function () {
-    this.connect();
-    document.addEventListener('keydown', this.onKeyDown.bind(this));
-    document.addEventListener('keyup', this.onKeyUp.bind(this));
+WebClient.prototype.emit = function (event, data) {
+    if (this.listeners[event]) {
+        for (let i=0; i<this.listeners[event].length; i++) {
+            this.listeners[event][i](data);
+        }
+    }
+};
+
+WebClient.prototype.begin = function (socket, gameState) {
+    // So we can remove them later
+    this.keyDownFunction = this.onKeyDown.bind(this);
+    this.keyUpFunction = this.onKeyUp.bind(this);
+    this.abortFunction = this.onClickAbort.bind(this);
+    document.addEventListener('keydown', this.keyDownFunction);
+    document.addEventListener('keyup', this.keyUpFunction);
+    document.getElementById('abort').addEventListener('click', this.abortFunction);
+
 
     this.canvas = document.getElementById('gamecanvas');
     this.resizeCanvas();
@@ -113,6 +98,17 @@ WebClient.prototype.begin = function () {
     this.ctx = this.canvas.getContext('2d');
 
     this.setupGamepads();
+
+    this.network.socket = socket;
+
+    this.network.socket.on('disconnect', this.onDisconnect.bind(this));
+    this.network.socket.on('update', this.onServerUpdate.bind(this));
+    this.network.socket.on('join', this.onPlayerJoin.bind(this));
+    this.network.socket.on('part', this.onPlayerPart.bind(this));
+    this.network.socket.on('end', this.onEnd.bind(this));
+    this.network.socket.on('viewport', this.onViewPort.bind(this));
+
+    this.startTheGame(gameState);
 };
 
 WebClient.prototype.resizeCanvas = function () {
@@ -253,9 +249,19 @@ WebClient.prototype.setObserverMode = function (mode, follow) {
 
 WebClient.prototype.cancelUpdates = function () {
     console.log("cancel animation");
+    this.network.socket.off('disconnect');
+    this.network.socket.off('update');
+    this.network.socket.off('join');
+    this.network.socket.off('part');
+    this.network.socket.off('end');
+    this.network.socket.off('viewport');
+
+    document.removeEventListener('keydown', this.keyDownFunction);
+    document.removeEventListener('keyup', this.keyUpFunction);
+    document.getElementById('abort').removeEventListener('click', this.abortFunction);
+
     window.cancelAnimationFrame(this.updateid);
     this.stopGameTickTimer();
-    this.network.socket.close();
 };
 
 WebClient.prototype.pressGameKey = function (k) {
@@ -276,7 +282,10 @@ WebClient.prototype.releaseGameKey = function (k) {
 
 
 WebClient.prototype.onKeyDown = function (ev) {
-    if (ev.which === 27) this.cancelUpdates();
+    if (ev.which === 27) {
+        this.cancelUpdates();
+        this.network.socket.close();
+    }
 
     if (this.mode === 'observer') {
         var used = false;
@@ -376,11 +385,8 @@ WebClient.prototype.onKeyUp = function (ev) {
     }
 };
 
-WebClient.prototype.onReset = function (data) {
-    for (let k in data.players) {
-        this.initPlayer(k);
-    }
-    this.engine.map = data.map;
+WebClient.prototype.onClickAbort = function () {
+    this.network.socket.emit('abort');
 };
 
 WebClient.prototype.startGameTickTimer = function () {
@@ -461,8 +467,8 @@ WebClient.prototype.onConnect = function () {
     this.network.socket.emit('greet', {'mode': this.mode});
 };
 
-WebClient.prototype.onStart = function (data) {
-    // console.log('start', data);
+WebClient.prototype.startTheGame = function (data) {
+    console.log('start', data);
     for (let k in data.players) {
         this.initPlayer(k);
         var p = this.players[k];
@@ -493,6 +499,9 @@ WebClient.prototype.onStart = function (data) {
         // console.log(this.engine.players[k]);
     }
     // this.engine.smoke = data.smoke;
+    // Players have IDs and observers don't.
+    this.mode = data.id ? 'player':'observer';
+
     this.engine.map = data.map;
     console.log('map', this.engine.map.width, this.engine.map.height, this.engine.map.fire.length);
 
@@ -548,6 +557,11 @@ WebClient.prototype.onPlayerPart = function (data) {
     delete this.players[data.id];
 };
 
+WebClient.prototype.onEnd = function (data) {
+    console.log('game over', data);
+    this.cancelUpdates();
+    this.emit('end');
+};
 
 WebClient.prototype.onServerUpdate = function (data) {
     this.network.serverUpdates.push(data);
@@ -1009,15 +1023,15 @@ WebClient.prototype.drawGameState = function () {
     // }
     // this.ctx.stroke();
 
-    var startx = Math.round((centerPos.x - this.canvas.width/2)/this.engine.config.map.cellSize);
-    var starty = Math.round((centerPos.y - this.canvas.height/2)/this.engine.config.map.cellSize);
-    var endx = startx+Math.round(this.canvas.width/this.engine.config.map.cellSize);
-    var endy = starty+Math.round(this.canvas.height/this.engine.config.map.cellSize);
+    var startx = Math.floor((centerPos.x - this.canvas.width/2)/this.engine.config.map.cellSize);
+    var starty = Math.floor((centerPos.y - this.canvas.height/2)/this.engine.config.map.cellSize);
+    var endx = startx+Math.ceil(this.canvas.width/this.engine.config.map.cellSize);
+    var endy = starty+Math.ceil(this.canvas.height/this.engine.config.map.cellSize);
 
     if (startx < 0) startx = 0;
     if (starty < 0) starty = 0;
-    if (endx >= this.engine.mapWidth) endx = this.engine.mapWidth-1;
-    if (endy >= this.engine.mapHeight) endy = this.engine.mapHeight-1;
+    if (endx >= this.engine.map.width) endx = this.engine.map.width-1;
+    if (endy >= this.engine.map.height) endy = this.engine.map.height-1;
 
     if (startx < this.engine.map.viewPort.x) startx = this.engine.map.viewPort.x;
     if (starty < this.engine.map.viewPort.y) starty = this.engine.map.viewPort.y;
@@ -1030,17 +1044,24 @@ WebClient.prototype.drawGameState = function () {
     for (let y=starty; y<=endy; y++) {
         for (let x=startx; x<=endx; x++) {
             var m = this.map_images[this.engine.map.data[y*this.engine.map.width+x]];
-            if (!m) console.log(this.engine.map.data[y*this.engine.map.width+x], x, y);
+            if (!m) console.log('nonexistent', this.engine.map.data[y*this.engine.map.width+x], x, y);
+            try {
             this.ctx.drawImage(m,
                                x * this.engine.config.map.cellSize,
                                y * this.engine.config.map.cellSize);
+            } catch(e) {
+                console.log('oops', m);
+                console.log(this.map_images.length, this.engine.map.data[y*this.engine.map.width+x], this.engine.map.data.length, y*this.engine.map.width+x);
+                throw(e);
+            }
+
         }
     }
 
     // Map Border
     this.ctx.lineWidth = 4;
     this.ctx.strokeStyle = '#00AA00';
-    this.ctx.strokeRect(this.engine.map.viewPort.x*this.engine.config.map.cellSize-2, this.engine.map.viewPort.y*this.engine.config.map.cellSize-2, (this.engine.map.viewPort.w+1)*this.engine.config.map.cellSize+4, (this.engine.map.viewPort.h+1)*this.engine.config.map.cellSize+4);
+    this.ctx.strokeRect(this.engine.map.viewPort.x*this.engine.config.map.cellSize-2, this.engine.map.viewPort.y*this.engine.config.map.cellSize-2, this.engine.map.viewPort.w*this.engine.config.map.cellSize+4, this.engine.map.viewPort.h*this.engine.config.map.cellSize+4);
     this.ctx.lineWidth = 1;
 
 

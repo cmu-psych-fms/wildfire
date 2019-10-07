@@ -1,4 +1,4 @@
-var game = {};
+var g_game = false, g_lobby;
 
 var g_images = {};
 var g_jq = [];
@@ -9,47 +9,9 @@ function load_image(name) {
     g_jq.push(g_images[name]);
 }
 
-function start_player_client () {
-    imagesLoaded(g_jq, {}, function () {
-        game = new WebClient('player');
-        game.begin();
-        show_menu();
-        hide_join_buttons();
-    });
-}
-
-function start_observer_client () {
-    imagesLoaded(g_jq, {}, function () {
-        game = new WebClient('observer');
-        game.begin();
-        show_menu();
-        hide_join_buttons();
-    });
-}
-
-function reset_game () {
-    if (game) game.sendReset();
-};
-
 function show_instructions () {
     var elem = document.getElementById('instructions_area');
     elem.style.display = 'block';
-};
-
-function hide_instructions () {
-    document.getElementById('instructions_area').style.display = 'none';
-};
-
-function hide_menu () {
-    document.getElementById('menu').style.display = 'none';
-};
-
-function show_menu () {
-    document.getElementById('menu').style.display = 'block';
-};
-
-function hide_join_buttons () {
-    document.getElementById('join').style.display = 'none';
 };
 
 function fullscreen () {
@@ -64,7 +26,7 @@ function fullscreen () {
     } else if (elem.msRequestFullscreen) { /* IE/Edge */
         elem.msRequestFullscreen();
     }
-    game.resizeCanvas();
+    // game.resizeCanvas();
 };
 
 window.onload = function(){
@@ -85,6 +47,17 @@ window.onload = function(){
     load_image('flame');
     load_image('flame2');
 
-    hide_instructions();
-    hide_menu();
+    document.getElementById('instructions_area').style.display = 'none';
+    document.getElementById('gamearea').style.display = 'none';
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('lobby').style.display = 'block';
+
+    imagesLoaded(g_jq, {}, function () {
+        g_lobby = new WebLobby();
+        g_lobby.begin();
+        // game = new WebClient('player');
+        // game.begin();
+        // show_menu();
+        // hide_join_buttons();
+    });
 };

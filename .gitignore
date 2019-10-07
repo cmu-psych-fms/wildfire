@@ -1,2 +1,6 @@
 node_modules/
 contrib/
+*.dmg
+Geospatial-darwin-x64*
+aup/
+src/server/data

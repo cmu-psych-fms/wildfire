@@ -36,6 +36,12 @@ table td {
 }
 
 
+#lobby {
+    /* display:inline-block; */
+    background: gray;
+    padding: 20px;
+}
+
 div.instructions {
     width:800px;
     text-align: justify;
@@ -43,4 +49,32 @@ div.instructions {
     background-color: #AACCCC;
     border: solid 5px black;
     padding: 0 20px 0 20px;
+}
+
+div.lobby_player {
+    display: inline-block;
+    width: 100px;
+    height: 100px;
+    background-color: orange;
+    border: 1px solid black;
+    margin: 5px;
+}
+
+div.lobby_observer {
+    display: inline-block;
+    width: 100px;
+    height: 100px;
+    background-color: #999999;
+    border: 1px solid black;
+    margin: 5px;
+}
+
+#client_buttons button {
+    width: 80px;
+}
+
+div.button {
+    background: blue;
+    width: 80px;
+    border: 1px solid black;
 }

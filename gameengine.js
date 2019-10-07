@@ -203,6 +203,18 @@ GameEngine.prototype.stepOneTick = function () {
     this.updateMapTimeout();
 };
 
+GameEngine.prototype.isFinished = function () {
+    return this.map.fire.length <= 0;
+};
+
+GameEngine.prototype.getScore = function () {
+    var count = 0;
+    for (let i=0; i<this.map.data.length; i++) {
+        if (this.map.data[i] !== MAP_ASH) count += 1;
+    }
+    return count;
+};
+
 GameEngine.prototype.retardantCanBePlaced = function (x, y, batch) {
     for (let i=0; i<batch.length; i++) {
         if (batch[i].x === x &&
@@ -262,7 +274,8 @@ GameEngine.prototype.addRetardant = function (x, y, batch) {
 
 GameEngine.prototype.ignite = function (x, y) {
     var m = this.mapAt(x,y);
-    if (m === MAP_ROCK ||
+    if (m === undefined ||
+        m === MAP_ROCK ||
         m === MAP_HROAD ||
         m === MAP_VROAD ||
         m === MAP_WATER ||

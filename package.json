@@ -10,9 +10,11 @@
   "license": "GVPL2",
   "dependencies": {
     "express": "^4.16.3",
+    "mersenne-twister": "^1.1.0",
     "pngjs": "^3.3.2",
     "socket.io": "^2.0.4",
-    "uuid": "^3.2.1"
+    "uuid": "^3.2.1",
+    "yargs": "^14.0.0"
   },
   "pkg": {
     "assets": [
