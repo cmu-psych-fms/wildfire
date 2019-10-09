@@ -23,6 +23,11 @@ Handler.prototype.addListeners = function () {
     this.socket.on('data', this.onData.bind(this));
     this.socket.on('end', this.onEnd.bind(this));
     this.socket.on('close', this.onClose.bind(this));
+    this.socket.on('error', this.onError.bind(this));
+};
+
+Handler.prototype.onError = function (e) {
+    console.log('TCP error', e.code)
 };
 
 Handler.prototype.onEnd = function () {
@@ -40,7 +45,7 @@ Handler.prototype.onData = function (data) {
 
     if (idx >= 0) {
         var raw = this.buffer.slice(0,idx);
-        console.log('data', raw.trim());
+        //console.log('data', raw.trim());
         var msg = JSON.parse(raw);
         this.emitter.emit(msg[0], msg[1]);
         this.buffer = this.buffer.slice(idx+1);
@@ -71,6 +76,10 @@ Server.prototype.onConnect = function(socket) {
     h.addListeners();
 
     this.emitter.emit('connection', h);
+};
+
+Server.prototype.close = function() {
+    this.server.close();
 };
 
 exports.Server = Server;

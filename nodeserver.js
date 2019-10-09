@@ -96,7 +96,6 @@ sio.sockets.on('connection', function (socket) {
     // client.on('greet', function (m) { server.addPlayer(client, m); });
 
     global_lobby.addClient(socket);
-
 });
 
 var tcpserver = require('./tcpserver');
@@ -106,20 +105,25 @@ tcp.on('connection', function (socket) { global_lobby.addClient(socket); });
 
 global_lobby.on('start', function (clients) {
     global_game = new GameServer(log, 'map.png');
-    global_game.on('end', global_lobby.backFromGame.bind(global_lobby));
+    global_game.on('end', function (clients) {
+        global_game = undefined;
+        global_lobby.backFromGame(clients);
+    });
     global_game.startWithClients(clients);
 });
 
 process.on('SIGINT', () => {
+    console.log('got SIGINT');
     global_lobby.close();
     if (global_game) global_game.close();
     sio.close();
     server.close();
-    process.exitCode = 1;
-    process.exit(1);
+    tcp.close();
+    // process.exitCode = 1;
+    // process.exit(1);
 });
 
-process.on('exit', () => {
+process.once('beforeExit', () => {
     console.log('shutting down');
     log.endExperiment();
 });

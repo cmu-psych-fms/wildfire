@@ -48,6 +48,7 @@ Lobby.prototype.addClient = function(socket) {
     socket.on('ready', function (data) { _this.setReady(c, data);});
     socket.on('seed', function (data) { _this.seedRNG(data);});
 
+    c.socket.emit('welcome', {id:c.id})
     this.broadcastRoster(c.id);
 };
 
@@ -135,9 +136,9 @@ Lobby.prototype.backFromGame = function(clients) {
 };
 
 Lobby.prototype.close = function() {
-    console.log('close lobby', this.clients.length);
+    if (this.clients.length > 0)
+        console.log('close lobby', this.clients.length);
     for (let i=0; i<this.clients.length; i++) {
-        console.log('destroy', this.clients[i].socket.destroy);
         this.clients[i].socket.disconnect(true);
     }
 };
