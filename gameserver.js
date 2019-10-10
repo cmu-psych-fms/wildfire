@@ -194,6 +194,18 @@ GameServer.prototype.delObserver = function (id) {
     }
 };
 
+GameServer.prototype.removeListenersAllClients = function () {
+    for (let k in this.players) {
+        this.players[k].removeAllListeners('movementRequest');
+        this.players[k].removeAllListeners('abort');
+        this.players[k].removeAllListeners('disconnect');
+    }
+    for (let k in this.observers) {
+        this.observers[k].removeAllListeners('abort');
+        this.observers[k].removeAllListeners('disconnect');
+    }
+};
+
 GameServer.prototype.shutdown = function (score) {
     this.stopServerUpdates();
     this.stopGameTickTimer();
@@ -311,6 +323,7 @@ GameServer.prototype.sendServerUpdate = function () {
 };
 
 GameServer.prototype.close = function() {
+    this.removeListenersAllClients();
     this.stopServerUpdates();
     this.stopGameTickTimer();
 };

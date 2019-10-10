@@ -73,7 +73,7 @@ log.startExperiment({build: 'TODO',
                      id: args.id
                     });
 
-var global_game;
+var global_games = [];
 var global_lobby = new Lobby(log);
 // server.readMap('sprites/map.png');
 // server.readMap(path.join(__dirname, 'sprites/bigmap.png'));
@@ -90,17 +90,30 @@ tcp.listen(gameport + 1);
 tcp.on('connection', function (socket) { global_lobby.addClient(socket); });
 
 global_lobby.on('start', function (clients) {
-    global_game = new GameServer(log, 'map.png');
-    global_game.on('end', function (clients) {
-        global_game = undefined;
+    var g = new GameServer(log, 'map.png');
+    global_games.push(g);
+    g.on('end', function (clients) {
+        var idx = global_games.indexOf(g);
+        if (idx >= 0)
+            global_games.splice(idx,1);
         global_lobby.backFromGame(clients);
     });
-    global_game.startWithClients(clients);
+    g.startWithClients(clients);
 });
 
 function shutdown() {
-    if (global_game) global_game.close();
+    global_lobby.removeListenersAllClients();
+    for (let i=0; i<global_games.length; i++)
+        global_games[i].close();
     server.close();
+    var n = Object.keys(io.sockets.sockets).length;
+    if (n > 0) {
+        console.log('Closing', n, 'IO socket(s)');
+        for (let k in io.sockets.sockets) {
+            // console.log('closing', k);
+            io.sockets.sockets[k].disconnect(true);
+        }
+    }
     io.close();
     tcp.close();
     // process.exit(1);

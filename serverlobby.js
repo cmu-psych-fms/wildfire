@@ -100,14 +100,17 @@ Lobby.prototype.seedRNG = function(data) {
 }
 
 
-Lobby.prototype.startGame = function() {
+Lobby.prototype.removeListenersAllClients = function() {
     for (let i=0; i<this.clients.length; i++) {
         this.clients[i].socket.removeAllListeners('mode');
         this.clients[i].socket.removeAllListeners('disconnect');
         this.clients[i].socket.removeAllListeners('ready');
         this.clients[i].socket.removeAllListeners('seed');
     }
+};
 
+Lobby.prototype.startGame = function() {
+    this.removeListenersAllClients();
     this.log.endScreen();
     this.emitter.emit('start', this.clients)
     this.clients.length = 0;
@@ -116,8 +119,11 @@ Lobby.prototype.startGame = function() {
 Lobby.prototype.backFromGame = function(clients) {
     var _this = this;
     var logClients = [];
-    console.log('lobby', clients.length);
-    this.clients.length = 0;
+    for (let i=0; i<this.clients.length; i++) {
+        logClients.push({id:this.clients[i].id,
+                         mode:this.clients[i].mode,
+                         ready:this.clients[i].ready});
+    }
     for (let i=0; i<clients.length; i++) {
         let c = {};
         c.id = clients[i].id;
@@ -131,6 +137,7 @@ Lobby.prototype.backFromGame = function(clients) {
         c.socket.on('seed', function (data) { _this.seedRNG(data);});
         logClients.push({id:c.id, mode:c.mode, ready:c.ready});
     }
+    console.log('lobby', this.clients.length);
     this.log.startScreen('lobby', {clients: logClients});
     this.broadcastRoster();
 };

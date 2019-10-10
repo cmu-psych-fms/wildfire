@@ -59,6 +59,7 @@ Handler.prototype.disconnect = function () {
 function Server() {
     this.emitter = new EventEmitter();
     this.on = this.emitter.on.bind(this.emitter);
+    this.sockets = [];
 }
 
 Server.prototype = {};
@@ -72,14 +73,29 @@ Server.prototype.onConnect = function(socket) {
     var remoteAddress = socket.remoteAddress + ':' + socket.remotePort;
     console.log('TCP client:', remoteAddress);
 
+    this.sockets.push(socket);
+    socket.on('close', () => { this.onClose(socket); });
+
     var h = new Handler(socket);
     h.addListeners();
 
     this.emitter.emit('connection', h);
 };
 
+Server.prototype.onClose = function(socket) {
+    var idx = this.sockets.indexOf(socket);
+    if (idx >= 0)
+        this.sockets.splice(idx,1);
+};
+
 Server.prototype.close = function() {
     this.server.close();
+    if (this.sockets.length > 0) {
+        console.log('Closing', this.sockets.length, 'TCP socket(s).');
+        for (let i=0; i<this.sockets.length; i++) {
+            this.sockets[i].end();
+        }
+    }
 };
 
 exports.Server = Server;

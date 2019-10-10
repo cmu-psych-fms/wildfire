@@ -82,8 +82,8 @@ class Model(object):
             self.players[player_id] = {}
             self.update_player(player_id, data['players'][player_id])
         # Start the client game loop
-        self.game_thread = self.sio.start_background_task(self.client_game_loop)
         self.state = 'game'
+        self.game_thread = self.sio.start_background_task(self.client_game_loop)
 
     # Sample server update
     # {'t': 48,
@@ -185,6 +185,7 @@ class Model(object):
     def on_disconnect(self):
         self.debug_recv('disconnect', None)
         self.announce('disconnected')
+        self.state = 'disconnected'
 
     def send_movement_request(self, turn, thrust, dump, waypoints=[]):
         # Tell the server you'd like to move your water bomber. This
