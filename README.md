@@ -73,7 +73,37 @@ observer.
 
 ### Disconnect
 
-Players and observers can press `Escape` to disconnect from the server and stop the game updates.
+Players and observers can press `Escape` to disconnect from the server
+and stop the game updates.
+
+### Logging
+
+The server can record record game data to a log file. For now, the
+update events sent from server are all that is recorded to the log
+file. This means not every game tick is recorded. Future updates
+will improve this.
+
+The Log is a JSON formatted object. The top-level object contains
+information about the session and a `"body"` property. `"body"` is a
+list whose entries are either `lobby` or `game` screens. The `lobby`
+screens record `"roster"` events sent in the lobby. The `game` screens
+record `"update"` events sent during the game.
+
+Each screen is an object with its own `"body"` property. `"body"` is a
+list containing the events sent from the server while that screen was
+active.
+
+Use the `--log` command line option to enable logging. You can supply
+an ID using the `--id` option that uniquely identifies this
+session. For example:
+
+    node nodeserver.js --log --id testmodel1
+
+Log files are stored in the `logs` folder in the current
+directory. The server will not overwrite log files. If the log file
+exists, the server will choose an alternate, available filename.
+
+
 
 ### Model Interface
 
@@ -82,8 +112,8 @@ to exchange JSON strings between the server and clients.
 
 I have written a demo python model player in `model_client.py` that
 provides a basic example of how a model could connect to the server
-and play the game. To try it you will need the `python-socketio`
-python package and python 3:
+and play the game using the socket.io interface. To try it you will
+need the `python-socketio` python package and python 3:
 
     $ python3 model_client.py
 
@@ -152,6 +182,11 @@ starts.
 Set the client's mode: either "player" or "observer". Observers can
 watch the game but not interact with it. All clients start as a
 "player".
+
+###### "seed" &lt;number&gt;
+
+Seed the random number generator with the supplied seed. Use this to
+reproduce a model run.
 
 ##### Game Messages From the Server to the Client
 
