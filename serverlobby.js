@@ -135,12 +135,4 @@ Lobby.prototype.backFromGame = function(clients) {
     this.broadcastRoster();
 };
 
-Lobby.prototype.close = function() {
-    if (this.clients.length > 0)
-        console.log('close lobby', this.clients.length);
-    for (let i=0; i<this.clients.length; i++) {
-        this.clients[i].socket.disconnect(true);
-    }
-};
-
 exports.Lobby = Lobby;

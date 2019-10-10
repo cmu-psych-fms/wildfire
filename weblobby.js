@@ -57,7 +57,7 @@ WebLobby.prototype.listen = function () {
 
 WebLobby.prototype.begin = function () {
     this.clients = [];
-    this.socket = io.connect();
+    this.socket = io.connect({reconnection: false});
 
     this.listen();
 };

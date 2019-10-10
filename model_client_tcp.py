@@ -1,33 +1,17 @@
+import sys
 import argparse
 import random
-import socketio
+import json
+import socket
+import time
 
 class Model(object):
+    separator = b'\n'
+
     def __init__(self, num_players):
-        self.num_players = num_players
         self.debug = 1
-        self.state = 'disconnected'
-        self.sio = socketio.Client()
-        # There are the events we must listen for from the server.
-        self.sio.on('connect', self.on_connect)
-        # The server sends this event when a client first connects
-        self.sio.on('welcome', self.on_welcome)
-        # The server sends this event in the lobby
-        self.sio.on('roster', self.on_roster)
-        # The server sends this event when the server is ready for the
-        # client to start playing.
-        self.sio.on('start', self.on_start)
-        # The server sends this event every 100ms. It contains a
-        # everything the client needs to create the current game
-        # state.
-        self.sio.on('update', self.on_server_update)
-        # The server sends this event when another player leaves
-        self.sio.on('part', self.on_player_part)
-        # Players and observers can restart the game from the
-        # beginning. This event is sent in such a case.
-        self.sio.on('end', self.on_game_end)
-        # If the connection to the server closes
-        self.sio.on('disconnect', self.on_disconnect)
+        self.buffer = b""
+        self.num_players = num_players
 
     def debug_recv(self, event, data):
         if self.debug >= 2:
@@ -43,20 +27,25 @@ class Model(object):
 
     def emit(self, event, data):
         self.debug_send(event, data)
-        self.sio.emit(event, data)
+        self.socket.sendall(json.dumps([event, data]).encode('utf-8') + self.separator)
 
-    def connect_to_server(self, url):
-        self.sio.connect(url)
-
-    def on_connect(self):
-        self.debug_recv('connected', None)
-        self.announce('connected')
-
-    def on_welcome(self, data):
-        self.debug_recv('welcome', data)
-        self.announce('welcome', data['id'])
-        self.id = data['id']
-        self.state = 'lobby'
+    def read_from_socket(self):
+        while True:
+            idx = self.buffer.find(self.separator)
+            if idx >= 0:
+                raw = self.buffer[0:idx]
+                self.debug_recv(raw, '')
+                msg = json.loads(raw)
+                self.buffer = self.buffer[idx+1:]
+                return (msg[0],msg[1])
+            try:
+                bytes = self.socket.recv(1024)
+                if len(bytes) == 0:
+                    return ('disconnect', None)
+                else:
+                    self.buffer += bytes
+            except socket.timeout:
+                return (None,None)
 
     def update_player(self, player_id, data):
         self.players[player_id]['alive'] = data[0]
@@ -81,9 +70,6 @@ class Model(object):
         for player_id in data['players']:
             self.players[player_id] = {}
             self.update_player(player_id, data['players'][player_id])
-        # Start the client game loop
-        self.game_thread = self.sio.start_background_task(self.client_game_loop)
-        self.state = 'game'
 
     # Sample server update
     # {'t': 48,
@@ -157,30 +143,12 @@ class Model(object):
             # visible portion of the map in the next update.
             self.map['viewPort'] = data['vp']
 
-    def on_roster(self, data):
-        self.debug_recv('roster', data)
-        self.announce('roster')
-        ready = False
-        count = 0
-        for c in data['clients']:
-            if c['id'] == self.id:
-                ready = c['ready']
-            if c['mode'] == 'player':
-                count += 1
-        if not ready and count >= self.num_players:
-            self.emit('ready', True)
-
     def on_player_part(self, data):
         self.debug_recv('part', data)
-        self.announce('part', data['id'])
+        self.announce('part', data['id']);
         # The player has disconnected from the game. Clean up their
         # data.
         del self.players[data['id']]
-
-    def on_game_end(self, data):
-        self.debug_recv('end', data)
-        self.announce('game end')
-        self.state = 'lobby'
 
     def on_disconnect(self):
         self.debug_recv('disconnect', None)
@@ -208,6 +176,28 @@ class Model(object):
                                       waypoints])
         self.movement_request_sequence += 1
 
+    def client_lobby_loop(self):
+        self.socket.settimeout(None)
+        while True:
+            (event,data) = self.read_from_socket()
+            if event == 'roster':
+                self.announce('roster')
+                ready = False
+                count = 0
+                for c in data['clients']:
+                    if c['id'] == self.id:
+                        ready = c['ready']
+                    if c['mode'] == 'player':
+                        count += 1
+                if not ready and count >= self.num_players:
+                    self.emit('ready', True)
+            elif event == 'start':
+                self.on_start(data)
+                return True
+            elif event == 'disconnect':
+                self.announce('disconnect')
+                return False
+
     def client_game_loop(self):
         # The client game loop sends movement requests at 60 frames
         # per second. It is these movement requests that make the
@@ -228,8 +218,22 @@ class Model(object):
                  'dump': 0}
         waypoints = []
         ticks = 0
-        while self.state == 'game':
+        # Use the socket to lock the game loop at 60 fps
+        self.socket.settimeout(1/60)
+        while True:
+            (event,data) = self.read_from_socket()
+            if event == 'update':
+                self.on_server_update(data)
+            elif event == 'part':
+                self.on_player_part(data)
+            elif event == 'end':
+                self.announce('end')
+                return True
+            elif event == 'disconnect':
+                self.announce('disconnect')
+                return False
             # Do something random every 3rd of a second
+            #if self.server_game_tick % 20 == 0:
             if ticks % 20 == 0:
                 k = random.choice(list(state.keys()))
                 if k == 'turn':
@@ -238,13 +242,32 @@ class Model(object):
                     state[k] = random.choice([0,'f', 's'])
                 elif k == 'dump':
                     state[k] = random.choice([0, 1])
-            m.send_movement_request(state['turn'], state['thrust'], state['dump'], waypoints)
-            self.sio.sleep(1/60.0)
+            self.send_movement_request(state['turn'], state['thrust'], state['dump'], waypoints)
             ticks += 1
+
+    def connect_to_server(self, host, port):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect((host,port))
+        self.announce('connected')
+
+    def main_loop(self):
+        # When we join
+        (event,data) = self.read_from_socket()
+        if event == 'welcome':
+                self.id = data['id']
+        else:
+            raise Exception('expected a welcome event to get our id')
+        while True:
+            if not self.client_lobby_loop():
+                break
+            if not self.client_game_loop():
+                break
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--server', metavar="URL", default="http://localhost:3000", help="The server to connect to")
+    parser.add_argument('--host', metavar="URL", default="localhost", help="The server to connect to")
+    parser.add_argument('--port', metavar="URL", type=int, default=3001, help="The port to connect to")
     parser.add_argument('--players', type=int, default=2, help="Wait for this many players before starting a game.")
     parser.add_argument('--debug', help="Print verbose debug output", action='store_true')
     args = parser.parse_args()
@@ -252,4 +275,5 @@ if __name__ == '__main__':
     m = Model(args.players)
     if args.debug:
         m.debug = 2
-    m.connect_to_server(args.server)
+    m.connect_to_server(args.host, args.port)
+    m.main_loop()

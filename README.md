@@ -77,16 +77,13 @@ Players and observers can press `Escape` to disconnect from the server and stop 
 
 ### Model Interface
 
-There is no formal model interface. It is purely an interactive, browser-based demo.
-
-All communication is done using Socket.io over WebSocket to exchange
-JSON strings between the server and clients. So it should be possible
-to write a model that uses this some protocol to interact with the
-server.
+For browser-based clients, all communication is done using Socket.io
+to exchange JSON strings between the server and clients.
 
 I have written a demo python model player in `model_client.py` that
-provides more information about how one might do this. To try it you
-will need the `python-socketio` python package and python 3:
+provides a basic example of how a model could connect to the server
+and play the game. To try it you will need the `python-socketio`
+python package and python 3:
 
     $ python3 model_client.py
 
@@ -95,15 +92,19 @@ run it like this:
 
     $ python3 model_client.py --debug
 
-To connect to the server using LISP and ACT-R may require more
-work. As far as I know there is a Websocket library for LISP but no
-Socket.io library. Using LISP to communicate directly with the
-wildfire server may require implementing a large part of Socket.io in
-LISP.
+For clients not running in the browser there is a second, simpler
+protocol that runs on straight TCP/IP. The information exchanged
+between client and server is exactly the same as the Socket.io
+interface but without requiring Socket.io.
 
-It may be easiest to spawn a Python script similar to model_client.py
-as a subprocess from LISP and communicate with it over a pipe to send
-and receive data to and from the wildfire server.
+Again, all communication is based on sending JSON data between client
+and server.
+
+I have written a demo python model player in `model_client_tcp.py`
+that uses the TCP/IP interface to connect to the server and play.
+
+This TCP/IP interface should make it fairly easy to write an ACT-R
+module in LISP that allows ACT-R models to connect to the server.
 
 ### Client/Server Communication
 
@@ -111,11 +112,55 @@ The following documents the communication protocol. The clients and
 server communicate via "events" that are emitted using the `socket.io`
 library. Each event has a name and data.
 
-#### Messages From the Server to the Client
+When a client first connects it will receive a `welcome` event.
 
-##### "start" { ... }
+###### "welcome" { "id": &lt;client id&gt; }
 
-The start event is sent to a newly connected client It contains a snapshot of the game state.
+This tells the client their unique client ID.
+
+#### Lobby
+
+When clients connect they start in the lobby. This is where players
+gather before starting a game.
+
+##### Lobby Messages From the Server to the Client
+
+###### "roster" { clients: [ ... ], join: &lt;client id&gt;, part: &lt;client id&gt; }
+
+This event is sent to all clients when a player joins, parts, or
+changes their mode or ready state. It describes the state of each
+client in the lobby.
+
+Each element of the `"clients"` list is an object with the following fields:
+
+    { id: <client id>, mode: <string>, ready: <boolean> }
+
+The client's mode can be `"observer"` or `"player"`. `"ready"` is
+`true` when the client is ready to start the game and `false` if
+not. When all clients are ready, the game starts.
+
+##### Lobby Messages From client to the Server
+
+###### "ready" &lt;boolean&gt;
+
+Set the client's ready state: either `true` or `false`. When all
+players and observers have set their ready state to `true` the game
+starts.
+
+###### "mode" &lt;string&gt;
+
+Set the client's mode: either "player" or "observer". Observers can
+watch the game but not interact with it. All clients start as a
+"player".
+
+##### Game Messages From the Server to the Client
+
+The game starts when all clients signal that they are ready.
+
+###### "start" { ... }
+
+The start event is sent to all clients when the game starts. It
+contains a snapshot of the game state.
 
 The "player" property contains a 6 element array for each player:
 
@@ -128,10 +173,6 @@ addition "map" contains the locations of all fires, fire retardant,
 and waypoints.
 
 The map's "viewPort" is the currently visible portion of the map.
-
-##### "join" {"id": &lt;player id&gt;}
-
-A new player has joined the game. The next "update" event will contain information about this player.
 
 ##### "part" {"id": &lt;player id&gt;}
 
@@ -171,22 +212,18 @@ but for waypoints. Waypoints can only be added.
 movement sequence received by the server at the time of the
 update. see `"movementRequest"` below for more info.
 
-##### "reset" { ... }
+##### "end" { ... }
 
-A player or observer has reset the game. This restarts the game from
-the beginning. It comes with a game state snapshot in the same format
-as the `"start"` event.
+The game's end condition has been met or a client has sent the "abort"
+message to abort the game. The game is over and all clients return to
+the lobby.
 
 #### Messages From client to the Server
 
-##### "greet" { "mode": &lt;mode&gt; }
+##### "abort"
 
-Upon connecting to the server, the client sends this event to announce
-what mode it would like to be in: "player" or "observer".
-
-##### "reset"
-
-The client sends this event to request a game restart.
+The client sends this event to request a stop to the game. When the
+game is aborted all clients return to the lobby.
 
 ##### "movementRequest" [ &lt;seq&gt;, &lt;turn&gt;, &lt;thrust&gt;, &lt;dump&gt;, &lt;waypoints&gt; ]
 
@@ -213,6 +250,34 @@ location. There is currently only a water waypoint. So to place a
 water waypoint at the airplane's current position, this parameter
 should be `[1]`.
 
+#### TCP interface
+
+For models or non-browser clients it may be easier to use the TCP
+interface. By default this service listens on port 3001.
+
+Each message sent to and from the client and server has two parts: an
+event and the data associated with that event. The event is always a
+string and the data can be any JSON data. The end of a message is
+marked with a \n newline character.
+
+Because the \n character is used as part of the protocol, your JSON
+data cannot contain the \n character in any of its strings. Luckily,
+with the current wildfire protocol there is no need to send newlines
+in JSON strings.
+
+A message is an array of size 2. The first element is the event name,
+a string, and the second element is the data. For example, a "roster"
+event from the server would look like this:
+
+    ["roster",{"clients":[{"id":"74530d00-eab9-11e9-9a3b-d566634f87ac","mode":"player","ready":false},{"id":"76bedce0-eab9-11e9-9a3b-d566634f87ac","mode":"player","ready":false}]}]\n
+
+To send the "mode" event the client would send this string over the TCP socket:
+
+    ["mode","observer"]\n
+
+Note the \n at the end of the message. This is necessary to tell where
+the message ends and the next message in the stream starts.
+
 #### Example
 
 The following is an example of the messages and JSON strings passed
@@ -227,8 +292,11 @@ the server.
 Each message has an event name followed by the JSON data that came
 with that event.
 
-    <<< connected
-    >>> greet {"mode": "player"}
+    <<< welcome {"id":"e631e640-d3fc-11e9-9d57-d1bf25c4edab"}
+    <<< roster {"clients":[{"id":"e54ae1a0-d3fc-11e9-9d57-d1bf25c4edab","mode":"player","ready":false},{"id":"e631e640-d3fc-11e9-9d57-d1bf25c4edab","mode":"player","ready":false}],"join":"e631e640-d3fc-11e9-9d57-d1bf25c4edab"}
+    >>> ready True
+    <<< roster {"clients":[{"id":"e54ae1a0-d3fc-11e9-9d57-d1bf25c4edab","mode":"player","ready":false},{"id":"e631e640-d3fc-11e9-9d57-d1bf25c4edab","mode":"player","ready":true}]}
+    <<< roster {"clients":[{"id":"e54ae1a0-d3fc-11e9-9d57-d1bf25c4edab","mode":"player","ready":true},{"id":"e631e640-d3fc-11e9-9d57-d1bf25c4edab","mode":"player","ready":true}]}
     <<< start {"id": "e631e640-d3fc-11e9-9d57-d1bf25c4edab", "map": {"width": 400, "height": 400, "viewPort": {"x": 146, "y": 146, "w": 108, "h": 108}, "retardant": [], "fire": [{"x": 163, "y": 239, "level": 1}, {"x": 155, "y": 247, "level": 1}, ...], "wayPoints": [], "data": [8, 8, 8, ...]}, "players": {"e54ae1a0-d3fc-11e9-9d57-d1bf25c4edab": [1, 4000, 4000, 100, 0, 0, 50], "e631e640-d3fc-11e9-9d57-d1bf25c4edab": [1, 4000, 4000, 100, 0, 0, 50]}}
     >>> movementRequest [0, 0, 0, 0, []]
     <<< update {"t": 492, "p": {"e54ae1a0-d3fc-11e9-9d57-d1bf25c4edab": [1, 4000, 4000, 100, 0, 0, 50], "e631e640-d3fc-11e9-9d57-d1bf25c4edab": [1, 4000, 4000, 100, 0, 0, 50]}, "m": [[99356, 2], [59354, 2]], "f": [[2, {"x": 156, "y": 248, "level": 1}], [1, {"x": 157, "y": 248, "level": 1}], [1, {"x": 156, "y": 249, "level": 1}], [2, {"x": 154, "y": 148, "level": 1}], [1, {"x": 154, "y": 149, "level": 1}], [1, {"x": 153, "y": 148, "level": 1}], [1, {"x": 154, "y": 147, "level": 1}]], "r": [], "wp": [], "lk": {"seq": None, "tick": None}}
@@ -261,3 +329,5 @@ with that event.
     <<< update {"t": 930, "p": {"e631e640-d3fc-11e9-9d57-d1bf25c4edab": [1, 3894.7181164314875, 4141.845066656051, 220, 5, "r", 22]}, "m": [[95759, 2], [70597, 2], [71792, 2]], "f": [[2, {"x": 159, "y": 239, "level": 1}], [1, {"x": 158, "y": 239, "level": 1}], [2, {"x": 197, "y": 176, "level": 1}], [2, {"x": 192, "y": 179, "level": 1}], [1, {"x": 192, "y": 178, "level": 1}]], "r": [[1, {"x": 195, "y": 208, "amt": 1, "timeout": 993}], [1, {"x": 195, "y": 207, "amt": 1, "timeout": 985}], [2, {"x": 197, "y": 198, "amt": 1, "timeout": 929}]], "wp": [], "lk": {"seq": 359, "tick": None}}
     >>> movementRequest [361, "r", "f", 1, []]
     >>> movementRequest [362, "r", "f", 1, []]
+    <<< end {}
+    <<< "roster" {"clients":[{"id":"e54ae1a0-d3fc-11e9-9d57-d1bf25c4edab","mode":"player","ready":false}]}

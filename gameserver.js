@@ -311,8 +311,6 @@ GameServer.prototype.sendServerUpdate = function () {
 };
 
 GameServer.prototype.close = function() {
-    for (let k in this.players) this.players[k].disconnect(true);
-    for (let k in this.observers) this.observers[k].disconnect(true);
     this.stopServerUpdates();
     this.stopGameTickTimer();
 };
