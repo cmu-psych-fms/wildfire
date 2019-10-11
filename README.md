@@ -144,7 +144,7 @@ library. Each event has a name and data.
 
 When a client first connects it will receive a `welcome` event.
 
-###### "welcome" { "id": &lt;client id&gt; }
+###### "welcome" { "id": < client id > }
 
 This tells the client their unique client ID.
 
@@ -155,7 +155,7 @@ gather before starting a game.
 
 ##### Lobby Messages From the Server to the Client
 
-###### "roster" { clients: [ ... ], join: &lt;client id&gt;, part: &lt;client id&gt; }
+###### "roster" { clients: [ ... ], join: < client id >, part: < client id > }
 
 This event is sent to all clients when a player joins, parts, or
 changes their mode or ready state. It describes the state of each
@@ -171,19 +171,19 @@ not. When all clients are ready, the game starts.
 
 ##### Lobby Messages From client to the Server
 
-###### "ready" &lt;boolean&gt;
+###### "ready" < boolean >
 
 Set the client's ready state: either `true` or `false`. When all
 players and observers have set their ready state to `true` the game
 starts.
 
-###### "mode" &lt;string&gt;
+###### "mode" < string >
 
 Set the client's mode: either "player" or "observer". Observers can
 watch the game but not interact with it. All clients start as a
 "player".
 
-###### "seed" &lt;number&gt;
+###### "seed" < number >
 
 Seed the random number generator with the supplied seed. Use this to
 reproduce a model run.
@@ -209,7 +209,7 @@ and waypoints.
 
 The map's "viewPort" is the currently visible portion of the map.
 
-##### "part" {"id": &lt;player id&gt;}
+##### "part" {"id": < player id >}
 
 A player has left the game. Subsequence "update" events will not
 contain information about this player anymore.
@@ -260,7 +260,7 @@ the lobby.
 The client sends this event to request a stop to the game. When the
 game is aborted all clients return to the lobby.
 
-##### "movementRequest" [ &lt;seq&gt;, &lt;turn&gt;, &lt;thrust&gt;, &lt;dump&gt;, &lt;waypoints&gt; ]
+##### "movementRequest" [ < seq >, < turn >, < thrust >, < dump >, < waypoints > ]
 
 The client must send a movement request every game tick. The movement
 request contains a 5 element array.
