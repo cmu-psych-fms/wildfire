@@ -92,7 +92,7 @@ WebLobby.prototype.onStartGame = function(data) {
 
     document.getElementById('gamearea').style.display = 'block';
     document.getElementById('menu').style.display = 'block';
-    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('lobbyarea').style.display = 'none';
 
     var wc = new WebClient();
     g_game = wc;
@@ -108,7 +108,7 @@ WebLobby.prototype.backToLobby = function() {
     document.getElementById('instructions_area').style.display = 'none';
     document.getElementById('gamearea').style.display = 'none';
     document.getElementById('menu').style.display = 'none';
-    document.getElementById('lobby').style.display = 'block';
+    document.getElementById('lobbyarea').style.display = 'block';
 
     this.socket.on('connect', this.onConnect.bind(this));
     this.socket.on('disconnect', this.onDisconnect.bind(this));

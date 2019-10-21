@@ -14,6 +14,11 @@ function show_instructions () {
     elem.style.display = 'block';
 };
 
+function hide_instructions () {
+    var elem = document.getElementById('instructions_area');
+    elem.style.display = 'none';
+};
+
 function fullscreen () {
     // var elem = document.getElementById('gamearea');
     var elem = document.body;
@@ -50,7 +55,7 @@ window.onload = function(){
     document.getElementById('instructions_area').style.display = 'none';
     document.getElementById('gamearea').style.display = 'none';
     document.getElementById('menu').style.display = 'none';
-    document.getElementById('lobby').style.display = 'block';
+    document.getElementById('lobbyarea').style.display = 'block';
 
     imagesLoaded(g_jq, {}, function () {
         g_lobby = new WebLobby();

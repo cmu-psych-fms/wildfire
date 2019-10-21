@@ -1096,6 +1096,10 @@ WebClient.prototype.drawGameState = function () {
     }
     this.ctx.lineWidth = 1;
 
+    this.ctx.font = "10pt sans-serif";
+    this.ctx.textAlign = "center";
+    this.ctx.textBaseLine = "middle";
+
     for (let id in this.players) {
         if (this.players[id].alive) {
             this.ctx.save();
@@ -1129,6 +1133,17 @@ WebClient.prototype.drawGameState = function () {
             this.ctx.stroke();
 
             this.ctx.restore();
+
+            this.ctx.beginPath();
+            this.ctx.arc(this.players[id].position.x, this.players[id].position.y, 6,
+                         0, Math.PI*2);
+            this.ctx.fillStyle = '#AA2200';
+            this.ctx.fill();
+            var n = Object.keys(this.players).indexOf(id) + 1;
+            this.ctx.fillStyle = '#FFFFFF';
+            this.ctx.fillText(n.toString(), this.players[id].position.x, this.players[id].position.y+4, 5);
+
+
         }
             // shipWireframe.draw (this.ctx,
             //                     this.players[id].position.x,
