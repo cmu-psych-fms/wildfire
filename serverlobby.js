@@ -2,6 +2,8 @@ const EventEmitter = require('events');
 var uuid = require('uuid/v1');
 var MersenneTwister = require('mersenne-twister');
 
+const IDLE_TIME = 5 * 60 * 1000;
+
 function Lobby(log) {
     this.log = log;
     this.clients = [];
@@ -21,6 +23,7 @@ Lobby.prototype.broadcast = function(event, data) {
 };
 
 Lobby.prototype.broadcastRoster = function(join, part) {
+    var now = new Date().getTime();
     var roster = {clients: new Array(this.clients.length),
                   join: join || undefined,
                   part: part || undefined};
@@ -29,6 +32,8 @@ Lobby.prototype.broadcastRoster = function(join, part) {
         roster.clients[i].id = this.clients[i].id;
         roster.clients[i].mode = this.clients[i].mode;
         roster.clients[i].ready = this.clients[i].ready;
+        console.log(now, this.clients[i].activity, IDLE_TIME)
+        roster.clients[i].idle = (now - this.clients[i].activity) > IDLE_TIME;
     }
     this.broadcast('roster', roster);
     this.log.lg('roster', roster);
@@ -39,6 +44,7 @@ Lobby.prototype.addClient = function(socket) {
     var c = {id: uuid(),
              socket: socket,
              ready: false,
+             activity: new Date().getTime(),
              mode: 'player'};
     this.clients.push(c);
     console.log('add ' + c.id);
@@ -65,17 +71,24 @@ Lobby.prototype.delClient = function(client) {
 };
 
 Lobby.prototype.setMode = function(client, data) {
+    client.activity = new Date().getTime();
     if (data === 'player' || data === 'observer')
         client.mode = data;
     this.broadcastRoster();
 };
 
 Lobby.prototype.setReady = function(client, data) {
+    var now = new Date().getTime();
+    client.activity = now;
     if (data) client.ready = true;
     else client.ready = false;
 
     var all = true;
     for (let i=0; i<this.clients.length; i++) {
+        if ((now - this.clients[i].activity) > IDLE_TIME) {
+            console.log('ignoring idler', this.clients[i].id)
+            continue;
+        }
         if (!this.clients[i].ready) {
             all = false;
             break;
@@ -129,6 +142,7 @@ Lobby.prototype.backFromGame = function(clients) {
         c.id = clients[i].id;
         c.mode = clients[i].mode;
         c.socket = clients[i].socket;
+        c.activity = new Date().getTime();
         c.ready = false;
         this.clients.push(c)
         c.socket.on('mode', function (data) { _this.setMode(c, data);});

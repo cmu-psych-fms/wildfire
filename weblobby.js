@@ -10,7 +10,9 @@ WebLobby.prototype.updateHTML = function () {
     for (let i=0; i<this.clients.length; i++) {
         html += '<div class="lobby_'+this.clients[i].mode+'" id="'+this.clients[i].id+'">';
         html += '<div style="background-color: #000000; color: #ffffff; margin-bottom: 5px">'+this.clients[i].mode+'</div>';
-        if (this.clients[i].ready)
+        if (this.clients[i].idle)
+            html += 'Zzzz';
+        else if (this.clients[i].ready)
             html += 'Ready';
         else
             html += 'Client '+(i+1);
