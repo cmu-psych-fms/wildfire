@@ -564,7 +564,6 @@ GameEngine.prototype.addPlayer = function (id) {
                         outstandingMovementRequests: [],
                         retardantBatch: []
                        };
-    console.log(n, this.players[id].position.x, this.players[id].position.y);
 };
 
 GameEngine.prototype.delPlayer = function (id) {
