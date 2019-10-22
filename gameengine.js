@@ -543,9 +543,12 @@ GameEngine.prototype.updatePlayers = function () {
 };
 
 GameEngine.prototype.addPlayer = function (id) {
+    var n = Object.keys(this.players).length + 1;
+    if (n%2 === 1) n = Math.floor(n/2)
+    else n = -n/2;
     this.players[id] = {id: id,
                         angle: this.config.player.startAngle,
-                        position: {x: this.map.width * this.config.map.cellSize / 2,
+                        position: {x: this.map.width * this.config.map.cellSize / 2 + n * 120,
                                    y: this.map.height * this.config.map.cellSize / 2},
 
                         speed: 0,
@@ -561,6 +564,7 @@ GameEngine.prototype.addPlayer = function (id) {
                         outstandingMovementRequests: [],
                         retardantBatch: []
                        };
+    console.log(n, this.players[id].position.x, this.players[id].position.y);
 };
 
 GameEngine.prototype.delPlayer = function (id) {

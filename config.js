@@ -4,7 +4,7 @@ function Config() {
                    };
     this.player = {startPosition: {x: 1500.0, y: 1500.0},
                    startVelocity: {x:0.0, y:0.0},
-                   startAngle: 100,
+                   startAngle: 270,
                    turnRate: 3,
                    // acceleration: 0.02,
                    acceleration: 0.04,
