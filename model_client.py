@@ -126,19 +126,19 @@ class Model(object):
         for r in data['r']:
             if r[0] == 0: # update retardant
                 for i in range(len(self.map['retardant'])):
-                    if self.map['retardant'][i]['x'] == f[1]['x'] and self.map['retardant'][i]['y'] == f[1]['y']:
+                    if self.map['retardant'][i]['x'] == r[1]['x'] and self.map['retardant'][i]['y'] == r[1]['y']:
                         self.map['retardant'][i] = r[1]
             if r[0] == 1: # add retardant
                 self.map['retardant'].append(r[1])
             elif r[0] == 2: # delete retardant
                 for i in range(len(self.map['retardant'])):
-                    if self.map['retardant'][i]['x'] == f[1]['x'] and self.map['retardant'][i]['y'] == f[1]['y']:
+                    if self.map['retardant'][i]['x'] == r[1]['x'] and self.map['retardant'][i]['y'] == r[1]['y']:
                         del self.map['retardant'][i]
                         break
         # Changes to the way-point list
         for wp in data['wp']:
             if wp[0] == 1: # add a waypoint
-                self.map['wayPoints'].append(f[1])
+                self.map['wayPoints'].append(wp[1])
         # The most recent movement sequence that the server has
         # received as of this server update. This is needed by the web
         # client to provide the illusion of lag-free movement for
