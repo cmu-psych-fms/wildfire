@@ -47,7 +47,13 @@ Handler.prototype.onData = function (data) {
 
         var raw = this.buffer.slice(0,idx);
         //console.log('data', raw.trim());
-        var msg = JSON.parse(raw);
+        var msg;
+        try { msg = JSON.parse(raw); }
+        catch (e) {
+            console.log('invalid JSON from', this.socket.remoteAddress);
+            this.disconnect();
+            return;
+        }
         this.emitter.emit(msg[0], msg[1]);
         this.buffer = this.buffer.slice(idx+1);
     }
