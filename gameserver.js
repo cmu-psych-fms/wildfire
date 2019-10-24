@@ -125,7 +125,7 @@ GameServer.prototype.startWithClients = function (clients) {
     if (this.numConnected >= 1) {
         this.startServerUpdates();
         this.startGameTickTimer();
-        console.log('start timers');
+        console.log('start game');
     }
 
     var p = this.getConnectPayload();
@@ -209,7 +209,7 @@ GameServer.prototype.removeListenersAllClients = function () {
 GameServer.prototype.shutdown = function (score) {
     this.stopServerUpdates();
     this.stopGameTickTimer();
-    console.log('shutdown timers');
+    console.log('shutdown game');
     for (let k in this.players) this.players[k].emit('end', {score: score});
     for (let k in this.observers) this.observers[k].emit('end', {score: score});
 

@@ -16,8 +16,8 @@ function Lobby(log) {
 Lobby.prototype = {};
 
 Lobby.prototype.broadcast = function(event, data) {
+    // console.log('broadcast', event);
     for (let i=0; i<this.clients.length; i++) {
-        console.log('broadcast', this.clients[i].id, event);
         this.clients[i].socket.emit(event, data);
     }
 };
@@ -32,7 +32,6 @@ Lobby.prototype.broadcastRoster = function(join, part) {
         roster.clients[i].id = this.clients[i].id;
         roster.clients[i].mode = this.clients[i].mode;
         roster.clients[i].ready = this.clients[i].ready;
-        console.log(now, this.clients[i].activity, IDLE_TIME)
         roster.clients[i].idle = (now - this.clients[i].activity) > IDLE_TIME;
     }
     this.broadcast('roster', roster);
@@ -78,6 +77,7 @@ Lobby.prototype.setMode = function(client, data) {
 };
 
 Lobby.prototype.setReady = function(client, data) {
+    console.log('ready', client.id);
     var now = new Date().getTime();
     client.activity = now;
     if (data) client.ready = true;
