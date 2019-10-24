@@ -41,9 +41,10 @@ Handler.prototype.onClose = function () {
 Handler.prototype.onData = function (data) {
     this.buffer += data;
 
-    var idx = this.buffer.indexOf(this.separator);
+    while (true) {
+        var idx = this.buffer.indexOf(this.separator);
+        if (idx < 0) break;
 
-    if (idx >= 0) {
         var raw = this.buffer.slice(0,idx);
         //console.log('data', raw.trim());
         var msg = JSON.parse(raw);
