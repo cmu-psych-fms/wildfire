@@ -1,3 +1,7 @@
+# @license
+# Copyright 2018,2019 Shawn Betts
+# SPDX-License-Identifier: MIT
+
 from __future__ import division, print_function
 import sys
 import argparse

@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 const Writable = require('stream').Writable;
 const path = require('path');
 const fs = require('fs');

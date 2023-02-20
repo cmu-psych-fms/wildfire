@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 const EventEmitter = require('events');
 var uuid = require('uuid/v1');
 var MersenneTwister = require('mersenne-twister');

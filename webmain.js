@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 var g_game = false, g_lobby;
 
 var g_images = {};

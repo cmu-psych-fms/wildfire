@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 var KEY_LEFT = 1;
 var KEY_RIGHT = 2;
 var KEY_UP = 3;

@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 const args = require('yargs')
       .option('log', {
           describe: "Specify whether or not to save logs",

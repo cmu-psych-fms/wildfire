@@ -366,3 +366,8 @@ with that event.
     >>> movementRequest [362, "r", "f", 1, []]
     <<< end {}
     <<< "roster" {"clients":[{"id":"e54ae1a0-d3fc-11e9-9d57-d1bf25c4edab","mode":"player","ready":false}]}
+
+### License
+
+This game was written by Shawn Betts. It is available under the MIT
+license. See the file `LICENSE` for details.

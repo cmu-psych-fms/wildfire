@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 const path = require('path');
 const EventEmitter = require('events');
 var engine = require('./gameengine');
