@@ -74,3 +74,8 @@ Here is an example:
     (:screen "score" :points 0 :rawPoints 0)
     quit
     Connection closed by foreign host.
+
+### License
+
+This game was written by Shawn Betts. It is available under the MIT
+license. See the file `LICENSE` for details.

@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 const args = require('yargs')
       .option('server', {
           describe: "Specify the URL of the server",

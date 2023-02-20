@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 function Config() {
     this.player = {startPosition: {x: 200.0, y: 200.0},
                    startVelocity: {x:0.0, y:0.0},

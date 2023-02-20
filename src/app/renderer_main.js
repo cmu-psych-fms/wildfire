@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 // Specifying wsEngine as an option to socketio doesn't seem to make
 // it use ws (and not uws). So tell it through the env var.
 process.env.EIO_WS_ENGINE = 'ws';

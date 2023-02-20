@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 if (typeof Config === 'undefined') Config = require('./config').Config;
 if (typeof GameEngineLib === 'undefined') GameEngineLib = require('./gameengine');
 if (typeof GameEngine === 'undefined') GameEngine = GameEngineLib.GameEngine;

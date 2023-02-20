@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 var UPDATE_ADD = 0;
 var UPDATE_DEL = 1;
 

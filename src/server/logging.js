@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 var fs = require('fs');
 var path = require('path');
 var sqlite3 = require('sqlite3').verbose();

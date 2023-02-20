@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 const url = require('url');
 const path = require('path');
 const defaultMenu = require('electron-default-menu');

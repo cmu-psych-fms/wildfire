@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 const net = require('net');
 const client = require('./client');
 // Experiment = require("./experiment").Experiment;

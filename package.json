@@ -11,7 +11,7 @@
     "pkg": "electron-packager . Geospatial --overwrite --ignore='\\.dmg$' --ignore=.gitignore$ --ignore=/upload.sh$ --ignore='/aup($|/)' --ignore='/db-scripts($|/)' --ignore='/perl($|/)' --ignore='/xcf($|/)' --ignore=/notes.txt$ --ignore=/create-dmg.sh$ --ignore='/contrib($|/)' --ignore=comm.txt --ignore='/src/server/data($|/)' --ignore=/TODO$"
   },
   "author": "Shawn Betts",
-  "license": "GVPL2",
+  "license": "MIT",
   "dependencies": {
     "electron-default-menu": "^1.0.1",
     "electron-settings": "^3.2.0",

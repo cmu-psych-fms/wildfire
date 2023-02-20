@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 function ScoreScreen (game_number, conversion) {
     this.screen_id = 'score';
     this.game_number = game_number;

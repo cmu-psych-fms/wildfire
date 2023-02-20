@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 var surveyHelper = {
     radioValue: function (name) {
         return $('input[name='+name+']:checked').val() || '';

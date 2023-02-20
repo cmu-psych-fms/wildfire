@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 var uuid = require('uuid/v1');
 var fs = require('fs');
 var path = require('path');

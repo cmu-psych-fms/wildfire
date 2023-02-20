@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
 function Wireframe(points, runs, color) {
     Object.call(this);
     this.points = points;

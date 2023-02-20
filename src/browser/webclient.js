@@ -1,3 +1,10 @@
+/**
+ * @license
+ * Copyright 2018,2019 Shawn Betts
+ * SPDX-License-Identifier: MIT
+**/
+
+
 //Code below is from Three.js, and sourced from links below
 
     // http://paulirish.com/2011/requestanimationframe-for-smart-animating/
