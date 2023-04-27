@@ -97,6 +97,15 @@ WebClient.prototype.begin = function (socket, gameState) {
     document.addEventListener('keyup', this.keyUpFunction);
     document.getElementById('abort').addEventListener('click', this.abortFunction);
 
+    // DEBUG
+    document.addEventListener("click", function(ev) {
+        console.log("%s, %s; %s, %s; %s, %s; %s, %s; %s, %s",
+                    ev.clientX, ev.clientY,
+                    ev.layerX, ev.layerY,
+                    ev.offsetX, ev.offsetY,
+                    ev.pageX, ev.pageY,
+                    ev.screenX, ev.screenY);
+    });
 
     this.canvas = document.getElementById('gamecanvas');
     this.resizeCanvas();
@@ -285,7 +294,6 @@ WebClient.prototype.releaseGameKey = function (k) {
         this.keyState[k] = 0;
     }
 };
-
 
 WebClient.prototype.onKeyDown = function (ev) {
     if (ev.which === 27) {

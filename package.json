@@ -11,6 +11,7 @@
   "dependencies": {
     "express": "^4.16.3",
     "mersenne-twister": "^1.1.0",
+    "nodemon": "^2.0.22",
     "pngjs": "^3.3.2",
     "socket.io": "^2.0.4",
     "uuid": "^3.2.1",
