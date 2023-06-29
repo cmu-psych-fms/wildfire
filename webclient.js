@@ -92,21 +92,12 @@ WebClient.prototype.begin = function (socket, gameState) {
     // So we can remove them later
     this.keyDownFunction = this.onKeyDown.bind(this);
     this.keyUpFunction = this.onKeyUp.bind(this);
+    this.clickFunction = this.onClick.bind(this);
     this.abortFunction = this.onClickAbort.bind(this);
     document.addEventListener('keydown', this.keyDownFunction);
     document.addEventListener('keyup', this.keyUpFunction);
+    document.addEventListener("click", this.clickFunction);
     document.getElementById('abort').addEventListener('click', this.abortFunction);
-
-    // DEBUG
-    document.addEventListener("click", function(ev) {
-        console.log("%s, %s; %s, %s; %s, %s; %s, %s; %s, %s",
-                    ev.clientX, ev.clientY,
-                    ev.layerX, ev.layerY,
-                    ev.offsetX, ev.offsetY,
-                    ev.pageX, ev.pageY,
-                    ev.screenX, ev.screenY);
-    });
-
     this.canvas = document.getElementById('gamecanvas');
     this.resizeCanvas();
     window.addEventListener('resize', this.resizeCanvas.bind(this));
@@ -137,6 +128,7 @@ WebClient.prototype.resizeCanvas = function () {
         this.canvas.height = 500;
         this.canvas.width = Math.min(window.innerWidth, window.innerHeight);
         this.canvas.height = Math.min(window.innerWidth, window.innerHeight);
+        document.canvasHalfWidth = this.canvas.width / 2;
     }
 };
 
@@ -271,8 +263,10 @@ WebClient.prototype.cancelUpdates = function () {
     this.network.socket.off('end');
     this.network.socket.off('viewport');
 
+    cnsole.log("removing");
     document.removeEventListener('keydown', this.keyDownFunction);
     document.removeEventListener('keyup', this.keyUpFunction);
+    document.removeEventListener("click", this.clickFunction);
     document.getElementById('abort').removeEventListener('click', this.abortFunction);
 
     window.cancelAnimationFrame(this.updateid);
@@ -397,6 +391,13 @@ WebClient.prototype.onKeyUp = function (ev) {
             this.keyState[k] = 0;
         }
     }
+};
+
+WebClient.prototype.onClick = function() {
+    document.addEventListener("click", function(ev) {
+        console.log("angle", Math.atan2(ev.offsetY - document.canvasHalfWidth,
+                                        ev.offsetX - document.canvasHalfWidth));
+    });
 };
 
 WebClient.prototype.onClickAbort = function () {
