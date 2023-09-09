@@ -5,3 +5,5 @@ Geospatial-darwin-x64*
 aup/
 src/server/data
 nohup.out
+original
+*.log
