@@ -14,7 +14,8 @@
   (:use :common-lisp :alexandria :iterate :ppcre
         :spinneret :hunchentoot :smackjack :json :uuid)
   (:local-nicknames (:css :css-lite) (:v :vom) (:g :geometry))
-  (:import-from :ps ps:*ps-lisp-library* ps:ps ps:ps* ps:@ ps:chain ps:var ps:new)
+  (:import-from :ps ps:*ps-lisp-library* ps:ps ps:ps* ps:defpsmacro
+                ps:@ ps:chain ps:var ps:new)
   (:export #:start-server #:stop-server))
 
 (in-package :wildfire)
@@ -32,8 +33,8 @@
 (defparameter +access-log+ "wildfire.log")
 (defparameter +view-size+ 801)          ; pixels, view is always square
 (defparameter +cell-size+ 20)           ; pixels, cells are always square
-(defparameter +cell-type-names+ '((grass 1 #\Space) (ash 0) (water 0)  (tree 1) (road 0)
-                                  (rock 0 #\K) (house 1)))
+(defparameter +cell-type-names+ '((grass 1) (ash 0) (water 0) (tree 1) (road 0)
+                                  (rock 0) (house 1)))
 (defparameter +default-cell-type+ (position 'grass +cell-type-names+ :key #'first))
 (defparameter +image-template+ "images/~(~A~).png")
 (defparameter +region-types+ '((grass) (lake water) (river water t) (forest tree)
@@ -50,23 +51,20 @@
 
 (defstruct (cell-type (:conc-name ct-) (:print-object))
   name
-  flamability
+  flamability                           ; TODO need more structure to fire propagation
   image-path
-  character
   index)
 
-(define-object-printer cell-type (ct) "~S ~C [~D]"
+(define-object-printer cell-type (ct) "~S [~D]"
   (ct-name ct)
-  (ct-character ct)
   (ct-index ct))
 
 (defparameter +cell-types+
-  (iter (for (name flamability char) :in +cell-type-names+)
+  (iter (for (name flamability) :in +cell-type-names+)
         (for i :from 0)
         (collect (make-cell-type :name name
                                  :flamability flamability
                                  :image-path (format nil +image-template+ name)
-                                 :character (or char (aref (symbol-name name) 0))
                                  :index i)
           :into result)
         (finally (return (coerce result 'vector)))))
@@ -202,17 +200,6 @@
                                                    keys))))))
   name)
 
-(defun ascii-map (g &optional (s *standard-output*))
-  ;; a testing and debugging aid
-  (iter (with w := (game-width g))
-        (with h := (game-height g))
-        (initially (format s "~A (~D×~D):~2%  ~v{_~}~%" (game-name g) w h w '(t)))
-        (for y :below h)
-        (format s " |~{~C~}|~%"
-                (iter (for x :below w)
-                      (collect (ct-character (aref +cell-types+ (aref (game-map g)  x y))))))
-        (finally (format s "  ~v{-~}~%" w '(t)))))
-
 
 
 (defstruct (player (:constructor %make-player)
@@ -286,11 +273,11 @@
   `(defun-ajax ,name ,args (*ajax* :method :post :callback-data :json)
      (encode-json-to-string (progn ,@body))))
 
-;; (defmacro defun-callback (name (&rest args) (json-var &rest arg-values) &body body)
-;;   ;; `(defun-js ,name (,@args)
-;;   ;;    ((@ smackjack ,name) ,@arg-values (lambda (,json-var) ,@body))))
-;;   (append-js `(defun ,name (,@args)
-;;                 ((@ smackjack ,name) ,@arg-values (lambda (,json-var) ,@body)))))
+(defmacro defun-callback (name (&rest args) (json-var &rest arg-values) &body body)
+  ;; `(defun-js ,name (,@args)
+  ;;    ((@ smackjack ,name) ,@arg-values (lambda (,json-var) ,@body))))
+  (append-js `(defun ,name (,@args)
+                ((@ smackjack ,name) ,@arg-values (lambda (,json-var) ,@body)))))
 
 (defun not-found ()
   (acceptor-status-message *acceptor* +http-not-found+))
@@ -340,17 +327,15 @@
                (push p (mission-players m)))
             (t (setf m (make-mission g p mission)))))
     (push-js `(progn
-                (var map-width ,(game-width g))
-                (var map-height ,(game-height g))))
+                (var dimensions '(,(game-width g) ,(game-height g)))
+                (var position '(,(game-start-x g) ,(game-start-x g)))))
     (append-js `(defun load-test ()
                   (when (eql (decf load-count) 0)
                     (render ',(iter (for x :below (game-width g))
                                     (collect (iter (for y :below (game-height g))
                                                    (collect (ct-index (cell-type
                                                                        (aref (mission-map m)
-                                                                             x y)))))))
-                            ,(game-start-x g)
-                            ,(game-start-y g)))))
+                                                                             x y)))))))))))
     (with-page ("Mission")
       (with-html
         (:div :style "text-align: center;"
@@ -362,6 +347,11 @@
                  :height (* (game-height g) +cell-size+)
                  :width (* (game-width g) +cell-size+))))))
 
+(defpsmacro with-point ((x y) value &body body)
+  `(let (,x ,y)
+     (setf (list ,x ,y) ,value)
+     ,@body))
+
 (push-js `(var images (map load-cell-image ',(map 'list #'ct-image-path +cell-types+))))
 
 (append-js '(defun load-cell-image (path)
@@ -370,38 +360,40 @@
                (setf (@ img src) path)
                img)))
 
-(append-js `(defun display-map (x y)
+(append-js `(defun display-map ()
               (let ((ctx (chain document (get-element-by-id "view") (get-context "2d"))))
-                ((@ ctx clear-rect) 0 0 (chain ctx canvas width) (chain ctx canvas height))
-                ((@ ctx draw-image) (chain document (get-element-by-id "map"))
-                 (- (* x ,+cell-size+) ,(round +view-size+ 2))
-                 (- (* y ,+cell-size+) ,(round +view-size+ 2))
-                 ,+view-size+ ,+view-size+
-                 0 0
-                 ,+view-size+ ,+view-size+)
-                (setf (@ ctx fill-style) "red")
-                ((@ ctx fill-rect) 397 397 7 7))))
+                (with-point (x y) position
+                  ((@ ctx clear-rect) 0 0 (chain ctx canvas width) (chain ctx canvas height))
+                  ((@ ctx draw-image) (chain document (get-element-by-id "map"))
+                   (- (* x ,+cell-size+) ,(round +view-size+ 2))
+                   (- (* y ,+cell-size+) ,(round +view-size+ 2))
+                   ,+view-size+ ,+view-size+
+                   0 0
+                   ,+view-size+ ,+view-size+)
+                  (setf (@ ctx fill-style) "red")
+                  ((@ ctx fill-rect) 397 397 7 7)))))
 
 (append-js `(defun render (map-data start-x start-y)
-              (loop :with ctx := (chain document (get-element-by-id "map") (get-context "2d"))
-                    :for y :from 0 :below map-height
-                    :do (loop :for x :from 0 :below map-width
-                              :do ((@ ctx draw-image)
-                                   (aref images (aref map-data x y))
-                                   (* x ,+cell-size+)
-                                   (* y ,+cell-size+)
-                                   ,+cell-size+
-                                   ,+cell-size+))
-                    :finally (display-map start-x start-y))))
+              (with-point (w h) dimensions
+                (loop :with ctx := (chain document (get-element-by-id "map") (get-context "2d"))
+                      :for y :from 0 :below h
+                      :do (loop :for x :from 0 :below w
+                                :do ((@ ctx draw-image)
+                                     (aref images (aref map-data x y))
+                                     (* x ,+cell-size+)
+                                     (* y ,+cell-size+)
+                                     ,+cell-size+
+                                     ,+cell-size+))
+                      :finally (display-map start-x start-y)))))
 
 (defajax clicked (x y)
   (v:info "clicked: ~D, ~D" x y)
   `((:x . ,x) (:y . ,y)))
 
-;; (defun-callback clicked (x y) (json (@ event offset-x) (@ event offset-y))
-;;   (let ((ctx (chain document (get-element-by-id "canvas") (get-context "2d"))))
-;;     (setf (@ ctx font) "48px serif")
-;;     ((@ ctx fill-text) ((@ *JSON* stringify) json) 50 50)))
+(defun-callback clicked (x y) (json (@ event offset-x) (@ event offset-y))
+  (let ((ctx (chain document (get-element-by-id "view") (get-context "2d"))))
+    (setf (@ ctx font) "48px serif")
+    ((@ ctx fill-text) ((@ *JSON* stringify) json) 50 50)))
 
 (append-js '(setf (@ window onload) load-test))
 
