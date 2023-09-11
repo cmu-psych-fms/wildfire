@@ -16,7 +16,7 @@
   (:local-nicknames (:css :css-lite) (:v :vom) (:g :geometry))
   (:import-from :ps ps:*ps-lisp-library* ps:ps ps:ps* ps:defpsmacro
                 ps:@ ps:chain ps:var ps:new)
-  (:export #:start-server #:stop-server))
+  (:export #:start-server #:stop-server #:defgame))
 
 (in-package :wildfire)
 
@@ -309,7 +309,7 @@
 
 (push-js `(progn
             (var +cell-size+ ,+cell-size+)
-            (var load-count ,(1+ (length +cell-types+))))) ; how many things still need to load
+            (var load-count ,(+ (length +cell-types+) 2)))) ; how many things still need to load
 
 (define-easy-handler (mission :uri "/") (game mission player)
   (let* ((*js* *js*)            ; all parenscript added here is only local to this mission
@@ -327,15 +327,18 @@
                (push p (mission-players m)))
             (t (setf m (make-mission g p mission)))))
     (push-js `(progn
-                (var dimensions '(,(game-width g) ,(game-height g)))
-                (var position '(,(game-start-x g) ,(game-start-x g)))))
+                (var position '(,(* (game-start-x g) +cell-size+)
+                                ,(* (game-start-x g) +cell-size+)))
+                (var speed '(0 0))
+                (var target '(0 0))))
     (append-js `(defun load-test ()
                   (when (eql (decf load-count) 0)
                     (render ',(iter (for x :below (game-width g))
                                     (collect (iter (for y :below (game-height g))
                                                    (collect (ct-index (cell-type
                                                                        (aref (mission-map m)
-                                                                             x y)))))))))))
+                                                                             x y)))))))
+                            ,(game-width g) ,(game-height g)))))
     (with-page ("Mission")
       (with-html
         (:div :style "text-align: center;"
@@ -352,9 +355,11 @@
      (setf (list ,x ,y) ,value)
      ,@body))
 
-(push-js `(var images (map load-cell-image ',(map 'list #'ct-image-path +cell-types+))))
+(push-js `(progn
+            (var images (map load-image ',(map 'list #'ct-image-path +cell-types+)))
+            (var dragons (load-image "images/dragons.jpg"))))
 
-(append-js '(defun load-cell-image (path)
+(append-js '(defun load-image (path)
              (let ((img (new (-image))))
                (setf (@ img onload) load-test)
                (setf (@ img src) path)
@@ -362,29 +367,51 @@
 
 (append-js `(defun display-map ()
               (let ((ctx (chain document (get-element-by-id "view") (get-context "2d"))))
+                ((@ ctx draw-image) dragons 0 0 ,+view-size+ ,+view-size+)
                 (with-point (x y) position
-                  ((@ ctx clear-rect) 0 0 (chain ctx canvas width) (chain ctx canvas height))
+                  ;; (setf (@ ctx fill-style) "black")
+                  ;; ((@ ctx fill-rect) 0 0 ,+view-size+ ,+view-size+)
                   ((@ ctx draw-image) (chain document (get-element-by-id "map"))
-                   (- (* x ,+cell-size+) ,(round +view-size+ 2))
-                   (- (* y ,+cell-size+) ,(round +view-size+ 2))
+                   (- x ,(round +view-size+ 2))
+                   (- y ,(round +view-size+ 2))
                    ,+view-size+ ,+view-size+
                    0 0
                    ,+view-size+ ,+view-size+)
                   (setf (@ ctx fill-style) "red")
                   ((@ ctx fill-rect) 397 397 7 7)))))
 
-(append-js `(defun render (map-data start-x start-y)
-              (with-point (w h) dimensions
-                (loop :with ctx := (chain document (get-element-by-id "map") (get-context "2d"))
-                      :for y :from 0 :below h
-                      :do (loop :for x :from 0 :below w
-                                :do ((@ ctx draw-image)
-                                     (aref images (aref map-data x y))
-                                     (* x ,+cell-size+)
-                                     (* y ,+cell-size+)
-                                     ,+cell-size+
-                                     ,+cell-size+))
-                      :finally (display-map start-x start-y)))))
+(append-js '(var last-update nil))
+
+(append-js `(defun update (ms)
+              (when (null last-update)
+                (setf last-update ms))
+              (with-point (x y) position
+                (with-point (tx ty) target
+                  (with-point (sx sy) speed
+                    (unless (= sx sy 0)
+                      (let ((d (/ (- ms last-update) 1000))) ; speed is per second not ms
+                        (labels ((change (spd cur lim)
+                                   (cond ((and (> spd 0) (> lim cur))
+                                          (min (+ cur (* spd d)) lim))
+                                         ((and (< spd 0) (< lim cur))
+                                          (max (+ cur (* spd d)) lim))
+                                         (t cur))))
+                          (setf x (change sx x tx))
+                          (setf y (change sy y ty))))))
+                  (setf position (list x y))
+                  (display-map)
+                  (unless (and (= x tx) (= y ty))
+                    ((@ window request-animation-frame) update))))))
+
+(append-js `(defun render (map-data w h)
+              (loop :with ctx := (chain document (get-element-by-id "map") (get-context "2d"))
+                    :for y :from 0 :below h
+                    :do (loop :for x :from 0 :below w
+                              :do ((@ ctx draw-image)
+                                   (aref images (aref map-data x y))
+                                   (* x ,+cell-size+) (* y ,+cell-size+)
+                                   ,+cell-size+ ,+cell-size+))
+                    :finally ((@ window request-animation-frame) update))))
 
 (defajax clicked (x y)
   (v:info "clicked: ~D, ~D" x y)
