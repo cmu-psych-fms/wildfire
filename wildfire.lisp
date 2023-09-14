@@ -27,21 +27,30 @@
 ;; Configuration
 
 (defparameter *debug* nil)
+(defparameter *data-directory* *default-pathname-defaults*)
+(defparameter *access-log* "wildfire.log")
+(defparameter *default-game* 'test-game)
 
-(defparameter +default-port+ 8978)
-(defparameter +data-directory+ *default-pathname-defaults*)
-(defparameter +access-log+ "wildfire.log")
-(defparameter +view-size+ 800)          ; pixels, view is always square
-(defparameter +plane-axis+ '(47 47))    ; pixels, point about which to spin plane
-(defparameter +cell-size+ 20)           ; pixels, cells are always square
-(defparameter +cell-type-names+ '((grass 1) (ash 0) (water 0) (tree 1) (road 0)
-                                  (rock 0) (house 1)))
-(defparameter +default-cell-type+ (position 'grass +cell-type-names+ :key #'first))
-(defparameter +image-template+ "images/~(~A~).png")
-(defparameter +region-types+ '((grass) (lake water) (river water t) (forest tree)
-                               (road road t) (outcrop rock) (houses house)))
-(defparameter +default-game+ 'test-game)
-(defparameter +default-map-size+ 100)    ; cells, default for both width and height
+(define-constant +default-port+ 8978)
+(define-constant +view-size+ 800)                     ; in pixels, view is always square
+(define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point about which to spin plane
+(define-constant +cell-size+ 20)                      ; in pixels, cells are always square
+(define-constant  +default-map-size+ 100) ; in cells, default for both width and height
+
+(define-constant +cell-type-names+
+    '((grass 1) (ash 0) (water 0) (tree 1) (road 0) (rock 0) (house 1))
+  :test #'equal)
+(define-constant +default-cell-type+ (position 'grass +cell-type-names+ :key #'first))
+(define-constant +image-template+ "images/~(~A~).png" :test #'string=)
+(define-constant +region-types+
+    '((grass) (lake water) (river water t) (forest tree) (road road t) (outcrop rock)
+      (houses house))
+  :test #'equal)
+
+(define-constant +tolerance+ 1.0d-12)
+
+(defun ~= (n &rest more)
+  (every (lambda (x) (< (abs (- x n)) +tolerance+)) more))
 
 
 
@@ -203,30 +212,6 @@
 
 
 
-(defstruct (player (:constructor %make-player)
-                   (:print-object))
-  id
-  name)
-
-(define-object-printer player (p) "~A~:[ (~A)~;~]"
-                       (player-name p)
-                       (equalp (player-name p) (player-id p))
-                       (player-id p))
-
-(defparameter *players-by-id* (make-hash-table :test 'equalp))
-(defparameter *players-by-name* (make-hash-table :test 'equalp))
-
-(defun make-player (&optional name)
-  (let* ((id (format nil "player-~A" (make-v1-uuid)))
-         (result (%make-player :id id :name (or name id))))
-    (setf (gethash (player-name result) *players-by-name*) result)
-    (setf (gethash id *players-by-id*) result)))
-
-(defun get-player (id &optional by-name-p)
-  (gethash id (if by-name-p *players-by-name* *players-by-id*)))
-
-
-
 (defstruct (mission (:constructor %make-mission)
                     (:print-object))
   id
@@ -241,7 +226,7 @@
 
 (defparameter *missions* (make-hash-table :test 'equalp))
 
-(defun make-mission (game initial-player &optional id)
+(defun make-mission (game &optional id)
   (unless id
     (setf id (format nil "mission-~A" (make-v1-uuid))))
   (iter (with map := (make-array (list (game-width game) (game-height game))))
@@ -250,11 +235,39 @@
         (iter (for x :from 0 :below (game-width game))
               (setf (aref map x y) (make-cell x y (aref (game-map game) x y))))
         (finally (setf (mission-map result) map)
-                 (push initial-player (mission-players result))
+                 (setf (gethash id *missions*) result)
                  (return result))))
 
 (defun get-mission (id)
   (gethash id *missions*))
+
+
+
+(defstruct (player (:constructor %make-player)
+                   (:print-object))
+  id
+  name
+  mission
+  (speed 100)) ; 30
+
+(define-object-printer player (p) "~A~:[ (~A)~;~*~] ~A"
+                       (player-name p)
+                       (equalp (player-name p) (player-id p))
+                       (player-id p)
+                       (player-mission p))
+
+(defparameter *players-by-id* (make-hash-table :test 'equalp))
+(defparameter *players-by-name* (make-hash-table :test 'equalp))
+
+(defun make-player (mission &optional name)
+  (let* ((id (format nil "player-~A" (make-v1-uuid)))
+         (result (%make-player :id id :name (or name id) :mission mission)))
+    (push result (mission-players mission))
+    (setf (gethash (player-name result) *players-by-name*) result)
+    (setf (gethash id *players-by-id*) result)))
+
+(defun get-player (id &optional by-name-p)
+  (gethash id (if by-name-p *players-by-name* *players-by-id*)))
 
 
 
@@ -270,15 +283,19 @@
 
 (defparameter *ajax* (make-instance 'ajax-processor :server-uri "/ajax"))
 
-(defmacro defajax (name args &body body)
-  `(defun-ajax ,name ,args (*ajax* :method :post :callback-data :json)
-     (encode-json-to-string (progn ,@body))))
-
-(defmacro defun-callback (name (&rest args) (json-var &rest arg-values) &body body)
-  ;; `(defun-js ,name (,@args)
-  ;;    ((@ smackjack ,name) ,@arg-values (lambda (,json-var) ,@body))))
-  (append-js `(defun ,name (,@args)
-                ((@ smackjack ,name) ,@arg-values (lambda (,json-var) ,@body)))))
+(defmacro defajax (name (&rest bindings) ((var) &body js-code) &body body)
+  (multiple-value-bind (args values)
+      (iter (for (v . b) :in bindings)
+            (unless (and (symbolp v) (not (keywordp v)))
+              (error "Variable name ~S is not a non-keyword symbol" v))
+            (collect v :into vars)
+            (collect `(progn ,@b) :into bodies)
+            (finally (return (values vars bodies))))
+    `(progn
+       (append-js '(defun ,name (,@args)
+                    ((@ smackjack ,name) ,@values (lambda (,var) ,@js-code))))
+       (defun-ajax ,name (,@args) (*ajax* :method :post :callback-data :json)
+         (encode-json-to-string (progn ,@body))))))
 
 (defun not-found ()
   (acceptor-status-message *acceptor* +http-not-found+))
@@ -306,7 +323,14 @@
   (with-page ("Error")
     (with-html
       (:div :style "text-align:center;font-size:larger;color:red;margin-top:6ex"
-      (apply #'format nil fmt args)))))
+            (apply #'format nil fmt args)))))
+
+(append-js `(defun clog (&rest args)
+              (apply (@ console log) args)))
+
+(append-js `(defun dlog (&rest args)
+              (when debug
+                (apply clog args))))
 
 (push-js `(var load-count ,(+ (length +cell-types+) 2 1))) ; number of images + 1 document
 
@@ -326,20 +350,20 @@
 
 (define-easy-handler (mission :uri "/") (game mission player)
   (let* ((*js* *js*)            ; all parenscript added here is only local to this mission
-         (g (get-game (or game +default-game+)))
-         (p (or (get-player player t) (make-player player)))
-         (m (get-mission mission)))
+         (g (get-game (or game *default-game*)))
+         (m (or (get-mission mission) (make-mission g mission)))
+         (p (or (get-player player t) (make-player m player))))
     (labels ((fail (fmt &rest args)
                (return-from mission (apply #'failure fmt args))))
       (unless g
         (fail "No game named ~A available." game))
-      (cond (m (unless (or (null game) (equalp (mission-game m) g))
-                 (fail "Mission ~A is not playing game ~A." mission game))
-               (when (member p (mission-players m) :test #'equalp)
-                 (fail "Player ~A is already in mission ~A." player mission))
-               (push p (mission-players m)))
-            (t (setf m (make-mission g p mission)))))
+      (unless (eq (mission-game m) g)
+        (fail "Mission ~A is not playing game ~A." mission game))
+      (unless (member p (mission-players m))
+        (fail "Player ~A is not a member of mission ~A" player mission)))
     (push-js `(progn
+                (var debug ,(if *debug* t 'false))
+                (var player ,(player-id p))
                 (var position '(,(* (game-start-x g) +cell-size+)
                                 ,(* (game-start-x g) +cell-size+)))
                 (var target position)))
@@ -384,9 +408,14 @@
                       ((@ ctx draw-image) plane ,(- xp) ,(- yp))
                       ((@ ctx restore))))))))
 
+(append-js `(defun animation-update () ((@ window request-animation-frame) update)))
+
 (append-js '(var last-update nil))
 
-(append-js `(defun update (ms)
+(append-js `(defun update (&optional ms)
+              (when (eq ms undefined)
+                (animation-update)
+                (return-from update))
               (when (null last-update)
                 (setf last-update ms))
               (with-point (x y) position
@@ -404,9 +433,10 @@
                           (setf y (change sy y ty))))))
                   (setf position (list x y))
                   (display-map)
+                  (setf last-update ms)
                   (if (and (= x tx) (= y ty))
-                      (setf speed '(0 0))
-                      ((@ window request-animation-frame) update))))))
+                      (setf speed '(0 0) last-update nil)
+                      (animation-update))))))
 
 (append-js `(defun render (map-data w h)
               (loop :with ctx := (chain document (get-element-by-id "map") (get-context "2d"))
@@ -416,16 +446,41 @@
                                    (aref images (aref map-data x y))
                                    (* x ,+cell-size+) (* y ,+cell-size+)
                                    ,+cell-size+ ,+cell-size+))
-                    :finally ((@ window request-animation-frame) update))))
+                    :finally (progn
+                               (dlog "map rendered")
+                               (animation-update)))))
 
-(defajax clicked-map (x y)
-  (v:info "clicked-map: ~D, ~D" x y)
-  `((:x . ,x) (:y . ,y)))
+(append-js `(setf (@ document onmousemove)
+                  (lambda () (setf (chain document body style cursor) "default"))))
 
-(defun-callback clicked-map (x y) (json (@ event offset-x) (@ event offset-y))
-  (let ((ctx (chain document (get-element-by-id "view") (get-context "2d"))))
-    (setf (@ ctx font) "48px serif")
-    ((@ ctx fill-text) ((@ *JSON* stringify) json) 50 50)))
+(defajax clicked-map ((where (list (@ event offset-x) (@ event offset-y)))
+                      (player-id player)
+                      (current position))
+    ((json)
+      (dlog "clicked" ((@ +json+ stringify) json))
+      (when json
+        (setf target (or (@ json target) target))
+        (setf angle (or (@ json angle) angle))
+        (setf speed (@ json speed))
+        (setf (chain document body style cursor) "none")
+        (update)))
+  (v:debug "clicked ~S ~S ~S" where current player-id)
+  (let* ((p (get-player player-id))
+         (map (mission-map (player-mission p)))
+         (d (mapcar #'- where `(,#0=(/ +view-size+ 2.0) ,#0#)))
+         (new-pos (mapcar #'+ current d)))
+    (when (every #'<
+                 `(,least-negative-single-float ,least-negative-single-float)
+                 new-pos
+                 (mapcar #'* (array-dimensions map) `(,+cell-size+ ,+cell-size+)))
+      (let* ((movep (not (apply #'~= 0 d)))
+             (angle (and movep (- (/ pi 2) (apply #'atan d)))))
+        `((:target . ,(and movep new-pos))
+          (:angle . ,angle)
+          (:speed . ,(if movep
+                         (mapcar (lambda (x) (* (player-speed p) x))
+                                 `(,(cos angle) ,(sin angle)))
+                         '(0 0))))))))
 
 (append-js '(setf (@ window onload) load-test))
 
@@ -447,22 +502,24 @@
          (setf *server* nil))
         (t (v:warn "No server was running"))))
 
-(defun ensure-consistency ()
-  (assert (get-game +default-game+)))
+(defun enable-debug (&optional (debug t))
+  (cond ((null debug) (setf *debug* nil))
+        ((not (realp debug)) (setf *debug* t))
+        (t (setf debug (clamp (round debug) 0 4))
+           (setf *debug* (if (zerop debug) t debug))))
+  (v:config :wildfire (cond ((null *debug*) :info)
+                            ((integerp *debug*) (make-keyword #?"DEBUG${*debug*}"))
+                            (t :debug))))
 
 (defun start-server (&key (port *port*) debug)
-  (when debug
-    (setf debug (or (first (member debug '(:debug1 :debug2 :debug3 :debug))) :debug)))
-  (v:config :wildfire (or debug :info))
-  (setf *debug* debug)
-  (ensure-consistency)
+  (enable-debug debug)
   (setf *port* port)
   (when *server*
     (v:warn "Server ~S already running, restarting it" *server*)
     (stop-server))
   (setf *server* (start (make-instance 'easy-acceptor
-                                       :document-root +data-directory+
-                                       :access-log-destination +access-log+
+                                       :document-root *data-directory*
+                                       :access-log-destination *access-log*
                                        :port port)))
   (v:info "Started ~A" *server*)
   *server*)
@@ -476,3 +533,5 @@
          (road (lincoln-highway) 40 0  4 99)
          (outcrop (bear-rocks) 45 44  49 46  47 51  46 49)
          (houses (levittown) 61 45  69 45  69 49  61 49))
+
+(assert (get-game *default-game*))
