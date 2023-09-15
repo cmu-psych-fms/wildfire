@@ -16,7 +16,7 @@
   (:local-nicknames (:css :css-lite) (:v :vom) (:g :geometry))
   (:import-from :ps ps:*ps-lisp-library* ps:ps ps:ps* ps:defpsmacro
                 ps:@ ps:chain ps:var ps:new)
-  (:export #:start-server #:stop-server #:defgame))
+  (:export #:start-server #:stop-server #:run-standalone #:defgame))
 
 (in-package :wildfire)
 
@@ -523,6 +523,10 @@
                                        :port port)))
   (v:info "Started ~A" *server*)
   *server*)
+
+(defun run-standalone ()
+  (start-server)
+  (loop (sleep 100000000)))
 
 
 

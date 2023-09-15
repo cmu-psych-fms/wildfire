@@ -1,3 +1,3 @@
 #!/bin/bash
 
-sbcl --load wildfire --eval '(wildfire:start-server)'
+sbcl --load wildfire --eval '(wildfire:run-standalone)'
