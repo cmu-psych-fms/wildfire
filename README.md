@@ -11,3 +11,6 @@ and when we do this README will become a bit more useful.
 ### Compatibility
 
 This *should* be playable in any major browser released since 2018, but will likely fail in earlier browser versions.
+
+The server-side code has only been tested in SBCL, but *should* run fine in any modern Common Lisp implementation
+that can run USOCKET and Bordeaux Threads.

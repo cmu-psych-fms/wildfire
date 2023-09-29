@@ -35,7 +35,7 @@
 (define-constant +view-size+ 800)                     ; in pixels, view is always square
 (define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point about which to spin plane
 (define-constant +cell-size+ 20)                      ; in pixels, cells are always square
-(define-constant  +default-map-size+ 100) ; in cells, default for both width and height
+(define-constant +default-map-size+ 100) ; in cells, default for both width and height
 
 (define-constant +cell-type-names+
     '((grass 1) (ash 0) (water 0) (tree 1) (road 0) (rock 0) (house 1))
@@ -256,18 +256,39 @@
                        (player-id p)
                        (player-mission p))
 
-(defparameter *players-by-id* (make-hash-table :test 'equalp))
-(defparameter *players-by-name* (make-hash-table :test 'equalp))
+(defparameter *players* (make-hash-table :test 'equalp))
 
 (defun make-player (mission &optional name)
   (let* ((id (format nil "player-~A" (make-v1-uuid)))
          (result (%make-player :id id :name (or name id) :mission mission)))
     (push result (mission-players mission))
-    (setf (gethash (player-name result) *players-by-name*) result)
-    (setf (gethash id *players-by-id*) result)))
+    (setf (gethash id *players*) result)))
 
-(defun get-player (id &optional by-name-p)
-  (gethash id (if by-name-p *players-by-name* *players-by-id*)))
+(defun get-player (id)
+  (gethash id *players*))
+
+(defun get-mission-player (name mission)
+  (find name (mission-players mission) :key #'player-name :test #'equalp))
+
+
+
+(defun join-mission (mission &optional player-name game)
+  "Returns a player named PLAYER-NAME playing a mission with id MISSION.
+If PLAYER-NAME is not supplied or is null a new uuid is allocated and used for the name.
+If such a mission already exists it is joined, and otherwise one is created, playing the
+game named GAME. Signals a SIMPLE-ERROR if the mission already exists and is not playing
+the game name, if the game does not exist, or if a player of the same name has already
+joined the mission."
+  (unless game
+    (setf game *default-game*))
+  (if-let ((g (get-game game)))
+    (let ((m (or (get-mission mission) (make-mission g mission))))
+      (unless (eq (mission-game m) g)
+        (error "Mission ~A is not playing game ~A." mission game))
+      (when (get-mission-player player-name m)
+        (error "A player named ~A is already in mission ~A" player-name mission))
+      (make-player m player-name))
+    (error "No game named ~A is available." game)))
 
 
 
@@ -349,18 +370,12 @@
             (var angle ,(- (/ pi 2)))))
 
 (define-easy-handler (mission :uri "/") (game mission player)
-  (let* ((*js* *js*)            ; all parenscript added here is only local to this mission
-         (g (get-game (or game *default-game*)))
-         (m (or (get-mission mission) (make-mission g mission)))
-         (p (or (get-player player t) (make-player m player))))
-    (labels ((fail (fmt &rest args)
-               (return-from mission (apply #'failure fmt args))))
-      (unless g
-        (fail "No game named ~A available." game))
-      (unless (eq (mission-game m) g)
-        (fail "Mission ~A is not playing game ~A." mission game))
-      (unless (member p (mission-players m))
-        (fail "Player ~A is not a member of mission ~A" player mission)))
+  (let* ((p (handler-case (join-mission mission player game)
+              (simple-error (e)
+                (return-from mission (failure #?"${e}")))))
+         (m (player-mission p))
+         (g (mission-game m))
+         (*js* *js*))           ; all parenscript added here is only local to this mission
     (push-js `(progn
                 (var debug ,(if *debug* t 'false))
                 (var player ,(player-id p))
