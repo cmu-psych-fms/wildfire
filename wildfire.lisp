@@ -1,4 +1,4 @@
-;;; Copyright 2023 Carnegie Mellon University
+;;; Copyright 2023-2024 Carnegie Mellon University
 
 #-(and cl-ppcre hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
