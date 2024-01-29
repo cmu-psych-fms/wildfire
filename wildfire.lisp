@@ -36,6 +36,7 @@
 (define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point about which to spin plane
 (define-constant +cell-size+ 20)                      ; in pixels, cells are always square
 (define-constant +default-map-size+ 100) ; in cells, default for both width and height
+(define-constant +polling-interval+ 1000) ; milliseconds
 
 (define-constant +cell-type-names+
     '((grass 1) (ash 0) (water 0) (tree 1) (road 0) (rock 0) (house 1))
@@ -297,7 +298,7 @@ joined the mission."
 (defun push-js (form)
   (first (push (ps* form) *js*)))
 
-(defun append-js (form)
+(defun add-js (form)
   (let ((s (ps* form)))
     (appendf *js* (list s))
     s))
@@ -313,8 +314,8 @@ joined the mission."
             (collect `(progn ,@b) :into bodies)
             (finally (return (values vars bodies))))
     `(progn
-       (append-js '(defun ,name (,@args)
-                    ((@ smackjack ,name) ,@values (lambda (,var) ,@js-code))))
+       (add-js '(defun ,name (,@args)
+                 ((@ smackjack ,name) ,@values (lambda (,var) ,@js-code))))
        (defun-ajax ,name (,@args) (*ajax* :method :post :callback-data :json)
          (encode-json-to-string (progn ,@body))))))
 
@@ -334,7 +335,7 @@ joined the mission."
                   (:link  :rel "stylesheet"
                           :href "https://fonts.googleapis.com/css?family=Merriweather+Sans")
                   (:raw (generate-prologue *ajax*))
-                  (:script (:raw (format nil "~%~A~%~{~A~%~}"
+                  (:script (:raw (format nil "~%~A~4%// ** Wildfire **~2%~{~A~%~}"
                                          (ps* *ps-lisp-library*) *js*)))
                   (:title title))
            (:body :style "margin-left: 4em; margin-top: 4ex;"
@@ -346,21 +347,21 @@ joined the mission."
       (:div :style "text-align:center;font-size:larger;color:red;margin-top:6ex"
             (apply #'format nil fmt args)))))
 
-(append-js `(defun clog (&rest args)
-              (apply (@ console log) args)))
+(add-js `(defun clog (&rest args)
+           (apply (@ console log) args)))
 
-(append-js `(defun dlog (&rest args)
-              (when debug
-                (apply clog args))))
+(add-js `(defun dlog (&rest args)
+           (when debug
+             (apply clog args))))
 
 (push-js `(var load-count ,(+ (length +cell-types+) 2 1))) ; number of images + 1 document
 
-(append-js '(defun load-image (path)
-             (incf load-count)
-             (let ((img (new (-image))))
-               (setf (@ img onload) load-test)
-               (setf (@ img src) path)
-               img)))
+(add-js '(defun load-image (path)
+          (incf load-count)
+          (let ((img (new (-image))))
+            (setf (@ img onload) load-test)
+            (setf (@ img src) path)
+            img)))
 
 (push-js `(progn
             (var images (map load-image ',(map 'list #'ct-image-path +cell-types+)))
@@ -382,14 +383,14 @@ joined the mission."
                 (var position '(,(* (game-start-x g) +cell-size+)
                                 ,(* (game-start-x g) +cell-size+)))
                 (var target position)))
-    (append-js `(defun load-test ()
-                  (when (eql (decf load-count) 0)
-                    (render ',(iter (for x :below (game-width g))
-                                    (collect (iter (for y :below (game-height g))
-                                                   (collect (ct-index (cell-type
-                                                                       (aref (mission-map m)
-                                                                             x y)))))))
-                            ,(game-width g) ,(game-height g)))))
+    (add-js `(defun load-test ()
+               (when (eql (decf load-count) 0)
+                 (render ',(iter (for x :below (game-width g))
+                                 (collect (iter (for y :below (game-height g))
+                                                (collect (ct-index (cell-type
+                                                                    (aref (mission-map m)
+                                                                          x y)))))))
+                         ,(game-width g) ,(game-height g)))))
     (with-page ("Mission")
       (with-html
         (:div :style "text-align: center;"
@@ -406,67 +407,67 @@ joined the mission."
      (setf (list ,x ,y) ,value)
      ,@body))
 
-(append-js (destructuring-bind (xp yp) +plane-axis+
-             (let* ((view-center (/ +view-size+ 2.0)))
-               `(defun display-map ()
-                  (let ((ctx (chain document (get-element-by-id "view") (get-context "2d"))))
-                    ((@ ctx draw-image) dragons 0 0 ,+view-size+ ,+view-size+)
-                    (with-point (x y) position
-                      ((@ ctx draw-image) (chain document (get-element-by-id "map"))
-                       (- x ,view-center) (- y ,view-center)
-                       ,+view-size+ ,+view-size+
-                       0 0
-                       ,+view-size+ ,+view-size+)
-                      ((@ ctx save))
-                      ((@ ctx translate) ,view-center ,view-center)
-                      ((@ ctx rotate) angle)
-                      ((@ ctx draw-image) plane ,(- xp) ,(- yp))
-                      ((@ ctx restore))))))))
+(add-js (destructuring-bind (xp yp) +plane-axis+
+          (let* ((view-center (/ +view-size+ 2.0)))
+            `(defun display-map ()
+               (let ((ctx (chain document (get-element-by-id "view") (get-context "2d"))))
+                 ((@ ctx draw-image) dragons 0 0 ,+view-size+ ,+view-size+)
+                 (with-point (x y) position
+                   ((@ ctx draw-image) (chain document (get-element-by-id "map"))
+                    (- x ,view-center) (- y ,view-center)
+                    ,+view-size+ ,+view-size+
+                    0 0
+                    ,+view-size+ ,+view-size+)
+                   ((@ ctx save))
+                   ((@ ctx translate) ,view-center ,view-center)
+                   ((@ ctx rotate) angle)
+                   ((@ ctx draw-image) plane ,(- xp) ,(- yp))
+                   ((@ ctx restore))))))))
 
-(append-js `(defun animation-update () ((@ window request-animation-frame) update)))
+(add-js `(defun animation-update () ((@ window request-animation-frame) update)))
 
-(append-js '(var last-update nil))
+(add-js '(var last-update nil))
 
-(append-js `(defun update (&optional ms)
-              (when (eq ms undefined)
-                (animation-update)
-                (return-from update))
-              (when (null last-update)
-                (setf last-update ms))
-              (with-point (x y) position
-                (with-point (tx ty) target
-                  (with-point (sx sy) speed
-                    (unless (= sx sy 0)
-                      (let ((d (/ (- ms last-update) 1000))) ; speed is pixels per second
-                        (labels ((change (spd cur lim)
-                                   (cond ((and (> spd 0) (> lim cur))
-                                          (min (+ cur (* spd d)) lim))
-                                         ((and (< spd 0) (< lim cur))
-                                          (max (+ cur (* spd d)) lim))
-                                         (t cur))))
-                          (setf x (change sx x tx))
-                          (setf y (change sy y ty))))))
-                  (setf position (list x y))
-                  (display-map)
-                  (setf last-update ms)
-                  (if (and (= x tx) (= y ty))
-                      (setf speed '(0 0) last-update nil)
-                      (animation-update))))))
+(add-js `(defun update (&optional ms)
+           (when (eq ms undefined)
+             (animation-update)
+             (return-from update))
+           (when (null last-update)
+             (setf last-update ms))
+           (with-point (x y) position
+             (with-point (tx ty) target
+               (with-point (sx sy) speed
+                 (unless (= sx sy 0)
+                   (let ((d (/ (- ms last-update) 1000))) ; speed is pixels per second
+                     (labels ((change (spd cur lim)
+                                (cond ((and (> spd 0) (> lim cur))
+                                       (min (+ cur (* spd d)) lim))
+                                      ((and (< spd 0) (< lim cur))
+                                       (max (+ cur (* spd d)) lim))
+                                      (t cur))))
+                       (setf x (change sx x tx))
+                       (setf y (change sy y ty))))))
+               (setf position (list x y))
+               (display-map)
+               (setf last-update ms)
+               (if (and (= x tx) (= y ty))
+                   (setf speed '(0 0) last-update nil)
+                   (animation-update))))))
 
-(append-js `(defun render (map-data w h)
-              (loop :with ctx := (chain document (get-element-by-id "map") (get-context "2d"))
-                    :for y :from 0 :below h
-                    :do (loop :for x :from 0 :below w
-                              :do ((@ ctx draw-image)
-                                   (aref images (aref map-data x y))
-                                   (* x ,+cell-size+) (* y ,+cell-size+)
-                                   ,+cell-size+ ,+cell-size+))
-                    :finally (progn
-                               (dlog "map rendered")
-                               (animation-update)))))
+(add-js `(defun render (map-data w h)
+           (loop :with ctx := (chain document (get-element-by-id "map") (get-context "2d"))
+                 :for y :from 0 :below h
+                 :do (loop :for x :from 0 :below w
+                           :do ((@ ctx draw-image)
+                                (aref images (aref map-data x y))
+                                (* x ,+cell-size+) (* y ,+cell-size+)
+                                ,+cell-size+ ,+cell-size+))
+                 :finally (progn
+                            (dlog "map rendered")
+                            (animation-update)))))
 
-(append-js `(setf (@ document onmousemove)
-                  (lambda () (setf (chain document body style cursor) "default"))))
+(add-js `(setf (@ document onmousemove)
+               (lambda () (setf (chain document body style cursor) "default"))))
 
 (defajax clicked-map ((where (list (@ event offset-x) (@ event offset-y)))
                       (player-id player)
@@ -497,7 +498,13 @@ joined the mission."
                                  `(,(cos angle) ,(sin angle)))
                          '(0 0))))))))
 
-(append-js '(setf (@ window onload) load-test))
+(add-js `(defun update-server ()
+           (clog "update-server")
+           (set-timeout update-server ,+polling-interval+)))
+
+(add-js `(set-timeout update-server))
+
+(add-js '(setf (@ window onload) load-test))
 
 
 
