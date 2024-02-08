@@ -301,6 +301,8 @@ joined the mission."
 
 (defparameter *locs* '#0=((200 400) (400 200) (600 600) . #0#))
 
+(declaim (ftype (function (t t t) t) queue-motion))
+
 (defun wildfire-model (player-id state)
   (when (equalp (cdr (assoc :speed state)) '(0 0))
     (cond ((null *next-model-move*)
@@ -375,7 +377,7 @@ joined the mission."
        (when debug
          (apply clog args))))
 
-(js `(ps:var load-count ,(+ (length +cell-types+) 2 1)) ; number of images + 1 document
+(js `(ps:var load-count ,(+ (length +cell-types+) 5 1)) ; number of images + 1 document
 
     `(defun load-image (path)
        (let ((img (ps:new (-image))))
@@ -386,6 +388,8 @@ joined the mission."
     `(ps:var images (map load-image ',(map 'list #'ct-image-path +cell-types+)))
     `(ps:var dragons (load-image "images/dragons.jpg"))
     `(ps:var plane (load-image "images/plane.png"))
+    `(ps:var flame (map load-image '("images/flame.png" "images/flame2.png")))
+    `(ps:var ash (load-image "images/ash.png"))
     `(ps:var speed '(0 0))
     `(ps:var angle ,(- (/ pi 2))))
 
@@ -448,12 +452,25 @@ joined the mission."
 
     `(ps:var last-update nil)
 
+    `(ps:var last-flame-time 1)
+
+    `(ps:var flame-index 0)             ; TODO remove this, and make it more reliable
+
     `(defun update-position (&optional ms)
        (when (eq ms undefined)
          (animation-update)
          (return-from update-position))
        (when (null last-update)
          (setf last-update ms))
+       (when (and last-flame-time       ; TODO remove this, and make it sent from server
+                  (>= ms 7000)
+                  (>= (- ms last-flame-time) 100))
+         (modify-map (@ flame (mod (incf flame-index) 2)) 42 42)
+         (when (>= ms 28000)
+           (dolist (pos '((41 42) (42 41) (42 42) (43 42) (42 43) (43 43)))
+             (with-point (x y) pos
+               (modify-map (@ flame (mod (incf flame-index) 2)) x y))))
+         (setf last-flame-time ms))
        (with-point (x y) position
          (with-point (tx ty) target
            (with-point (sx sy) speed
@@ -470,9 +487,9 @@ joined the mission."
            (setf position (list x y))
            (display-map)
            (setf last-update ms)
-           (if (and (= x tx) (= y ty))
-               (setf speed '(0 0) last-update nil)
-               (animation-update)))))
+           (when (and (= x tx) (= y ty))
+             (setf speed '(0 0) last-update nil))
+           (animation-update))))
 
     `(defun render (map-data w h)
        (loop :with ctx := (ps:chain document (get-element-by-id "map") (get-context "2d"))
@@ -485,6 +502,13 @@ joined the mission."
              :finally (progn
                         (dlog "map rendered")
                         (animation-update))))
+
+    `(defun modify-map (image x y)
+       ;; x and y are indices into the map
+       (let ((ctx (ps:chain document (get-element-by-id "map") (get-context "2d"))))
+         ((@ ctx draw-image) image
+          (* x ,+cell-size+) (* y ,+cell-size+)
+          ,+cell-size+ ,+cell-size+)))
 
     `(setf (@ document onmousemove)
            (lambda () (setf (ps:chain document body style cursor) "default"))))
