@@ -14,7 +14,7 @@
   (:use :common-lisp :alexandria :iterate :ppcre
         :spinneret :hunchentoot :smackjack :json :uuid)
   (:local-nicknames (:css :css-lite) (:v :vom) (:g :geometry))
-  (:import-from :ps ps:ps ps:ps* ps:@)
+  (:import-from :ps ps:@)
   (:export #:start-server #:stop-server #:run-standalone #:defgame))
 
 (in-package :wildfire)
@@ -248,7 +248,9 @@
   id
   name
   mission
-  (speed 100)) ; 30
+  (speed 30)
+  (motion nil)
+  state)
 
 (define-object-printer player (p) "~A~:[ (~A)~;~*~] ~A"
                        (player-name p)
@@ -292,25 +294,52 @@ joined the mission."
 
 
 
+;;; TODO figure out how tidily to hook models into missions
+;;; TODO so far this is just a kludge to prove it can be done
+
+(defparameter *next-model-move* nil)
+
+(defparameter *locs* '#0=((200 400) (400 200) (600 600) . #0#))
+
+(defun wildfire-model (player-id state)
+  (when (equalp (cdr (assoc :speed state)) '(0 0))
+    (cond ((null *next-model-move*)
+           (setf *next-model-move* (+ 5000 (cdr (assoc :time state))))
+           nil)
+          ((>= (cdr (assoc :time state)) *next-model-move*)
+           (setf *next-model-move* nil)
+           (let ((pos (cdr (assoc :position state))))
+             (queue-motion player-id (pop *locs*) pos))))))
+
+
+
 (defparameter *js* nil)
 
 (defun js (&rest forms)
   (let ((front (eq (first forms) :front)))
     (when front
       (pop forms))
-    (setf forms (mapcar #'ps* forms))
+    (setf forms (mapcar #'ps:ps* forms))
     (if front
-        (setf *js* (nconc forms *js*))
-        (nconcf *js* forms))))
+        (setf *js* (append forms *js*))
+        (appendf *js* forms))))
 
 (defparameter *ajax* (make-instance 'ajax-processor :server-uri "/ajax"))
 
 (defmacro define-remote-call (name (&rest args) &body body)
   `(defun-ajax ,name (,@args) (*ajax* :method :post :callback-data :json)
-     (encode-json-to-string (progn ,@body))))
+     (v:debug "~A from client ~@{~S~^, ~}" ',name ,@args)
+     (let ((result (encode-json-to-string (progn ,@body))))
+       (v:debug "~A to client ~A" ',name result)
+       result)))
 
-(ps:defpsmacro call (name (jvar &rest args) &body callback-body)
-  `((@ smackjack ,name) ,@args (lambda (,jvar) ,@callback-body)))
+(ps:defpsmacro call (name (&optional jvar) (&rest args) &body callback-body)
+  `(let ((vals (list ,@args)))
+     (dlog "to server" ',name vals)
+     ,(and jvar `((@ vals push) (lambda (,jvar)
+                                  (dlog "from server" ',name ((@ +json+ stringify) ,jvar))
+                                  ,@callback-body)))
+     (apply (@ smackjack ,name) vals)))
 
 (defun not-found ()
   (acceptor-status-message *acceptor* +http-not-found+))
@@ -329,7 +358,7 @@ joined the mission."
                           :href "https://fonts.googleapis.com/css?family=Merriweather+Sans")
                   (:raw (generate-prologue *ajax*))
                   (:script (:raw (format nil "~%~A~4%// ** Wildfire **~2%~{~A~%~}"
-                                         (ps* ps:*ps-lisp-library*) *js*)))
+                                         (ps:ps* ps:*ps-lisp-library*) *js*)))
                   (:title title))
            (:body :style "margin-left: 4em; margin-top: 4ex;"
                   (funcall thunk)))))
@@ -380,12 +409,14 @@ joined the mission."
                                                                 (aref (mission-map m)
                                                                       x y)))))))
                      ,(game-width g) ,(game-height g)))))
+    (setf *next-model-move* nil)        ; TODO temporary hack
     (with-page ("Mission")
       (with-html
         (:div :style "text-align: center;"
               (:canvas :id "view"
                        :height +view-size+ :width +view-size+
-                       :onclick (ps (clicked-map event))
+                       :onclick (ps:ps (clicked-map (list (@ event offset-x)
+                                                          (@ event offset-y))))
                        "Not supported in this browser"))
         (:canvas :id "map" :style #?'display: ${(if *debug* "block" "none")}'
                  :height (* (game-height g) +cell-size+)
@@ -413,14 +444,14 @@ joined the mission."
                ((@ ctx draw-image) plane ,(- xp) ,(- yp))
                ((@ ctx restore)))))))
 
-    `(defun animation-update () ((@ window request-animation-frame) update))
+    `(defun animation-update () ((@ window request-animation-frame) update-position))
 
     `(ps:var last-update nil)
 
-    `(defun update (&optional ms)
+    `(defun update-position (&optional ms)
        (when (eq ms undefined)
          (animation-update)
-         (return-from update))
+         (return-from update-position))
        (when (null last-update)
          (setf last-update ms))
        (with-point (x y) position
@@ -458,46 +489,69 @@ joined the mission."
     `(setf (@ document onmousemove)
            (lambda () (setf (ps:chain document body style cursor) "default"))))
 
-(define-remote-call clicked-map (where player-id current)
-  (v:debug "clicked ~S ~S ~S" where current player-id)
-  (let* ((p (get-player player-id))
-         (map (mission-map (player-mission p)))
-         (d (mapcar #'- where `(,#0=(/ +view-size+ 2.0) ,#0#)))
-         (new-pos (mapcar #'+ current d)))
+;;; TODO should be able to extract current from player state
+;;; TODO queue-motion should probably be changed to take the target in the map's coordinate system
+
+(defun queue-motion (player-id target current)
+  ;; target is in pixels, in the visible region's coordinate system
+  ;; current is in pixels, in the underlying map's coordinate system
+  (when-let* ((p (get-player player-id))
+              (map (mission-map (player-mission p)))
+              (d (mapcar #'- target `(,#0=(/ +view-size+ 2.0) ,#0#)))
+              (new-pos (mapcar #'+ current d))) ; pixels, map's coordinate system
     (when (every #'<
                  `(,least-negative-single-float ,least-negative-single-float)
                  new-pos
                  (mapcar #'* (array-dimensions map) `(,+cell-size+ ,+cell-size+)))
-      (let* ((movep (not (apply #'~= 0 d)))
-             (angle (and movep (- (/ pi 2) (apply #'atan d)))))
-        `((:target . ,(and movep new-pos))
-          (:angle . ,angle)
-          (:speed . ,(if movep
-                         (mapcar (lambda (x) (* (player-speed p) x))
-                                 `(,(cos angle) ,(sin angle)))
-                         '(0 0))))))))
+      (when (not (apply #'~= 0 d))
+        (let ((angle (- (/ pi 2) (apply #'atan d))))
+          (setf (player-motion p)
+                `((:target . ,new-pos)
+                  (:angle . ,angle)
+                  (:speed . ,(mapcar (lambda (x) (* (player-speed p) x))
+                                     `(,(cos angle) ,(sin angle)))))))))))
 
-(js `(defun clicked-map (event)
-       (dlog "clicked-map" event)
-       (call clicked-map (json
-                          (list (@ event offset-x) (@ event offset-y))
-                          player
-                          position)
-             (dlog "clicked" ((@ +json+ stringify) json))
-             (when json
-               (setf target (or (@ json target) target))
-               (setf angle (or (@ json angle) angle))
-               (setf speed (@ json speed))
-               (setf (ps:chain document body style cursor) "none")
-               (update))))
+(define-remote-call clicked-map (where player-id current)
+  ;; where is in pixels, in the visible region's coordinate system
+  ;; current is in pixels, in the underlying map's coordinate system
+  (queue-motion player-id where current))
+
+(js `(defun clicked-map (location)
+       (call clicked-map () (location player position))))
+
+
+
+(define-remote-call server-update (player-id state)
+  ;; TODO following is a temporary hack until I figure out how to do it more tidily
+  (when (fboundp 'wildfire-model)
+    (funcall 'wildfire-model player-id state))
+  (when-let ((p (get-player player-id)))
+    `((:motion . ,(shiftf (player-motion p) nil))
+      (:fire))))
+
+(js `(defun motion (json)
+       (when json
+         (setf target (@ json target))
+         (setf angle (@ json angle))
+         (setf speed (@ json speed))
+         (setf (ps:chain document body style cursor) "none")
+         (update-position)))
 
     `(defun update-server ()
-       (clog "update-server")
+       (let ((state (ps:create :time (@ document timeline current-time)
+                               :position position
+                               :target target
+                               :speed speed
+                               :angle angle)))
+         (call server-update (json) (player state)
+               (motion (@ json motion))))
        (set-timeout update-server ,+polling-interval+))
 
-    `(set-timeout update-server)
+    `(set-timeout update-server))
 
-    '(setf (@ window onload) load-test))
+
+
+(js '(setf (@ window onload) load-test))
 
 
 
@@ -554,3 +608,14 @@ joined the mission."
          (houses (levittown) 61 45  69 45  69 49  61 49))
 
 (assert (get-game *default-game*))
+
+
+
+#|
+
+(progn
+  (load "/home/dfm/w/wildfire/wildfire.lisp")
+  (swank:set-package "WILDFIRE")
+  (funcall (find-symbol "START-SERVER") :debug t))
+
+|#
