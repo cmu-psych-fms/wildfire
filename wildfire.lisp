@@ -1,4 +1,4 @@
-;;; Copyright 2023-2024 Carnegie Mellon University
+;;;; Copyright 2023-2024 Carnegie Mellon University
 
 #-(and cl-ppcre hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
@@ -23,7 +23,7 @@
 
 
 
-;; Configuration
+;;; Configuration
 
 (defparameter *debug* nil)
 (defparameter *data-directory* *default-pathname-defaults*)
@@ -48,9 +48,19 @@
       (houses house))
   :test #'equal)
 
+;;; TODO generate stuff like the following automatically from a simple radius, probably
+;;;      configured on a per-game basis
+(define-constant +extinguish-area+
+  (iter (for x :from -3 :to 3)
+        (nconcing (iter (for y :from -3 :to 3)
+                        (unless (= (abs x) (abs y) 3)
+                          (collect (list x y))))))
+  :test #'equal)
+
+
 (define-constant +tolerance+ 1.0d-12)
 
-(defun ~= (n &rest more)
+(defun =~ (n &rest more)
   (every (lambda (x) (< (abs (- x n)) +tolerance+)) more))
 
 
@@ -246,7 +256,8 @@
   game
   map
   ignitions
-  (fires (make-hash-table)))
+  (fires (make-hash-table))
+  (last-click nil))
 
 (define-object-printer mission (s) "~A, ~A (~D))"
                        (mission-id s)
@@ -493,10 +504,10 @@ joined the mission."
        (when (null last-update)
          (setf last-update ms))
        (when (and fires (>= (- ms last-flame-time) ,+flame-flicker-interval+))
-         (let ((f (aref flame (setf flame-index (mod (1+ flame-index) 2)))))
-           (dolist (loc fires)
-             (with-point (x y) loc
-               (modify-map f x y))))
+         ;; (labels ((f () (aref flame (setf flame-index (mod (1+ flame-index) 2)))))
+         ;;   (dolist (loc fires)
+         ;;     (with-point (x y) loc
+         ;;       (modify-map (f) x y))))
          (setf last-flame-time ms))
        (with-point (x y) position
          (with-point (tx ty) target
@@ -547,14 +558,20 @@ joined the mission."
   ;; target is in pixels, in the visible region's coordinate system
   ;; current is in pixels, in the underlying map's coordinate system
   (when-let* ((p (get-player player-id))
-              (map (mission-map (player-mission p)))
+              (mission (player-mission p))
+              (map (mission-map mission))
               (d (mapcar #'- target `(,#0=(/ +view-size+ 2.0) ,#0#)))
               (new-pos (mapcar #'+ current d))) ; pixels, map's coordinate system
     (when (every #'<
                  `(,least-negative-single-float ,least-negative-single-float)
                  new-pos
                  (mapcar #'* (array-dimensions map) `(,+cell-size+ ,+cell-size+)))
-      (when (not (apply #'~= 0 d))
+      (let ((cell (apply #'aref map (mapcar (lambda (x)
+                                              (floor (/ x (float +cell-size+))))
+                                            new-pos))))
+        (setf (mission-last-click mission)
+              (and (cell-burningp cell) cell)))
+      (unless (apply #'=~ 0 d)
         (let ((angle (- (/ pi 2) (apply #'atan d))))
           (setf (player-motion p)
                 `((:target . ,new-pos)
@@ -575,7 +592,9 @@ joined the mission."
 ;;; TODO make fire scale fire probabilities by update speed (probably well above
 ;;;      here somewhere)
 
-(defun propagate-fires (mission time)
+;;; TODO factor out various geometry things, like test for a cell being in bounds
+
+(defun propagate-fires (mission state)
   (let* ((g (mission-game mission))
          (m (mission-map mission))
          (exhaustion-probability (game-fire-exhaustion-probability g))
@@ -589,6 +608,23 @@ joined the mission."
                (setf (cell-burningp cell) t)
                (setf (gethash cell (mission-fires mission)) t)
                (push (coords cell) births)))
+      (when-let ((last-click (mission-last-click mission)))
+        (when (and (every #'zerop (cdr (assoc :speed state)))
+                   (equal (mapcar (lambda (x) (floor (/ x (float +cell-size+))))
+                                  (cdr (assoc :position state)))
+                          (coords last-click)))
+          ;; refactor for commonality with what follows
+          (iter (for (xo yo) :in +extinguish-area+)
+                (for x := (+ (cell-x last-click) xo))
+                (for y := (+ (cell-y last-click) yo))
+                (for candidate := (and (< -1 x (game-width g))
+                                       (< -1 y (game-height g))
+                                       (aref m x y)))
+                (when (and candidate (cell-burningp candidate))
+                  (setf (cell-burningp candidate) nil)
+                  (setf (cell-type candidate) ash-type)
+                  (remhash candidate (mission-fires mission))
+                  (push (coords candidate) deaths)))))
       (iter (for c :in (hash-table-keys (mission-fires mission)))
             (cond ((<= (random 1.0) exhaustion-probability)
                    (setf (cell-burningp c) nil)
@@ -607,7 +643,7 @@ joined the mission."
                                       (<= (random 1.0) propagation-probability))
                              (ignite candidate))))))
       (iter (for start := (caar (mission-ignitions mission)))
-            (while (and start (>= time start)))
+            (while (and start (>= (cdr (assoc :time state)) start)))
             (for (nil x y) := (pop (mission-ignitions mission)))
             (ignite (aref m x y))))
     (values births deaths)))
@@ -618,8 +654,7 @@ joined the mission."
     (funcall 'wildfire-model player-id state))
   (when-let* ((p (get-player player-id))
               (m (player-mission p)))
-    (multiple-value-bind (births deaths)
-        (propagate-fires m (cdr (assoc :time state)))
+    (multiple-value-bind (births deaths) (propagate-fires m state)
       `((:motion . ,(shiftf (player-motion p) nil))
         (:ignite . ,births)
         (:extinguish . ,deaths)))))
@@ -644,7 +679,10 @@ joined the mission."
     `(defun extinguish (locs)
        (when locs
          (dolist (loc locs)
-           ((@ fires splice) ((@ fires index-of) loc) 2)
+           (let ((idx ((@ fires index-of) loc)))
+             (if (>= idx 0)
+                 ((@ fires splice) idx 1)
+                 (dlog "loc not in fires" loc fires)))
            (with-point (x y) loc
              (modify-map ash x y)))))
 
