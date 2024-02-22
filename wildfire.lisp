@@ -36,9 +36,10 @@
 (define-constant +cell-size+ 20)                      ; in pixels, cells are always square
 (define-constant +default-map-size+ 100) ; in cells, default for both width and height
 (define-constant +polling-interval+ 1000) ; milliseconds
+(define-constant +flame-flicker-interval+ 100) ; milliseconds
 
 (define-constant +cell-type-names+
-    '((grass 1) (ash 0) (water 0) (tree 1) (road 0) (rock 0) (house 1))
+    '((grass t) (ash nil) (water nil) (tree t) (road nil) (rock nil) (house t))
   :test #'equal)
 (define-constant +default-cell-type+ (position 'grass +cell-type-names+ :key #'first))
 (define-constant +image-template+ "images/~(~A~).png" :test #'string=)
@@ -61,7 +62,7 @@
 
 (defstruct (cell-type (:conc-name ct-) (:print-object))
   name
-  flamability                           ; TODO need more structure to fire propagation
+  (flamablep nil)
   image-path
   index)
 
@@ -70,10 +71,10 @@
   (ct-index ct))
 
 (defparameter +cell-types+
-  (iter (for (name flamability) :in +cell-type-names+)
+  (iter (for (name flamablep) :in +cell-type-names+)
         (for i :from 0)
         (collect (make-cell-type :name name
-                                 :flamability flamability
+                                 :flamablep flamablep
                                  :image-path (format nil +image-template+ name)
                                  :index i)
           :into result)
@@ -87,15 +88,17 @@
 (defstruct (cell (:constructor %make-cell (x y type)) (:print-object))
   x
   y
-  type)
+  type
+  (burningp nil))
 
 (defun make-cell (x y index)
   (%make-cell x y (aref +cell-types+ index)))
 
-(define-object-printer cell () "~D ~D ~S"
+(define-object-printer cell () "~D ~D ~S~:[~;!~]"
                        (cell-x cell)
                        (cell-y cell)
-                       (ct-name (cell-type cell)))
+                       (ct-name (cell-type cell))
+                       (cell-burningp cell))
 
 (defstruct (game (:print-object))
   name
@@ -104,7 +107,10 @@
   height
   start-x
   start-y
-  regions)
+  regions
+  (fire-exhaustion-probability 0.08)
+  (fire-propagation-probability 0.11)
+  ignitions)
 
 (define-object-printer game () "~A (~D×~D)"
                        (game-name game)
@@ -124,7 +130,8 @@
 
 
 (defmacro defgame (name (&rest keys &key &allow-other-keys) &rest regions)
-  `(%defgame ',name ',regions ,@keys))
+  `(%defgame ',name ',regions ,@(iter (for (k v) :on keys :by #'cddr)
+                                      (nconcing `(,k ',v)))))
 
 (defparameter *games* (make-hash-table :test 'equalp))
 
@@ -173,10 +180,29 @@
                                            (height +default-map-size+)
                                            (start-x (round width 2))
                                            (start-y (round height 2))
+                                           (ignitions nil)
                  &allow-other-keys)
   (let ((m (make-array (list width height)
                        :element-type '(unsigned-byte 8)
-                       :initial-element +default-cell-type+)))
+                       :initial-element +default-cell-type+))
+        (ign (stable-sort (iter (with last-time)
+                                (for ig :in ignitions)
+                                (nconcing (iter (for k :in '(:t :x :y))
+                                                (for v := (getf ig k))
+                                                (when (eq k :t)
+                                                  (if v
+                                                      (setf last-time v)
+                                                      (setf v last-time))
+                                                  (when v
+                                                    (setf v (* v 1000)))) ; sec to ms
+                                                (unless v
+                                                  (v:error "Missing ~S in ignition ~S"
+                                                           k ig)
+                                                  (return nil))
+                                                (collect v :into result)
+                                                (finally (return (list result))))))
+                          #'<
+                          :key #'first)))
     (iter (for r :in regions)
           (for i :from 0)
           (collect (destructuring-bind (kind (&optional name) &rest coords) r
@@ -203,10 +229,11 @@
                          (apply #'make-game (list* :name name
                                                    :width width
                                                    :height height
-                                                   :map m
+                                                   :map (copy-array m)
                                                    :start-x start-x
                                                    :start-y start-y
                                                    :regions reg
+                                                   :ignitions ign
                                                    keys))))))
   name)
 
@@ -217,7 +244,9 @@
   id
   (players nil)
   game
-  map)
+  map
+  ignitions
+  (fires (make-hash-table)))
 
 (define-object-printer mission (s) "~A, ~A (~D))"
                        (mission-id s)
@@ -230,7 +259,9 @@
   (unless id
     (setf id (format nil "mission-~A" (make-v1-uuid))))
   (iter (with map := (make-array (list (game-width game) (game-height game))))
-        (with result := (%make-mission :id id :game game))
+        (with result := (%make-mission :id id
+                                       :game game
+                                       :ignitions (game-ignitions game)))
         (for y :from 0 :below (game-height game))
         (iter (for x :from 0 :below (game-width game))
               (setf (aref map x y) (make-cell x y (aref (game-map game) x y))))
@@ -249,8 +280,7 @@
   name
   mission
   (speed 30)
-  (motion nil)
-  state)
+  (motion nil))
 
 (define-object-printer player (p) "~A~:[ (~A)~;~*~] ~A"
                        (player-name p)
@@ -303,15 +333,15 @@ joined the mission."
 
 (declaim (ftype (function (t t t) t) queue-motion))
 
-(defun wildfire-model (player-id state)
-  (when (equalp (cdr (assoc :speed state)) '(0 0))
-    (cond ((null *next-model-move*)
-           (setf *next-model-move* (+ 5000 (cdr (assoc :time state))))
-           nil)
-          ((>= (cdr (assoc :time state)) *next-model-move*)
-           (setf *next-model-move* nil)
-           (let ((pos (cdr (assoc :position state))))
-             (queue-motion player-id (pop *locs*) pos))))))
+;; (defun wildfire-model (player-id state)
+;;   (when (equalp (cdr (assoc :speed state)) '(0 0))
+;;     (cond ((null *next-model-move*)
+;;            (setf *next-model-move* (+ 5000 (cdr (assoc :time state))))
+;;            nil)
+;;           ((>= (cdr (assoc :time state)) *next-model-move*)
+;;            (setf *next-model-move* nil)
+;;            (let ((pos (cdr (assoc :position state))))
+;;              (queue-motion player-id (pop *locs*) pos))))))
 
 
 
@@ -329,9 +359,11 @@ joined the mission."
 (defparameter *ajax* (make-instance 'ajax-processor :server-uri "/ajax"))
 
 (defmacro define-remote-call (name (&rest args) &body body)
+  ;; Note that because cl-json is so idiosyncratic at its alist detection, we have to
+  ;; make it explicit, so any non-nil return value from this must be an alist.
   `(defun-ajax ,name (,@args) (*ajax* :method :post :callback-data :json)
      (v:debug "~A from client ~@{~S~^, ~}" ',name ,@args)
-     (let ((result (encode-json-to-string (progn ,@body))))
+     (let ((result (encode-json-alist-to-string (progn ,@body))))
        (v:debug "~A to client ~A" ',name result)
        result)))
 
@@ -377,7 +409,7 @@ joined the mission."
        (when debug
          (apply clog args))))
 
-(js `(ps:var load-count ,(+ (length +cell-types+) 5 1)) ; number of images + 1 document
+(js `(ps:var load-count ,(+ (length +cell-types+) 4 1)) ; number of images + 1 document
 
     `(defun load-image (path)
        (let ((img (ps:new (-image))))
@@ -389,7 +421,6 @@ joined the mission."
     `(ps:var dragons (load-image "images/dragons.jpg"))
     `(ps:var plane (load-image "images/plane.png"))
     `(ps:var flame (map load-image '("images/flame.png" "images/flame2.png")))
-    `(ps:var ash (load-image "images/ash.png"))
     `(ps:var speed '(0 0))
     `(ps:var angle ,(- (/ pi 2))))
 
@@ -451,10 +482,9 @@ joined the mission."
     `(defun animation-update () ((@ window request-animation-frame) update-position))
 
     `(ps:var last-update nil)
-
-    `(ps:var last-flame-time 1)
-
-    `(ps:var flame-index 0)             ; TODO remove this, and make it more reliable
+    `(ps:var fires #())
+    `(ps:var last-flame-time 0)
+    `(ps:var flame-index 0)
 
     `(defun update-position (&optional ms)
        (when (eq ms undefined)
@@ -462,14 +492,11 @@ joined the mission."
          (return-from update-position))
        (when (null last-update)
          (setf last-update ms))
-       (when (and last-flame-time       ; TODO remove this, and make it sent from server
-                  (>= ms 7000)
-                  (>= (- ms last-flame-time) 100))
-         (modify-map (@ flame (mod (incf flame-index) 2)) 42 42)
-         (when (>= ms 28000)
-           (dolist (pos '((41 42) (42 41) (42 42) (43 42) (42 43) (43 43)))
-             (with-point (x y) pos
-               (modify-map (@ flame (mod (incf flame-index) 2)) x y))))
+       (when (and fires (>= (- ms last-flame-time) ,+flame-flicker-interval+))
+         (let ((f (aref flame (setf flame-index (mod (1+ flame-index) 2)))))
+           (dolist (loc fires)
+             (with-point (x y) loc
+               (modify-map f x y))))
          (setf last-flame-time ms))
        (with-point (x y) position
          (with-point (tx ty) target
@@ -545,13 +572,57 @@ joined the mission."
 
 
 
+;;; TODO make fire scale fire probabilities by update speed (probably well above
+;;;      here somewhere)
+
+(defun propagate-fires (mission time)
+  (let* ((g (mission-game mission))
+         (m (mission-map mission))
+         (exhaustion-probability (game-fire-exhaustion-probability g))
+         (propagation-probability (game-fire-propagation-probability g))
+         (ash-type (get-ct 'ash))
+         (births nil)
+         (deaths nil))
+    (labels ((coords (cell)
+               (list (cell-x cell) (cell-y cell)))
+             (ignite (cell)
+               (setf (cell-burningp cell) t)
+               (setf (gethash cell (mission-fires mission)) t)
+               (push (coords cell) births)))
+      (iter (for c :in (hash-table-keys (mission-fires mission)))
+            (cond ((<= (random 1.0) exhaustion-probability)
+                   (setf (cell-burningp c) nil)
+                   (setf (cell-type c) ash-type)
+                   (remhash c (mission-fires mission))
+                   (push (coords c) deaths))
+                  (t (iter (for (xo yo) :in '((-1 0) (0 -1) (1 0) (0 1)))
+                           (for x := (+ (cell-x c) xo))
+                           (for y := (+ (cell-y c) yo))
+                           (for candidate := (and (< -1 x (game-width g))
+                                                  (< -1 y (game-height g))
+                                                  (aref m x y)))
+                           (when (and candidate
+                                      (ct-flamablep (cell-type candidate))
+                                      (not (cell-burningp candidate))
+                                      (<= (random 1.0) propagation-probability))
+                             (ignite candidate))))))
+      (iter (for start := (caar (mission-ignitions mission)))
+            (while (and start (>= time start)))
+            (for (nil x y) := (pop (mission-ignitions mission)))
+            (ignite (aref m x y))))
+    (values births deaths)))
+
 (define-remote-call server-update (player-id state)
   ;; TODO following is a temporary hack until I figure out how to do it more tidily
   (when (fboundp 'wildfire-model)
     (funcall 'wildfire-model player-id state))
-  (when-let ((p (get-player player-id)))
-    `((:motion . ,(shiftf (player-motion p) nil))
-      (:fire))))
+  (when-let* ((p (get-player player-id))
+              (m (player-mission p)))
+    (multiple-value-bind (births deaths)
+        (propagate-fires m (cdr (assoc :time state)))
+      `((:motion . ,(shiftf (player-motion p) nil))
+        (:ignite . ,births)
+        (:extinguish . ,deaths)))))
 
 (js `(defun motion (json)
        (when json
@@ -561,6 +632,22 @@ joined the mission."
          (setf (ps:chain document body style cursor) "none")
          (update-position)))
 
+    `(ps:var ash (aref images ,(position 'ash +cell-type-names+ :key #'car)))
+
+    `(defun ignite (locs)
+       (when locs
+         (dolist (loc locs)
+           (with-point (x y) loc
+             (modify-map (aref flame flame-index) x y))
+           ((@ fires push) loc))))
+
+    `(defun extinguish (locs)
+       (when locs
+         (dolist (loc locs)
+           ((@ fires splice) ((@ fires index-of) loc) 2)
+           (with-point (x y) loc
+             (modify-map ash x y)))))
+
     `(defun update-server ()
        (let ((state (ps:create :time (@ document timeline current-time)
                                :position position
@@ -568,7 +655,10 @@ joined the mission."
                                :speed speed
                                :angle angle)))
          (call server-update (json) (player state)
-               (motion (@ json motion))))
+               (progn
+                 (extinguish (@ json extinguish))
+                 (ignite (@ json ignite))
+                 (motion (@ json motion)))))
        (set-timeout update-server ,+polling-interval+))
 
     `(set-timeout update-server))
@@ -623,7 +713,10 @@ joined the mission."
 
 
 
-(defgame test-game ()
+(defgame test-game (:ignitions ((:x 90 :y 90 :t 7)
+                                (:x 91 :y 98)
+                                (:x 25 :y 20)
+                                (:x 64 :y 47 :t 14)))
          (forest (sherwood-forest) 0 0  30 0  45 45  10 40  0 25)
          (lake (loch-ness) 55 55  80 65  70 75  60 68  45 60)
          (river (nile) 70 0  60 20  64 60)
