@@ -36,7 +36,7 @@
 (define-constant +cell-size+ 20)                      ; in pixels, cells are always square
 (define-constant +default-map-size+ 100) ; in cells, default for both width and height
 (define-constant +polling-interval+ 1000) ; milliseconds
-(define-constant +flame-flicker-interval+ 100) ; milliseconds
+(define-constant +flame-flicker-interval+ 150) ; milliseconds
 
 (define-constant +cell-type-names+
     '((grass t) (ash nil) (water nil) (tree t) (road nil) (rock nil) (house t))
@@ -431,9 +431,14 @@ joined the mission."
     `(ps:var images (map load-image ',(map 'list #'ct-image-path +cell-types+)))
     `(ps:var dragons (load-image "images/dragons.jpg"))
     `(ps:var plane (load-image "images/plane.png"))
-    `(ps:var flame (map load-image '("images/flame.png" "images/flame2.png")))
+    `(ps:var flames (map load-image '("images/flame.png" "images/flame2.png")))
+    `(ps:var flame-index 0)
     `(ps:var speed '(0 0))
-    `(ps:var angle ,(- (/ pi 2))))
+    `(ps:var angle ,(- (/ pi 2)))
+
+    `(defun flame ()
+       ;; returns one of the two flame images in a pseudo-random order
+       (aref flames (mod (setf flame-index (logand (1+ (* 257 flame-index)) #x1ffff)) 2))))
 
 (define-easy-handler (mission :uri "/") (game mission player)
   (let* ((p (handler-case (join-mission mission player game)
@@ -493,9 +498,8 @@ joined the mission."
     `(defun animation-update () ((@ window request-animation-frame) update-position))
 
     `(ps:var last-update nil)
-    `(ps:var fires #())
+    `(ps:var fires (ps:new (-Set)))
     `(ps:var last-flame-time 0)
-    `(ps:var flame-index 0)
 
     `(defun update-position (&optional ms)
        (when (eq ms undefined)
@@ -504,10 +508,9 @@ joined the mission."
        (when (null last-update)
          (setf last-update ms))
        (when (and fires (>= (- ms last-flame-time) ,+flame-flicker-interval+))
-         ;; (labels ((f () (aref flame (setf flame-index (mod (1+ flame-index) 2)))))
-         ;;   (dolist (loc fires)
-         ;;     (with-point (x y) loc
-         ;;       (modify-map (f) x y))))
+         ((@ fires for-each) (lambda (v)
+                               (with-point (x y) ((@ ((@ v split) ",") map) -Number)
+                                 (modify-map (flame) x y))))
          (setf last-flame-time ms))
        (with-point (x y) position
          (with-point (tx ty) target
@@ -523,7 +526,7 @@ joined the mission."
                    (setf x (change sx x tx))
                    (setf y (change sy y ty))))))
            (setf position (list x y))
-           (display-map)
+         (display-map)
            (setf last-update ms)
            (when (and (= x tx) (= y ty))
              (setf speed '(0 0) last-update nil))
@@ -673,16 +676,13 @@ joined the mission."
        (when locs
          (dolist (loc locs)
            (with-point (x y) loc
-             (modify-map (aref flame flame-index) x y))
-           ((@ fires push) loc))))
+             (modify-map (flame) x y))
+           ((@ fires add) ((@ loc join))))))
 
     `(defun extinguish (locs)
        (when locs
          (dolist (loc locs)
-           (let ((idx ((@ fires index-of) loc)))
-             (if (>= idx 0)
-                 ((@ fires splice) idx 1)
-                 (dlog "loc not in fires" loc fires)))
+           ((@ fires delete) ((@ loc join)))
            (with-point (x y) loc
              (modify-map ash x y)))))
 
@@ -751,10 +751,11 @@ joined the mission."
 
 
 
-(defgame test-game (:ignitions ((:x 90 :y 90 :t 7)
-                                (:x 91 :y 98)
-                                (:x 25 :y 20)
-                                (:x 64 :y 47 :t 14)))
+(defgame test-game (:ignitions ((:x 55 :y 50 :t 4)
+                                #+(or)(:x 90 :y 90 :t 7)
+                                #+(or)(:x 91 :y 98)
+                                #+(or)(:x 25 :y 20)
+                                #+(or)(:x 64 :y 47 :t 14)))
          (forest (sherwood-forest) 0 0  30 0  45 45  10 40  0 25)
          (lake (loch-ness) 55 55  80 65  70 75  60 68  45 60)
          (river (nile) 70 0  60 20  64 60)
