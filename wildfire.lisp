@@ -752,10 +752,10 @@ joined the mission."
 
 
 (defgame test-game (:ignitions ((:x 55 :y 50 :t 4)
-                                #+(or)(:x 90 :y 90 :t 7)
-                                #+(or)(:x 91 :y 98)
-                                #+(or)(:x 25 :y 20)
-                                #+(or)(:x 64 :y 47 :t 14)))
+                                (:x 90 :y 90 :t 7)
+                                (:x 91 :y 98)
+                                (:x 25 :y 20)
+                                (:x 64 :y 47 :t 14)))
          (forest (sherwood-forest) 0 0  30 0  45 45  10 40  0 25)
          (lake (loch-ness) 55 55  80 65  70 75  60 68  45 60)
          (river (nile) 70 0  60 20  64 60)
