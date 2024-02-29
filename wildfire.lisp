@@ -31,12 +31,12 @@
 (defparameter *default-game* 'test-game)
 
 (define-constant +default-port+ 8978)
-(define-constant +view-size+ 800)                     ; in pixels, view is always square
-(define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point about which to spin plane
 (define-constant +cell-size+ 20)                      ; in pixels, cells are always square
-(define-constant +default-map-size+ 100) ; in cells, default for both width and height
-(define-constant +polling-interval+ 1000) ; milliseconds
-(define-constant +flame-flicker-interval+ 150) ; milliseconds
+(define-constant +view-size+ (* 39 +cell-size+))      ; in pixels, view is always square
+(define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point about which to spin plane
+(define-constant +default-map-size+ 100)              ; in cells, default for both width and height
+(define-constant +polling-interval+ 333)              ; milliseconds
+(define-constant +flame-flicker-interval+ 150)        ; milliseconds
 
 (define-constant +cell-type-names+
     '((grass t) (ash nil) (water nil) (tree t) (road nil) (rock nil) (house t))
@@ -110,6 +110,15 @@
                        (ct-name (cell-type cell))
                        (cell-burningp cell))
 
+(defun cells-to-pixels (n &optional centerp)
+  (let ((raw (* n +cell-size+)))
+    (if centerp
+        (+ raw (round +cell-size+ 2))
+        raw)))
+
+(defun pixels-to-cells (x)
+  (floor x +cell-size+))
+
 (defstruct (game (:print-object))
   name
   map
@@ -118,9 +127,10 @@
   start-x
   start-y
   regions
-  (fire-exhaustion-probability 0.08)
-  (fire-propagation-probability 0.11)
-  ignitions)
+  (fire-exhaustion-probability 0.005)
+  (fire-propagation-probability 0.01)
+  ignitions
+  (model nil))
 
 (define-object-printer game () "~A (~D×~D)"
                        (game-name game)
@@ -146,7 +156,7 @@
 (defparameter *games* (make-hash-table :test 'equalp))
 
 (defun get-game (name)
-  (gethash name *games*))
+  (gethash (string name) *games*))
 
 (defun polygon-cells (points bounds)
   (declare (ignore bounds))
@@ -235,7 +245,7 @@
                                (setf (aref m x y) (ct-index ct)))
                          (make-region name cells i))))
             :into reg)
-          (finally (setf (gethash name *games*)
+          (finally (setf (gethash (string name) *games*)
                          (apply #'make-game (list* :name name
                                                    :width width
                                                    :height height
@@ -338,11 +348,11 @@ joined the mission."
 ;;; TODO figure out how tidily to hook models into missions
 ;;; TODO so far this is just a kludge to prove it can be done
 
-(defparameter *next-model-move* nil)
+;; (defparameter *next-model-move* nil)
 
-(defparameter *locs* '#0=((200 400) (400 200) (600 600) . #0#))
+;; (defparameter *locs* '#0=((200 400) (400 200) (600 600) . #0#))
 
-(declaim (ftype (function (t t t) t) queue-motion))
+;; (declaim (ftype (function (t t t) t) queue-motion))
 
 ;; (defun wildfire-model (player-id state)
 ;;   (when (equalp (cdr (assoc :speed state)) '(0 0))
@@ -437,7 +447,7 @@ joined the mission."
     `(ps:var angle ,(- (/ pi 2)))
 
     `(defun flame ()
-       ;; returns one of the two flame images in a pseudo-random order
+       ;; returns one of the two flame images selected pseudo-randomly
        (aref flames (mod (setf flame-index (logand (1+ (* 257 flame-index)) #x1ffff)) 2))))
 
 (define-easy-handler (mission :uri "/") (game mission player)
@@ -449,8 +459,8 @@ joined the mission."
          (*js* *js*))           ; all parenscript added here is only local to this mission
     (js :front `(ps:var debug ,(if *debug* t 'false)))
     (js `(ps:var player ,(player-id p))
-        `(ps:var position '(,(* (game-start-x g) +cell-size+)
-                            ,(* (game-start-x g) +cell-size+)))
+        `(ps:var position '(,(cells-to-pixels (game-start-x g) t)
+                            ,(cells-to-pixels (game-start-x g) t)))
         `(ps:var target position)
         `(defun load-test ()
            (when (eql (decf load-count) 0)
@@ -460,7 +470,6 @@ joined the mission."
                                                                 (aref (mission-map m)
                                                                       x y)))))))
                      ,(game-width g) ,(game-height g)))))
-    (setf *next-model-move* nil)        ; TODO temporary hack
     (with-page ("Mission")
       (with-html
         (:div :style "text-align: center;"
@@ -470,8 +479,8 @@ joined the mission."
                                                           (@ event offset-y))))
                        "Not supported in this browser"))
         (:canvas :id "map" :style #?'display: ${(if *debug* "block" "none")}'
-                 :height (* (game-height g) +cell-size+)
-                 :width (* (game-width g) +cell-size+))))))
+                 :height (cells-to-pixels (game-height g))
+                 :width (cells-to-pixels (game-width g)))))))
 
 (ps:defpsmacro with-point ((x y) value &body body)
   `(let (,x ,y)
@@ -569,9 +578,7 @@ joined the mission."
                  `(,least-negative-single-float ,least-negative-single-float)
                  new-pos
                  (mapcar #'* (array-dimensions map) `(,+cell-size+ ,+cell-size+)))
-      (let ((cell (apply #'aref map (mapcar (lambda (x)
-                                              (floor (/ x (float +cell-size+))))
-                                            new-pos))))
+      (let ((cell (apply #'aref map (mapcar #'pixels-to-cells new-pos))))
         (setf (mission-last-click mission)
               (and (cell-burningp cell) cell)))
       (unless (apply #'=~ 0 d)
@@ -613,8 +620,7 @@ joined the mission."
                (push (coords cell) births)))
       (when-let ((last-click (mission-last-click mission)))
         (when (and (every #'zerop (cdr (assoc :speed state)))
-                   (equal (mapcar (lambda (x) (floor (/ x (float +cell-size+))))
-                                  (cdr (assoc :position state)))
+                   (equal (mapcar #'pixels-to-cells (cdr (assoc :position state)))
                           (coords last-click)))
           ;; refactor for commonality with what follows
           (iter (for (xo yo) :in +extinguish-area+)
@@ -653,10 +659,11 @@ joined the mission."
 
 (define-remote-call server-update (player-id state)
   ;; TODO following is a temporary hack until I figure out how to do it more tidily
-  (when (fboundp 'wildfire-model)
-    (funcall 'wildfire-model player-id state))
   (when-let* ((p (get-player player-id))
-              (m (player-mission p)))
+              (m (player-mission p))
+              (g (mission-game m)))
+    (when-let ((mod (game-model g)))
+      (funcall mod state))
     (multiple-value-bind (births deaths) (propagate-fires m state)
       `((:motion . ,(shiftf (player-motion p) nil))
         (:ignite . ,births)
@@ -763,15 +770,32 @@ joined the mission."
          (outcrop (bear-rocks) 45 44  49 46  47 51  46 49)
          (houses (levittown) 61 45  69 45  69 49  61 49))
 
+(defgame model-game (:model test-model
+                     :ignitions ((:x 55 :y 50 :t 4)
+                                (:x 90 :y 90 :t 7)
+                                (:x 91 :y 98)
+                                (:x 25 :y 20)
+                                (:x 64 :y 47 :t 14)))
+         (forest (sherwood-forest) 0 0  30 0  45 45  10 40  0 25)
+         (lake (loch-ness) 55 55  80 65  70 75  60 68  45 60)
+         (river (nile) 70 0  60 20  64 60)
+         (road (lincoln-highway) 40 0  4 99)
+         (outcrop (bear-rocks) 45 44  49 46  47 51  46 49)
+         (houses (levittown) 61 45  69 45  69 49  61 49))
+
 (assert (get-game *default-game*))
+
+(defun test-model (state)
+  (format t "~&test-model: ~:W~%" state))
 
 
 
 #|
 
 (progn
-  (load "/home/dfm/w/wildfire/wildfire.lisp")
+  (swank:set-default-directory "/home/dfm/w/wildfire/")
+  (load "wildfire")
   (swank:set-package "WILDFIRE")
-  (funcall (find-symbol "START-SERVER") :debug t))
+  (funcall (find-symbol "START-SERVER" (find-package "WILDFIRE")) :debug nil))
 
 |#
