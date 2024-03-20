@@ -30,10 +30,11 @@
 (defparameter *access-log* "wildfire.log")
 (defparameter *default-game* 'test-game)
 
+(define-constant +source-file-type+ "lisp" :test #'string=)
 (define-constant +default-port+ 8978)
 (define-constant +cell-size+ 20)                      ; in pixels, cells are always square
 (define-constant +view-size+ (* 39 +cell-size+))      ; in pixels, view is always square
-(define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point about which to spin plane
+(define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point within plane about which to spin
 (define-constant +default-map-size+ 100)              ; in cells, default for both width and height
 (define-constant +polling-interval+ 333)              ; milliseconds
 (define-constant +flame-flicker-interval+ 150)        ; milliseconds
@@ -739,12 +740,22 @@ joined the mission."
                             ((integerp *debug*) (make-keyword #?"DEBUG${*debug*}"))
                             (t :debug))))
 
+(defun load-model-files ()
+  (dolist (f (mapcar (lambda (p) (make-pathname :defaults p :type nil))
+                     (directory (merge-pathnames (make-pathname :name :wild
+                                                                :type +source-file-type+)
+                                                 (uiop:subpathname *data-directory*
+                                                                   "models/")))))
+    (v:info "Loading model file ~S" f)
+    (load f)))
+
 (defun start-server (&key (port *port*) debug)
   (enable-debug debug)
   (setf *port* port)
   (when *server*
     (v:warn "Server ~S already running, restarting it" *server*)
     (stop-server))
+  (load-model-files)
   (setf *server* (start (make-instance 'easy-acceptor
                                        :document-root *data-directory*
                                        :access-log-destination *access-log*
@@ -784,9 +795,6 @@ joined the mission."
          (houses (levittown) 61 45  69 45  69 49  61 49))
 
 (assert (get-game *default-game*))
-
-(defun test-model (state)
-  (format t "~&test-model: ~:W~%" state))
 
 
 
