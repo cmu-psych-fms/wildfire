@@ -3,7 +3,7 @@
 #-(and cl-ppcre hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
                 :spinneret :hunchentoot :smackjack :cl-json :css-lite :parenscript
-                :uuid :cl-geometry :vom))
+                :uuid :cl-geometry :uiop :local-time :vom))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (export '(geometry::make-point geometry::construct-bounding-box
@@ -13,7 +13,7 @@
 (defpackage :wildfire
   (:use :common-lisp :alexandria :iterate :ppcre
         :spinneret :hunchentoot :smackjack :json :uuid)
-  (:local-nicknames (:css :css-lite) (:v :vom) (:g :geometry))
+  (:local-nicknames (:css :css-lite) (:v :vom) (:g :geometry) (:lt :local-time))
   (:import-from :ps ps:@)
   (:export #:start-server #:stop-server #:run-standalone #:defgame))
 
@@ -24,6 +24,9 @@
 
 
 ;;; Configuration
+
+(define-constant +version+ "1.0" :test #'equal)
+(define-constant +mission-log-format-version+ "1.0" :test #'equal)
 
 (defparameter *debug* nil)
 (defparameter *data-directory* *default-pathname-defaults*)
@@ -268,7 +271,8 @@
   map
   ignitions
   (fires (make-hash-table))
-  (last-click nil))
+  (last-click nil)
+  log-file-path)
 
 (define-object-printer mission (s) "~A, ~A (~D))"
                        (mission-id s)
@@ -277,18 +281,41 @@
 
 (defparameter *missions* (make-hash-table :test 'equalp))
 
+(defun write-to-mission-log (mission plist &optional first-time)
+  (with-open-file (stream (mission-log-file-path mission)
+                          :direction :output
+                          :if-exists :append
+                          :if-does-not-exist :create)
+    (format stream "~:[~%~;~](~{~S ~S~^~% ~})~%" first-time plist)
+    plist))
+
+(defun create-mission-log (mission)
+  ;; TODO include more metadata here, such as the contents of the game object and map
+  (write-to-mission-log mission
+                        `(:log-file-version ,+mission-log-format-version+ :wildfire-version ,+version+
+                          :start-time ,(lt:format-timestring nil (lt:now))
+                          :original-log-file-path ,(namestring (mission-log-file-path mission))
+                          :mission ,(mission-id mission)
+                          :game ,(symbol-name (game-name (mission-game mission))))
+                        t))
+
 (defun make-mission (game &optional id)
   (unless id
     (setf id (format nil "mission-~A" (make-v1-uuid))))
   (iter (with map := (make-array (list (game-width game) (game-height game))))
-        (with result := (%make-mission :id id
-                                       :game game
-                                       :ignitions (game-ignitions game)))
+        (with result :=
+              (%make-mission :id id
+                             :game game
+                             :ignitions (game-ignitions game)
+                             :log-file-path (merge-pathnames (format nil "~A-log.lisp" id)
+                                                             (uiop:subpathname *data-directory*
+                                                                               "mission-logs/"))))
         (for y :from 0 :below (game-height game))
         (iter (for x :from 0 :below (game-width game))
               (setf (aref map x y) (make-cell x y (aref (game-map game) x y))))
         (finally (setf (mission-map result) map)
                  (setf (gethash id *missions*) result)
+                 (create-mission-log result)
                  (return result))))
 
 (defun get-mission (id)

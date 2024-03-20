@@ -2,5 +2,6 @@
 *.fas
 *.?x??fsl
 *.log
+*-log.lisp
 nohup.out
 original
