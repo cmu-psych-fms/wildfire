@@ -286,7 +286,7 @@
                           :direction :output
                           :if-exists :append
                           :if-does-not-exist :create)
-    (format stream "~:[~%~;~](~{~S ~S~^~% ~})~%" first-time plist)
+    (format stream "~:[~%~;~](~{~S ~:W~^~% ~})~%" first-time plist)
     plist))
 
 (defun create-mission-log (mission)
