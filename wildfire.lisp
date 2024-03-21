@@ -11,11 +11,13 @@
             geometry::x-max geometry::y-max) :geometry))
 
 (defpackage :wildfire
+  (:nicknames :wf)
   (:use :common-lisp :alexandria :iterate :ppcre
         :spinneret :hunchentoot :smackjack :json :uuid)
   (:local-nicknames (:css :css-lite) (:v :vom) (:g :geometry) (:lt :local-time))
   (:import-from :ps ps:@)
-  (:export #:start-server #:stop-server #:run-standalone #:defgame))
+  (:export #:start-server #:stop-server #:run-standalone #:defgame
+           #:grass #:ash #:water #:tree #:road #:rock #:house))
 
 (in-package :wildfire)
 
@@ -35,8 +37,10 @@
 
 (define-constant +source-file-type+ "lisp" :test #'string=)
 (define-constant +default-port+ 8978)
+(define-constant +view-side+ 39)                      ; number of cells on one side of the view
+(assert (oddp +view-side+))                           ; must be odd
 (define-constant +cell-size+ 20)                      ; in pixels, cells are always square
-(define-constant +view-size+ (* 39 +cell-size+))      ; in pixels, view is always square
+(define-constant +view-size+ (* +view-side+ +cell-size+)) ; in pixels, view is always square
 (define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point within plane about which to spin
 (define-constant +default-map-size+ 100)              ; in cells, default for both width and height
 (define-constant +polling-interval+ 333)              ; milliseconds
@@ -321,6 +325,13 @@
 (defun get-mission (id)
   (gethash id *missions*))
 
+(defun mission-cell (mission x y)
+  (let ((m (mission-map mission))
+        (g (mission-game mission)))
+    (and (< -1 x (game-width g))
+         (< -1 y (game-height g))
+         (aref m x y))))
+
 
 
 (defstruct (player (:constructor %make-player)
@@ -383,7 +394,7 @@ joined the mission."
 ;; (declaim (ftype (function (t t t) t) queue-motion))
 
 ;; (defun wildfire-model (player-id state)
-;;   (when (equalp (cdr (assoc :speed state)) '(0 0))
+;;   (when (equalp (cdr (assoc :velocity state)) '(0 0))
 ;;     (cond ((null *next-model-move*)
 ;;            (setf *next-model-move* (+ 5000 (cdr (assoc :time state))))
 ;;            nil)
@@ -471,7 +482,7 @@ joined the mission."
     `(ps:var plane (load-image "images/plane.png"))
     `(ps:var flames (map load-image '("images/flame.png" "images/flame2.png")))
     `(ps:var flame-index 0)
-    `(ps:var speed '(0 0))
+    `(ps:var velocity '(0 0))
     `(ps:var angle ,(- (/ pi 2)))
 
     `(defun flame ()
@@ -551,9 +562,9 @@ joined the mission."
          (setf last-flame-time ms))
        (with-point (x y) position
          (with-point (tx ty) target
-           (with-point (sx sy) speed
+           (with-point (sx sy) velocity
              (unless (= sx sy 0)
-               (let ((d (/ (- ms last-update) 1000))) ; speed is pixels per second
+               (let ((d (/ (- ms last-update) 1000))) ; velocity is pixels per second
                  (labels ((change (spd cur lim)
                             (cond ((and (> spd 0) (> lim cur))
                                    (min (+ cur (* spd d)) lim))
@@ -566,7 +577,7 @@ joined the mission."
          (display-map)
            (setf last-update ms)
            (when (and (= x tx) (= y ty))
-             (setf speed '(0 0) last-update nil))
+             (setf velocity '(0 0) last-update nil))
            (animation-update))))
 
     `(defun render (map-data w h)
@@ -614,7 +625,7 @@ joined the mission."
           (setf (player-motion p)
                 `((:target . ,new-pos)
                   (:angle . ,angle)
-                  (:speed . ,(mapcar (lambda (x) (* (player-speed p) x))
+                  (:velocity . ,(mapcar (lambda (x) (* (player-speed p) x))
                                      `(,(cos angle) ,(sin angle)))))))))))
 
 (define-remote-call clicked-map (where player-id current)
@@ -647,16 +658,14 @@ joined the mission."
                (setf (gethash cell (mission-fires mission)) t)
                (push (coords cell) births)))
       (when-let ((last-click (mission-last-click mission)))
-        (when (and (every #'zerop (cdr (assoc :speed state)))
+        (when (and (every #'zerop (cdr (assoc :velocity state)))
                    (equal (mapcar #'pixels-to-cells (cdr (assoc :position state)))
                           (coords last-click)))
           ;; refactor for commonality with what follows
           (iter (for (xo yo) :in +extinguish-area+)
                 (for x := (+ (cell-x last-click) xo))
                 (for y := (+ (cell-y last-click) yo))
-                (for candidate := (and (< -1 x (game-width g))
-                                       (< -1 y (game-height g))
-                                       (aref m x y)))
+                (for candidate := (mission-cell mission x y))
                 (when (and candidate (cell-burningp candidate))
                   (setf (cell-burningp candidate) nil)
                   (setf (cell-type candidate) ash-type)
@@ -671,9 +680,7 @@ joined the mission."
                   (t (iter (for (xo yo) :in '((-1 0) (0 -1) (1 0) (0 1)))
                            (for x := (+ (cell-x c) xo))
                            (for y := (+ (cell-y c) yo))
-                           (for candidate := (and (< -1 x (game-width g))
-                                                  (< -1 y (game-height g))
-                                                  (aref m x y)))
+                           (for candidate := (mission-cell mission x y))
                            (when (and candidate
                                       (ct-flamablep (cell-type candidate))
                                       (not (cell-burningp candidate))
@@ -685,13 +692,40 @@ joined the mission."
             (ignite (aref m x y))))
     (values births deaths)))
 
+(define-constant +center+ (make-list 2 :initial-element (floor +view-side+ 2))
+  :test #'equal)
+
+(defun make-model-state (player client-state)
+  (let ((m (player-mission player))
+        (result (iter (for pass-through :in '(:time :angle))
+                      (nconcing `(,pass-through ,(cdr (assoc  pass-through client-state)))
+                        :into passed-through)
+                      (finally (return `(,@passed-through
+                                         :center ,+center+
+                                         :speed ,(sqrt (apply #'+ (mapcar (rcurry #'expt 2)
+                                                                          (cdr (assoc :velocity client-state)))))
+                                         :view ,(make-array `(,+view-side+ ,+view-side+))))))))
+    (iter (with v := (getf result :view))
+          (with off := (mapcar #'-
+                               (mapcar #'pixels-to-cells
+                                           (cdr (assoc :position client-state)))
+                               +center+))
+          (for x :from 0 :below +view-side+)
+          (iter (for y :from 0 :below +view-side+)
+                (for c := (mission-cell m (+ x (first off)) (+ y (second off))))
+                (setf (aref v x y)
+                      (and c `(,(ct-name (cell-type c)) ,(cell-burningp c))))))
+    result))
+
 (define-remote-call server-update (player-id state)
-  ;; TODO following is a temporary hack until I figure out how to do it more tidily
   (when-let* ((p (get-player player-id))
               (m (player-mission p))
               (g (mission-game m)))
-    (when-let ((mod (game-model g)))
-      (funcall mod state))
+    (when-let* ((mod (game-model g))
+                (model-response (funcall mod (make-model-state p state))))
+      (queue-motion player-id
+                    (mapcar #'cells-to-pixels (getf model-response :target))
+                    (cdr (assoc :position state))))
     (multiple-value-bind (births deaths) (propagate-fires m state)
       `((:motion . ,(shiftf (player-motion p) nil))
         (:ignite . ,births)
@@ -701,7 +735,7 @@ joined the mission."
        (when json
          (setf target (@ json target))
          (setf angle (@ json angle))
-         (setf speed (@ json speed))
+         (setf velocity (@ json velocity))
          (setf (ps:chain document body style cursor) "none")
          (update-position)))
 
@@ -725,7 +759,7 @@ joined the mission."
        (let ((state (ps:create :time (@ document timeline current-time)
                                :position position
                                :target target
-                               :speed speed
+                               :velocity velocity
                                :angle angle)))
          (call server-update (json) (player state)
                (progn
@@ -767,13 +801,13 @@ joined the mission."
                             ((integerp *debug*) (make-keyword #?"DEBUG${*debug*}"))
                             (t :debug))))
 
-(defun load-model-files ()
+(defun load-from-subdirectory (subdir)
   (dolist (f (mapcar (lambda (p) (make-pathname :defaults p :type nil))
                      (directory (merge-pathnames (make-pathname :name :wild
                                                                 :type +source-file-type+)
                                                  (uiop:subpathname *data-directory*
-                                                                   "models/")))))
-    (v:info "Loading model file ~S" f)
+                                                                   subdir)))))
+    (v:info "Loading ~A" (namestring f))
     (load f)))
 
 (defun start-server (&key (port *port*) debug)
@@ -782,7 +816,9 @@ joined the mission."
   (when *server*
     (v:warn "Server ~S already running, restarting it" *server*)
     (stop-server))
-  (load-model-files)
+  (load-from-subdirectory "games/")
+  (assert (get-game *default-game*))
+  (load-from-subdirectory "models/")
   (setf *server* (start (make-instance 'easy-acceptor
                                        :document-root *data-directory*
                                        :access-log-destination *access-log*
@@ -793,35 +829,6 @@ joined the mission."
 (defun run-standalone ()
   (start-server)
   (loop (sleep 100000000)))
-
-
-
-(defgame test-game (:ignitions ((:x 55 :y 50 :t 4)
-                                (:x 90 :y 90 :t 7)
-                                (:x 91 :y 98)
-                                (:x 25 :y 20)
-                                (:x 64 :y 47 :t 14)))
-         (forest (sherwood-forest) 0 0  30 0  45 45  10 40  0 25)
-         (lake (loch-ness) 55 55  80 65  70 75  60 68  45 60)
-         (river (nile) 70 0  60 20  64 60)
-         (road (lincoln-highway) 40 0  4 99)
-         (outcrop (bear-rocks) 45 44  49 46  47 51  46 49)
-         (houses (levittown) 61 45  69 45  69 49  61 49))
-
-(defgame model-game (:model test-model
-                     :ignitions ((:x 55 :y 50 :t 4)
-                                (:x 90 :y 90 :t 7)
-                                (:x 91 :y 98)
-                                (:x 25 :y 20)
-                                (:x 64 :y 47 :t 14)))
-         (forest (sherwood-forest) 0 0  30 0  45 45  10 40  0 25)
-         (lake (loch-ness) 55 55  80 65  70 75  60 68  45 60)
-         (river (nile) 70 0  60 20  64 60)
-         (road (lincoln-highway) 40 0  4 99)
-         (outcrop (bear-rocks) 45 44  49 46  47 51  46 49)
-         (houses (levittown) 61 45  69 45  69 49  61 49))
-
-(assert (get-game *default-game*))
 
 
 
