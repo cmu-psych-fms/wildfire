@@ -77,7 +77,7 @@ name recorded to ease comparison of their performance. For example
 
 In the browser window the user is presented with a
 
-![screen image](images/screen-for-doc.png)
+![screen image](/images/screen-for-doc.png)
 
 blah, blah, blah
 
