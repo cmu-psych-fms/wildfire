@@ -1,3 +1,5 @@
+(in-package :wildfire)
+
 (defgame test-game (:ignitions ((:x 55 :y 50 :t 4)
                                 (:x 90 :y 90 :t 7)
                                 (:x 91 :y 98)
