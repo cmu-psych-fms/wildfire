@@ -87,11 +87,37 @@ The plane cannot fly off the underlying map, when it reaches the edge of the und
 
 While not yet present, in the future there will be
 
-* indications on the border of the view showing the direction in which lie various items outside the current
-view, but still known to the player
+* indicators on the border of the view showing the direction in which lie various items outside the current
+view, but still known to the player,
 
-* foo bar baZ
-laj lajidsf lkj adfs
+* further pieces of information about he state of the mission displayed in the margins around the view,
+
+* and affordances for various possible actions the player can perform displayed in the margins around the view.
+
+To fly to a particular location simply left click on that location in the view. To fly to locations not in the current
+view you must first click on a location in the correct location and then click again as new terrain comes into view.
+This will likely be augmented with other gestures for flying in a direction off the view. In addition, it will
+in the future be possible to lay down markers, which will persist even when out of the view, but can be cited
+as places to visit.
+
+In the view there are currently seven types of cell that might be present
+
+1. grass ~[grass](/images/grass.png)
+
+2. ash ~[ash](/images/ash.png)
+
+3. water ~[water](/images/water.png)
+
+4. tree ~[tree](/images/tree.png)
+
+5. road ~[road](/images/road.png)
+
+6. rock ~[rock](/images/rock.png)
+
+7. house ~[house](/images/house.png)
+
+
+
 
 
 ### Running the Server
