@@ -43,7 +43,7 @@
 (define-constant +view-size+ (* +view-side+ +cell-size+)) ; in pixels, view is always square
 (define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point within plane about which to spin
 (define-constant +default-map-size+ 100)              ; in cells, default for both width and height
-(define-constant +polling-interval+ 333)              ; milliseconds
+(define-constant +polling-interval+ 1000)             ; milliseconds
 (define-constant +flame-flicker-interval+ 150)        ; milliseconds
 
 (define-constant +cell-type-names+
@@ -285,23 +285,25 @@
 
 (defparameter *missions* (make-hash-table :test 'equalp))
 
-(defun write-to-mission-log (mission plist &optional first-time)
+(defun write-to-mission-log (mission kind plist)
+  (check-type kind keyword)
   (with-open-file (stream (mission-log-file-path mission)
                           :direction :output
                           :if-exists :append
                           :if-does-not-exist :create)
-    (format stream "~:[~%~;~](~{~S ~:W~^~% ~})~%" first-time plist)
-    plist))
+    (format stream "~:[~%~;~](~S ~S~%~{ ~S ~:W~^~%~})~%"
+            (eq kind :metadata)
+            kind
+            (lt:format-timestring nil (lt:now))
+            plist)))
 
 (defun create-mission-log (mission)
   ;; TODO include more metadata here, such as the contents of the game object and map
-  (write-to-mission-log mission
+  (write-to-mission-log mission :metadata
                         `(:log-file-version ,+mission-log-format-version+ :wildfire-version ,+version+
-                          :start-time ,(lt:format-timestring nil (lt:now))
                           :original-log-file-path ,(namestring (mission-log-file-path mission))
                           :mission ,(mission-id mission)
-                          :game ,(symbol-name (game-name (mission-game mission))))
-                        t))
+                          :game ,(symbol-name (game-name (mission-game mission))))))
 
 (defun make-mission (game &optional id)
   (unless id
@@ -641,7 +643,7 @@ joined the mission."
 ;;; TODO make fire scale fire probabilities by update speed (probably well above
 ;;;      here somewhere)
 
-;;; TODO factor out various geometry things, like test for a cell being in bounds
+;;; TODO factor out various geometry things, like testing for a cell being in bounds
 
 (defun propagate-fires (mission state)
   (let* ((g (mission-game mission))
@@ -721,15 +723,21 @@ joined the mission."
   (when-let* ((p (get-player player-id))
               (m (player-mission p))
               (g (mission-game m)))
-    (when-let* ((mod (game-model g))
-                (model-response (funcall mod (make-model-state p state))))
-      (queue-motion player-id
-                    (mapcar #'cells-to-pixels (getf model-response :target))
-                    (cdr (assoc :position state))))
-    (multiple-value-bind (births deaths) (propagate-fires m state)
-      `((:motion . ,(shiftf (player-motion p) nil))
-        (:ignite . ,births)
-        (:extinguish . ,deaths)))))
+    (write-to-mission-log m :update-request-from-client (alist-plist state))
+    (when-let ((mod (game-model g))
+               (model-state (make-model-state p state)))
+      (write-to-mission-log m :call-model model-state)
+      (when-let ((model-response (funcall mod model-state)))
+        (write-to-mission-log m :model-response model-response)
+        (queue-motion player-id
+                      (mapcar #'cells-to-pixels (getf model-response :target))
+                      (cdr (assoc :position state)))))
+    (let ((response (multiple-value-bind (births deaths) (propagate-fires m state)
+                      `((:motion . ,(shiftf (player-motion p) nil))
+                        (:ignite . ,births)
+                        (:extinguish . ,deaths)))))
+      (write-to-mission-log m :update-from-server (alist-plist response))
+      response)))
 
 (js `(defun motion (json)
        (when json
