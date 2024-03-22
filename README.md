@@ -3,6 +3,8 @@
 This is a new implementation of a firefighting game based on Shawn Betts’s *wildfire*,
 This new implementation being primarily written in Lisp. The game play of this new version is
 significantly different from Shawn’s original game, being largely mouse driven rather than keystroke driven.
+The game is intended not as entertainment but rather as a platform for experiments in psychology.
+Players fly virtual airplanes over a virtual terrain extinguishing wildfires.
 
 As of 21 March 2024 this remains just the beginnings of this new implementation, but incorporates an example
 of what is believed to be every major component the finished version will require, and it appears to work well.
@@ -25,8 +27,49 @@ access to a Windows machine.
 
 ### Terminology
 
+Wildfire has *games*, *missions* and *players*.
+
+A *game* brings together attributes of a particular virtual environment, or experiment. It’s most important
+component is *map*, describing the terrain. The map is rectangular, and divided into square *cells*, each *cell*
+being a particular type of terrain, such as grass or woodland. When defining a *map* polygonal *regions* are
+defined and named, being contiguous sets of *cells* of the same type. A game has a *name* and an *id*, as well
+as various other parameters such as where in the *map* the *player* starts and details of fire initiation and
+propagation. There may be any number of *games* available, and they are defined before the server is started,
+using `defgame` forms in `.lisp` files in the `games/` subdirectory of the main server directory. This is described
+in more detail below under the heading Defining Games.
+
+A *player* is one participant. Currently a *player* can only manipulate a single airplane, and each airplane has a
+single *player* associated with it; in the future I expect to allow one *player* to manipulate multiple planes.
+
+A *mission* is an instantiation of a game with one or more players. Currently only a single *player* is supported
+in a *mission* but in the future I expect to support multiple *players* in the same *mission*. The *game* defines
+the initial state of the *mission*, which evolves as it is played. A *mission* is created when the user points a browser
+at the Wildfire URL, as described in the next section.
+
 
 ### Starting a Game
+
+If Wildfire is running on a server named `<server>` using port `<port>` game play can be started by pointing
+a browser at
+
+    http://<server>:<port>/
+
+For example, if the server is `koalemos.psy.cmu.edu` and the port is `8978` (the default)
+
+    http://koalemos.psy.cmu.edu:8978/
+
+This will create a new player playing a new mission using a default game. It is possible to provide the name of an
+alternative game using `?game=`. For example, to play the `model-game` game
+
+    http://koalemos.psy.cmu.edu:8978/?game=model-game
+
+When starting a game in this way the names of the mission and game are provided by the server. However, names
+can be provided using `?mission=` and/or `?player=`, which facilitates multiple players joining the same
+mission. While multiple players in a mission is not yet supported, the code exists for joining such missions
+as soon as it is. Similarly, this allows the same player to participate in different missions but have their
+name recorded to ease comparison of their performance. For example
+
+    http://koalemos.psy.cmu.edu:8978/?game=conflagration&player=fred&misison=fred-and-john-mission
 
 
 ### Game Play
