@@ -89,9 +89,7 @@ While not yet present, in the future there will be
 
 * indicators on the border of the view showing the direction in which lie various items outside the current
 view, but still known to the player,
-
 * further pieces of information about he state of the mission displayed in the margins around the view,
-
 * and affordances for various possible actions the player can perform displayed in the margins around the view.
 
 To fly to a particular location simply left click on that location in the view. To fly to locations not in the current
@@ -103,17 +101,11 @@ as places to visit.
 In the view there are currently seven types of cell that might be present
 
 1. grass ![grass](/images/grass.png)
-
 2. ash ![ash](/images/ash.png)
-
 3. water ![water](/images/water.png)
-
 4. tree ![tree](/images/tree.png)
-
 5. road ![road](/images/road.png)
-
 6. rock ![rock](/images/rock.png)
-
 7. house ![house](/images/house.png)
 
 
