@@ -88,7 +88,7 @@ The plane cannot fly off the underlying map, when it reaches the edge of the und
 While not yet present, in the future there will be
 
 * indications on the border of the view showing the direction in which lie various items outside the current
-  view, but still known to the player
+view, but still known to the player
 
 * foo bar baZ
 laj lajidsf lkj adfs
