@@ -42,7 +42,8 @@ A *player* is one participant. Currently a *player* can only manipulate a single
 single *player* associated with it; in the future I expect to allow one *player* to manipulate multiple planes.
 
 A *mission* is an instantiation of a game with one or more players. Currently only a single *player* is supported
-in a *mission* but in the future I expect to support multiple *players* in the same *mission*. The *game* defines
+in a *mission* but in the future I expect to support multiple *players* in the same *mission*, and the code
+is structured in a way that is expected to support such use. The *game* defines
 the initial state of the *mission*, which evolves as it is played. A *mission* is created when the user points a browser
 at the Wildfire URL, as described in the next section.
 
@@ -73,6 +74,12 @@ name recorded to ease comparison of their performance. For example
 
 
 ### Game Play
+
+In the browser window the user is presented with a
+
+![screen image](images/screen-for-doc.png)
+
+blah, blah, blah
 
 
 ### Running the Server
