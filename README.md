@@ -8,8 +8,8 @@ Players fly virtual airplanes over a virtual terrain extinguishing wildfires.
 
 As of 21 March 2024 this remains just the beginnings of this new implementation, but incorporates an example
 of what is believed to be every major component the finished version will require, and it appears to work well.
-As additional features are added they will be documented in this README. In what follows I
-point out many of the features I hope to implement as development progresses.
+As additional features are added they will be documented in this README. In what follows I describe the current
+state of the game, but also point out many of the features I hope to implement as development progresses.
 
 
 ### Compatibility
@@ -96,7 +96,8 @@ To fly to a particular location simply left click on that location in the view. 
 view you must first click on a location in the correct location and then click again as new terrain comes into view.
 This will likely be augmented with other gestures for flying in a direction off the view. In addition, it will
 in the future be possible to lay down markers, which will persist even when out of the view, but can be cited
-as places to visit.
+as places to visit. Also, currently clicking on a location while the plane is en route immediately changes the plane’s
+destination; in the future it will instead be possible to queue up a sequence of destinations.
 
 In the view there are currently seven types of cells that might be present
 
@@ -108,8 +109,20 @@ In the view there are currently seven types of cells that might be present
 6. ![rock](/images/rock.png) rock
 7. ![house](/images/house.png) house
 
+In the future there may be other types of cells, too.
 
+In addition, a grass, tree or house cell might be on fire, in which case it is augmented with flames
+![flames](/images/flame.png).
 
+A game typically designates one or more cells that are ignited at specific times after the game begins.
+This fires then slowly spread stochasticly to neighboring flammable cells. Fires also stochasticly burn
+themselves out, the burned out cells changing to ash. Fires cannot propagate across roads, water, rocks or ash.
+
+The goal of the game is for the player(s) to find and extinguish these fires. Currently the mechanism for extinguishing a fire is simply to click on or near it: when the plane reaches a location clicked on it extinguishes any burning cells within
+a small radius of the location clicked on. In the future this mechanism will become more complex, with the player(s) needing
+to explicitly drop and extinguishing agent on a fire. A plane will only carry a limited quantity of such an agent, and will
+need to refill it periodically. Planning and coördinating such use of an extinguishing agent and the required travel will
+be an important part of the players efforts.
 
 
 ### Running the Server
