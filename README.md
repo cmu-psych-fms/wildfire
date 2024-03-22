@@ -75,13 +75,23 @@ name recorded to ease comparison of their performance. For example
 
 ### Game Play
 
-In the browser window the user is presented with a
-
-<img src="images/screen-for-doc.png" alt="screen image" width="600" height="600">
+In the browser window the user is presented with a *view* into the game’s map, 39 cells by 39 cells.
 
 ![screen image](/images/screen-for-doc.png)
 
-blah, blah, blah
+The player’s plane is centered in this image, and remains so as the plane flies about the landscape, with
+the terrain shown varying as the plane’s position on the underlying map changes. If the plane is not moving
+it should be interpreted as it circling above the location at which is is stopped. When moving the plane
+currently travels at a constant speed, but in the future it will be possible to vary the speed of he plane.
+The plane cannot fly off the underlying map, when it reaches the edge of the underlying map it stops.
+
+While not yet present, in the future there will be
+
+* indications on the border of the view showing the direction in which lie various items outside the current
+  view, but still known to the player
+
+* foo bar baZ
+laj lajidsf lkj adfs
 
 
 ### Running the Server
