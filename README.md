@@ -98,15 +98,15 @@ This will likely be augmented with other gestures for flying in a direction off 
 in the future be possible to lay down markers, which will persist even when out of the view, but can be cited
 as places to visit.
 
-In the view there are currently seven types of cell that might be present
+In the view there are currently seven types of cells that might be present
 
-1. grass ![grass](/images/grass.png)
-2. ash ![ash](/images/ash.png)
-3. water ![water](/images/water.png)
-4. tree ![tree](/images/tree.png)
-5. road ![road](/images/road.png)
-6. rock ![rock](/images/rock.png)
-7. house ![house](/images/house.png)
+1. ![grass](/images/grass.png) grass
+2. ![ash](/images/ash.png) ash
+3. ![water](/images/water.png) water
+4. ![tree](/images/tree.png) tree
+5. ![road](/images/road.png) road
+6. ![rock](/images/rock.png) rock
+7. ![house](/images/house.png) house
 
 
 
