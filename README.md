@@ -10,6 +10,8 @@ As of 21 March 2024 this remains just the beginnings of this new implementation,
 of what is believed to be every major component the finished version will require, and it appears to work well.
 As additional features are added they will be documented in this README. In what follows I describe the current
 state of the game, but also point out many of the features I hope to implement as development progresses.
+My goal throughout developing this is to keep it in a state suitable for running throughout, simply adding
+features incrementally.
 
 
 ### Compatibility
@@ -142,8 +144,62 @@ Installation and running should be straightforward:
 
 ### Defining Games
 
+To ease the addition of games to Wildfire when the server starts it looks in the `games/` subdirectory of the
+server directory when the server starts. For each `.lisp` file it finds in that subdirectory it calls `load` with the
+filename but not file type to load the file. Note that this means if there is a more recent compiled version of the file
+it will typically load that in preference to the source file, and will otherwise load the source file. These files
+should typically contain one or more `defegame` forms.
 
 ### Defining Models
+
+In addition to human players, there can, though do not have to be, mechanical players, *models*. Once multiple players
+in a single mission are supported it will be possible to have both humans and models playing in a single mission.
+
+A *model* is implemented as a Lisp function of one argument. This function is called each time the server and client
+interact and exchange information, currently at a rate of approximately 1 Hz. Th argument is a plist describing the
+then current state of the mission from this modeled players perspective. The model can simply learn from this
+information, or it can decide to take one or more actions. To take actions, the model function should return a plist,
+describing the action or actions to be taken; if it takes no actions it should return `nil`.
+
+To ease the addition of models to Wildfire when the server starts it looks in the `models/` subdirectory of the
+server directory when the server starts. For each `.lisp` file it finds in that subdirectory it calls `load` with the
+filename but not file type to load the file. Note that this means if there is a more recent compiled version of the file
+it will typically load that in preference to the source file, and will otherwise load the source file. These files
+should typically contain one or more model functions.
+
+As of right now a game uses a model function for the player in a mission playing this game if the `defgame` form
+cites the function in a `:model` keyword argument. When support for multiple players in a mission is supprted
+this mechanism will necessarily change slightly, but will be similar.
+
+Among the items in the plist argument supplied to a model function are
+
+* `:time`, the current model time, in seconds, where zero was the start of the game
+* `speed`, the current speed of the modeled player’s plane, in abstract units
+* `view`, a two dimensional array, each element corresponding to a cell that is currently visible to the player;
+each element is either `nil`, denoting a cell of the view that is off the map and cannot be visited, or a two
+element list, a keyword denoting the type of cell (*e. g.* :grass or :rock) and a Boolean indicting whether the
+cell is currently on fire
+* `:center`, a two element list the position in the view that the plane occupies; this is essentially a constant
+that could easily be computed from the dimensions of the view array, but is supplied as a convenience.
+
+In the future more information will be supplied as part of this argument.
+
+The only currently supported action that the model can return is motion to a target location in the view.
+To do this return `(:target <x> <y>)`, where `<x>` and `<y>` are the indices into the view array of the cell
+to which to move. In the future a wider repertoire of possible actions will be available.
+
+And example model function is in `models/test-model.lisp`. This simple example waits five seconds after the mission
+starts, and then
+
+* if the player is moving, does nothing
+
+* if the player is stopped it looks for cells in its view that are on fire, and if it finds any that it
+is not already directly on top of it picks one at random and moves to it
+
+* if the player is topped and no such fires are found it selects a cell at random that is at least three cells
+away from the current position and moves to it.
+
+This example model is used by the example `model-game` defined in `games/test-games.lisp`.
 
 
 ### Mission Logs

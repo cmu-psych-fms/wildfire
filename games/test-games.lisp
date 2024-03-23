@@ -1,3 +1,5 @@
+;;;; Copyright 2024 Carnegie Mellon University
+
 (in-package :wildfire)
 
 (defgame test-game (:ignitions ((:x 55 :y 50 :t 4)
