@@ -147,3 +147,46 @@ Installation and running should be straightforward:
 
 
 ### Mission Logs
+
+Each mission writes a details description of what has transpired in the mission into a file in the `mission-logs/`
+subdirectory of the main server diretory. This file has a name of the form `mission-<id>-log.lisp` where `<id>` is
+replaced by the mission ID, the string representation of a
+[UUID](https://datatracker.ietf.org/doc/html/rfc4122), for example
+
+    mission-logs/mission-03F3D280-E7E2-11EE-A371-64006A6189B3-log.lisp
+
+The primary purpose of these log files is to record detailed information about the interrelations of users with
+Wildfire for subsequent analysis. While not yet implemented, it will also eventually be possible to play back these log
+files as a way to observe previous game play as an aid to such analysis.
+
+A mission log file contains a sequence of textual representations of Common Lisp lists. The first element (car) of each
+list is a Comomon Lisp keyword describing the kind of record it represents, one of the following
+
+    :metadata
+    :update-request-from-client
+    :call-model
+    :model-response
+    :update-from-server
+
+The second element (cadr) of each list is an [ISO 8601 timestamp](https://www.iso.org/iso-8601-date-and-time-format.html),
+the time on the server that this record was written.
+
+The remainder of the list (cddr) is a plist containing detailed information appropriate to a record of the given kind.
+
+The first record in ever file is a `:metadata` record recording information about the mission, including, for example,
+the version number of the Wildfire software, the version number of the log file format itself, the mission ID
+and the name of the game being played. The timestamp in this record is also the start time of the mission. This is
+the only `:metadata` record in the file, and is always first.
+
+Each time the client and server exchange information both an `update-requiest-from-client` and an `update-from-server`
+are written, the first when the server receives the triggering update request from the client, and the second when
+the server responds. The first contains information the client sends to the server with its request, such as if the user
+has clicked the mouse and where, and the second the information the server returns to the client, such as whither
+to move and how to update whatever fires may be burning.
+
+If a model is being used, between these two records may also appear a `:call-model` record, containing all the information
+provided to the model as it is called. If the model returns a non-nil response this will be followed by a
+`mofrl-trdpondr` record containing that response.
+
+Mission log files can grow large quickly, on the order of Gigabytes, especially if a model is in use.
+The do, however, compress well.
