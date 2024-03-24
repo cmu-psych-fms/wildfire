@@ -1,12 +1,12 @@
 ### What Is This?
 
 This is a new implementation of a firefighting game based on Shawn Betts’s *wildfire*,
-This new implementation being primarily written in Lisp. The game play of this new version is
+this new implementation being primarily written in Lisp. The game play of this new version is
 significantly different from Shawn’s original game, being largely mouse driven rather than keystroke driven.
 The game is intended not as entertainment but rather as a platform for experiments in psychology.
 Players fly virtual airplanes over a virtual terrain extinguishing wildfires.
 
-As of 21 March 2024 this remains just the beginnings of this new implementation, but incorporates an example
+As of 22 March 2024 this remains just the beginnings of this new implementation, but incorporates an example
 of what is believed to be every major component the finished version will require, and it appears to work well.
 As additional features are added they will be documented in this README. In what follows I describe the current
 state of the game, but also point out many of the features I hope to implement as development progresses.
@@ -19,7 +19,7 @@ features incrementally.
 This *should* be playable in any major browser released since 2018, but will likely fail in earlier browser versions.
 The UI is aimed at a computer with a screen of at least 1920 × 1080 pixels, and with a mouse or touchpad. It may or may
 not be playable with a smaller screen, and almost certainly will not be playable on a phone or tablet.
-As of 21 March 2024 there appears to be a bug when used with Apple Safari, but I hope to understand and fix that bug soon.
+As of 22 March 2024 there appears to be a bug when used with Apple Safari, but I hope to understand and fix that bug soon.
 
 The server-side code has only been tested in SBCL on Linux, but *should* run fine in any modern Common Lisp implementation
 that can run USOCKET and Bordeaux Threads. It *should* be possible to run it in Windows, though some minor modifications
@@ -150,12 +150,12 @@ The available games are defined using the `defgame` form.
 
 None of the arguments to `defgame` is evaluated.
 
-A `<region description` is of the form
+A `<region description>` is of the form
 
     (<region type> (<region name> &key <keyword arguments>) & rest <points>)
 
 A region is a contiguous set of cells of of the same cell type.
-The currently supported `<region type>`s and their cell types are
+The currently supported region types and their cell types are
 * `forest tree`
 * `lake water`
 * `river water`
@@ -233,7 +233,7 @@ it will typically load that in preference to the source file, and will otherwise
 should typically contain one or more model functions.
 
 As of right now a game uses a model function for the player in a mission playing this game if the `defgame` form
-cites the function in a `:model` keyword argument. When support for multiple players in a mission is supprted
+cites the function in a `:model` keyword argument. When support for multiple players in a mission is supported
 this mechanism will necessarily change slightly, but will be similar.
 
 Among the items in the plist argument supplied to a model function are
@@ -251,7 +251,8 @@ In the future more information will be supplied as part of this argument.
 
 The only currently supported action that the model can return is motion to a target location in the view.
 To do this return `(:target <x> <y>)`, where `<x>` and `<y>` are the indices into the view array of the cell
-to which to move. In the future a wider repertoire of possible actions will be available.
+to which to move. In the future a wider repertoire of possible actions will be available. There will also be
+information available about, and actions involving, whole regions (as defined in `defgame`) identified by their names.
 
 And example model function is in `models/test-model.lisp`. This simple example waits five seconds after the mission
 starts, and then
@@ -281,7 +282,7 @@ Wildfire for subsequent analysis. While not yet implemented, it will also eventu
 files as a way to observe previous game play as an aid to such analysis.
 
 A mission log file contains a sequence of textual representations of Common Lisp lists. The first element (car) of each
-list is a Comomon Lisp keyword describing the kind of record it represents, one of the following
+list is a Common Lisp keyword describing the kind of record it represents, one of the following
 
     :metadata
     :update-request-from-client
