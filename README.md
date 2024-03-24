@@ -144,11 +144,76 @@ Installation and running should be straightforward:
 
 ### Defining Games
 
+The available games are defined using the `defgame` form.
+
+    (defgame <name> (*key <keyword arguments>) &rest <region descriptions>)
+
+None of the arguments to `defgame` is evaluated.
+
+A `<region description` is of the form
+
+    (<region type> (<region name> &key <keyword arguments>) & rest <points>)
+
+A region is a contiguous set of cells of of the same cell type.
+The currently supported `<region type>`s and their cell types are
+* `forest tree`
+* `lake water`
+* `river water`
+* `road road`
+* `outcrop rock`
+* `houses house`
+There may be further region types in the future.
+
+The `<points>` portion of the region description should be list of an even number of positive integers, the coördinates
+in cell units defining a region. Most region types are polygons, the points being their vertices, which form an implicitly
+closed loop. Two of the region types,
+`river` and `road` are instead paths, collections of line segments, one cell wide, with the points being points
+between which these segments extend, and which typically do not form a closed loop.
+
+An important keyword argument to `defgame` is `:ignitions`, which is a list of plists, the elements of this plist being
+`:x``, `:y` and `:t`, denoting the coördinates of a cell at which a fire will start, and the time, in seconds after
+the mission starts, that that fire will ignite. If no time is given, the previously specified time is re-used.
+
+Another keyword argument to `defgame` is `:model`, which should be a symbol naming a *model*, described in the next
+section, to be used for the mission playing this game.
+
+Other keyword arguments to `defgame` include the following, which all have reasonable default values if not
+explicitly supplied
+* `:width` and `:height`, the dimensions, in cells, of the game’s map
+* `start-x` and `start-y`, the position, in cell coördinates, at which the player’s plane starts
+* `fire-exhaustion-probability` and `fire-propagation-probability`, real numbers between 0 and 1 defining how
+fires spread.
+
+In the future, when multiple players are supported, much of this
+syntax will necessarily have to change, but for now it is sufficient.
+Also in the future it will be possible for a game definition to inherit from another game definition, simply updating
+those parts of its definition that are to change.
+
+Here is an example of a game definition,
+
+    (defgame model-game (:model test-model
+                         :ignitions ((:x 55 :y 50 :t 4)
+                                    (:x 90 :y 90 :t 7)
+                                    (:x 91 :y 98)
+                                    (:x 25 :y 20)
+                                    (:x 64 :y 47 :t 14)))
+             (forest (sherwood-forest) 0 0  30 0  45 45  10 40  0 25)
+             (lake (loch-ness) 55 55  80 65  70 75  60 68  45 60)
+             (river (nile) 70 0  60 20  64 60)
+             (road (lincoln-highway) 40 0  4 99)
+             (outcrop (bear-rocks) 45 44  49 46  47 51  46 49)
+             (houses (levittown) 61 45  69 45  69 49  61 49))
+
 To ease the addition of games to Wildfire when the server starts it looks in the `games/` subdirectory of the
 server directory when the server starts. For each `.lisp` file it finds in that subdirectory it calls `load` with the
 filename but not file type to load the file. Note that this means if there is a more recent compiled version of the file
 it will typically load that in preference to the source file, and will otherwise load the source file. These files
 should typically contain one or more `defegame` forms.
+
+The default `games/` subdirectory contains a file, `test-games.lisp`, defining two simple example games,
+`test-game` and `model-game`. These two games are identical, except that the latter uses an example model
+which the former does not.
+
 
 ### Defining Models
 
