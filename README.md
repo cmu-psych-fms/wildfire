@@ -117,7 +117,7 @@ In addition, a grass, tree or house cell might be on fire, in which case it is a
 ![flames](/images/flame.png).
 
 A game typically designates one or more cells that are ignited at specific times after the game begins.
-This fires then slowly spread stochasticly to neighboring flammable cells. Fires also stochasticly burn
+These fires then slowly spread stochasticly to neighboring flammable cells. Fires also stochasticly burn
 themselves out, the burned out cells changing to ash. Fires cannot propagate across roads, water, rocks or ash.
 
 The goal of the game is for the player(s) to find and extinguish these fires. Currently the mechanism for extinguishing a fire is simply to click on or near it: when the plane reaches a location clicked on it extinguishes any burning cells within
