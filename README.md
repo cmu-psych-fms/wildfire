@@ -122,7 +122,7 @@ themselves out, the burned out cells changing to ash. Fires cannot propagate acr
 
 The goal of the game is for the player(s) to find and extinguish these fires. Currently the mechanism for extinguishing a fire is simply to click on or near it: when the plane reaches a location clicked on it extinguishes any burning cells within
 a small radius of the location clicked on. In the future this mechanism will become more complex, with the player(s) needing
-to explicitly drop and extinguishing agent on a fire. A plane will only carry a limited quantity of such an agent, and will
+to explicitly drop an extinguishing agent on a fire. A plane will only carry a limited quantity of such an agent, and will
 need to refill it periodically. Planning and coördinating such use of an extinguishing agent and the required travel will
 be an important part of the players efforts.
 
