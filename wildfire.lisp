@@ -307,7 +307,11 @@
 
 (defun make-mission (game &optional id)
   (unless id
-    (setf id (format nil "mission-~A" (make-v1-uuid))))
+    (setf id (lt:format-timestring nil (lt:now)
+                                   :format `("mission-" (:year 4) (:month 2) (:day 2)
+                                                        (:hour 2) (:min 2) (:sec 2)
+                                                        (:msec 3) "-"
+                                                        ,(princ-to-string (make-v1-uuid))))))
   (iter (with map := (make-array (list (game-width game) (game-height game))))
         (with result :=
               (%make-mission :id id
@@ -708,6 +712,7 @@ joined the mission."
                                                                           (cdr (assoc :velocity client-state)))))
                                          :view ,(make-array `(,+view-side+ ,+view-side+))))))))
     (iter (with v := (getf result :view))
+          (with type-cells := nil)
           (with off := (mapcar #'-
                                (mapcar #'pixels-to-cells
                                            (cdr (assoc :position client-state)))
@@ -715,9 +720,39 @@ joined the mission."
           (for x :from 0 :below +view-side+)
           (iter (for y :from 0 :below +view-side+)
                 (for c := (mission-cell m (+ x (first off)) (+ y (second off))))
-                (setf (aref v x y)
-                      (and c `(,(ct-name (cell-type c)) ,(cell-burningp c))))))
-    result))
+                (unless c
+                  (next-iteration))
+                (for nm := (ct-name (cell-type c)))
+                (setf (aref v x y) (list nm (cell-burningp c)))
+                (push (list x y) (getf type-cells nm)))
+          (finally (return `(:regions ,(make-local-regions type-cells v) ,@result))))))
+
+(defun make-local-regions (by-type cell-data)
+  (let ((used (make-hash-table :test 'equal)))
+    (labels ((gather-region (coord type)
+               (iter (with pending := (list coord))
+                     (with result := (list coord))
+                     (initially (setf (gethash coord used) t))
+                     (while pending)
+                     (for (x y) := (pop pending))
+                     (iter (for (x0 y0) :in '((-1 0) (0 -1) (1 0) (0 1)))
+                           (for new-x := (+ x x0))
+                           (for new-y := (+ y y0))
+                           (unless (and (< -1 new-x +view-side+) (< -1 new-y +view-side+))
+                             (next-iteration))
+                           (for new-coord := (list new-x new-y))
+                           (when (and (not (gethash new-coord used))
+                                      (eq (first (aref cell-data new-x new-y)) type))
+                             (push new-coord pending)
+                             (push new-coord result)
+                             (setf (gethash new-coord used) t)))
+                     (finally (return result)))))
+      (iter (with result := nil)
+            (for (type cells) :on by-type :by #'cddr)
+            (iter (for coord :in cells)
+                  (unless (gethash coord used)
+                    (push (cons type (gather-region coord type)) result)))
+            (finally (return result))))))
 
 (define-remote-call server-update (player-id state)
   (when-let* ((p (get-player player-id))
