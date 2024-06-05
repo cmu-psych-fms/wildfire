@@ -1,8 +1,24 @@
 ;;;; Copyright 2023-2024 Carnegie Mellon University
 
+;;; TODO generate Extinguishment area automatically from a simple radius, probably
+;;;      configured on a per-game basis
+;;; TODO include more metadata in the log, such as the contents of the game object and map
+;;; TODO in queue-motion it should be possible  to extract current position from player
+;;;      state instead of having to pass it as another paremeter
+;;; TODO queue-motion should probably be changed to take the target in the map's
+;;;      coordinate system
+;;; TODO make fire scale fire probabilities by update speed
+;;; TODO factor out various geometry things, like testing for a cell being in bounds
+;;; TODO figure out why this doesn't always work right on Safari
+;;; TODO figure out what's going wrong with logging near the map boundary
+;;; TODO implement an end to game
+;;; TODO auto-compress log files
+;;; TODO auto-compress log files
+;;; TODO make debug output on Lisp side less voluminous
+
 #-(and cl-ppcre hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
-                :spinneret :hunchentoot :smackjack :cl-json :css-lite :parenscript
+                :spinneret :hunchentoot :smackjack :cl-json :parenscript
                 :uuid :cl-geometry :uiop :local-time :vom))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -14,7 +30,7 @@
   (:nicknames :wf)
   (:use :common-lisp :alexandria :iterate :ppcre
         :spinneret :hunchentoot :smackjack :json :uuid)
-  (:local-nicknames (:css :css-lite) (:v :vom) (:g :geometry) (:lt :local-time))
+  (:local-nicknames (:v :vom) (:g :geometry) (:lt :local-time))
   (:import-from :ps ps:@)
   (:export #:start-server #:stop-server #:run-standalone #:defgame
            #:grass #:ash #:water #:tree #:road #:rock #:house))
@@ -43,7 +59,7 @@
 (define-constant +view-size+ (* +view-side+ +cell-size+)) ; in pixels, view is always square
 (define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point within plane about which to spin
 (define-constant +default-map-size+ 100)              ; in cells, default for both width and height
-(define-constant +polling-interval+ 1000)             ; milliseconds
+(define-constant +polling-interval+ 3000)             ; milliseconds
 (define-constant +flame-flicker-interval+ 150)        ; milliseconds
 
 (define-constant +cell-type-names+
@@ -56,8 +72,6 @@
       (houses house))
   :test #'equal)
 
-;;; TODO generate stuff like the following automatically from a simple radius, probably
-;;;      configured on a per-game basis
 (define-constant +extinguish-area+
   (iter (for x :from -3 :to 3)
         (nconcing (iter (for y :from -3 :to 3)
@@ -298,7 +312,6 @@
             plist)))
 
 (defun create-mission-log (mission)
-  ;; TODO include more metadata here, such as the contents of the game object and map
   (write-to-mission-log mission :metadata
                         `(:log-file-version ,+mission-log-format-version+ :wildfire-version ,+version+
                           :original-log-file-path ,(namestring (mission-log-file-path mission))
@@ -390,24 +403,23 @@ joined the mission."
 
 
 
-;;; TODO figure out how tidily to hook models into missions
-;;; TODO so far this is just a kludge to prove it can be done
+(defparameter *css* (make-array 1 :element-type 'character
+                                  :initial-element #\Newline
+                                  :adjustable t
+                                  :fill-pointer 1))
 
-;; (defparameter *next-model-move* nil)
+(defun %css (&rest args)
+  (format nil "~{~(~A:~A~);~}" args))
 
-;; (defparameter *locs* '#0=((200 400) (400 200) (600 600) . #0#))
+(defmacro css (&rest args &key &allow-other-keys)
+  `(apply #'%css ',args))
 
-;; (declaim (ftype (function (t t t) t) queue-motion))
+(defun %defcss (class &rest args)
+  (format *css* "~(.~A~) {~A}~%" class (apply #'%css args))
+  nil)
 
-;; (defun wildfire-model (player-id state)
-;;   (when (equalp (cdr (assoc :velocity state)) '(0 0))
-;;     (cond ((null *next-model-move*)
-;;            (setf *next-model-move* (+ 5000 (cdr (assoc :time state))))
-;;            nil)
-;;           ((>= (cdr (assoc :time state)) *next-model-move*)
-;;            (setf *next-model-move* nil)
-;;            (let ((pos (cdr (assoc :position state))))
-;;              (queue-motion player-id (pop *locs*) pos))))))
+(defmacro defcss (class &rest args &key &allow-other-keys)
+  `(apply #'%defcss ',class ',args))
 
 
 
@@ -441,6 +453,8 @@ joined the mission."
                                   ,@callback-body)))
      (apply (@ smackjack ,name) vals)))
 
+
+
 (defun not-found ()
   (acceptor-status-message *acceptor* +http-not-found+))
 
@@ -452,21 +466,22 @@ joined the mission."
     (setf (header-out :X-Clacks-Overhead) "GNU Terry Pratchett"))
   (with-html-string
     (:doctype)
-    (:html :style "font-family: 'Merriweather Sans', sans-serif; overflow-x: auto;"
+    (:html :style (css :font-family "Merriweather Sans,sans-serif" :overflow-x :auto)
            (:head (:meta :name "viewport" :content "width=device-width, initial-scale=1")
-                  (:link  :rel "stylesheet"
-                          :href "https://fonts.googleapis.com/css?family=Merriweather+Sans")
+                  (:link :rel "stylesheet"
+                         :href "https://fonts.googleapis.com/css?family=Merriweather+Sans")
+                  (:style *css*)
                   (:raw (generate-prologue *ajax*))
                   (:script (:raw (format nil "~%~A~4%// ** Wildfire **~2%~{~A~%~}"
                                          (ps:ps* ps:*ps-lisp-library*) *js*)))
                   (:title title))
-           (:body :style "margin-left: 4em; margin-top: 4ex;"
+           (:body :style (css :margin-left 4rem :margin-top 4rex)
                   (funcall thunk)))))
 
 (defun failure (fmt &rest args)
   (with-page ("Error")
     (with-html
-      (:div :style "text-align:center;font-size:larger;color:red;margin-top:6ex"
+      (:div :style (css :text-align center :font-size larger :color red :margin-top 6rex)
             (apply #'format nil fmt args)))))
 
 (js `(defun clog (&rest args)
@@ -479,7 +494,7 @@ joined the mission."
 
     `(defun load-image (path)
        (let ((img (ps:new (-image))))
-         (setf (@ img onload) load-test)
+         (setf (@ img onload) load-image-test-and-render)
          (setf (@ img src) path)
          img))
 
@@ -507,7 +522,7 @@ joined the mission."
         `(ps:var position '(,(cells-to-pixels (game-start-x g) t)
                             ,(cells-to-pixels (game-start-x g) t)))
         `(ps:var target position)
-        `(defun load-test ()
+        `(defun load-image-test-and-render ()
            (when (eql (decf load-count) 0)
              (render ',(iter (for x :below (game-width g))
                              (collect (iter (for y :below (game-height g))
@@ -517,15 +532,33 @@ joined the mission."
                      ,(game-width g) ,(game-height g)))))
     (with-page ("Mission")
       (with-html
-        (:div :style "text-align: center;"
-              (:canvas :id "view"
-                       :height +view-size+ :width +view-size+
-                       :onclick (ps:ps (clicked-map (list (@ event offset-x)
-                                                          (@ event offset-y))))
-                       "Not supported in this browser"))
-        (:canvas :id "map" :style #?'display: ${(if *debug* "block" "none")}'
-                 :height (cells-to-pixels (game-height g))
-                 :width (cells-to-pixels (game-width g)))))))
+        (:div :style (css :display :flex :justify-content :center)
+              (:div.uicol (:fieldset.component :style (css :width 10rem)
+                           (:legend :style (css :padding "0 0.3em") "Clicking on map")
+                           (:div
+                            (:input#move :type "radio" :name "click-action" :checked t)
+                            (:label :for "move" "moves airplane"))
+                           (:div
+                            (:input#mark :type "radio" :name "click-action")
+                            (:label :for "mark" "places marker")))
+                          (:div.component
+                           (:input#extinguish :type "checkbox" :checked t)
+                           (:label :for "extinguish" :style (css :width 80%
+                                                                 :display :inline-block
+                                                                 :vertical-align :middle)
+                                   "Extinguish fires at move destination")))
+              (:canvas#view :height +view-size+ :width +view-size+
+                            :onclick (ps:ps (clicked-map (list (@ event offset-x)
+                                                               (@ event offset-y))))
+                            "Not supported in this browser")
+              (:div.uicol (:div.component (:input#speed :type "range" :min 1 :max 10)
+                                          (:label :for "speed" "Airplane speed"))))
+        (:canvas#map :style #?'display: ${(if *debug* "block" "none")}'
+                     :height (cells-to-pixels (game-height g))
+                     :width (cells-to-pixels (game-width g)))))))
+
+(defcss uicol :width 14rem :margin "0 0.7rem")
+(defcss component :margin-bottom 0.8rex)
 
 (ps:defpsmacro with-point ((x y) value &body body)
   `(let (,x ,y)
@@ -580,7 +613,7 @@ joined the mission."
                    (setf x (change sx x tx))
                    (setf y (change sy y ty))))))
            (setf position (list x y))
-         (display-map)
+           (display-map)
            (setf last-update ms)
            (when (and (= x tx) (= y ty))
              (setf velocity '(0 0) last-update nil))
@@ -607,9 +640,6 @@ joined the mission."
 
     `(setf (@ document onmousemove)
            (lambda () (setf (ps:chain document body style cursor) "default"))))
-
-;;; TODO should be able to extract current from player state
-;;; TODO queue-motion should probably be changed to take the target in the map's coordinate system
 
 (defun queue-motion (player-id target current)
   ;; target is in pixels, in the visible region's coordinate system
@@ -643,11 +673,6 @@ joined the mission."
        (call clicked-map () (location player position))))
 
 
-
-;;; TODO make fire scale fire probabilities by update speed (probably well above
-;;;      here somewhere)
-
-;;; TODO factor out various geometry things, like testing for a cell being in bounds
 
 (defun propagate-fires (mission state)
   (let* ((g (mission-game mission))
@@ -701,32 +726,6 @@ joined the mission."
 (define-constant +center+ (make-list 2 :initial-element (floor +view-side+ 2))
   :test #'equal)
 
-(defun make-model-state (player client-state)
-  (let ((m (player-mission player))
-        (result (iter (for pass-through :in '(:time :angle))
-                      (nconcing `(,pass-through ,(cdr (assoc  pass-through client-state)))
-                        :into passed-through)
-                      (finally (return `(,@passed-through
-                                         :center ,+center+
-                                         :speed ,(sqrt (apply #'+ (mapcar (rcurry #'expt 2)
-                                                                          (cdr (assoc :velocity client-state)))))
-                                         :view ,(make-array `(,+view-side+ ,+view-side+))))))))
-    (iter (with v := (getf result :view))
-          (with type-cells := nil)
-          (with off := (mapcar #'-
-                               (mapcar #'pixels-to-cells
-                                           (cdr (assoc :position client-state)))
-                               +center+))
-          (for x :from 0 :below +view-side+)
-          (iter (for y :from 0 :below +view-side+)
-                (for c := (mission-cell m (+ x (first off)) (+ y (second off))))
-                (unless c
-                  (next-iteration))
-                (for nm := (ct-name (cell-type c)))
-                (setf (aref v x y) (list nm (cell-burningp c)))
-                (push (list x y) (getf type-cells nm)))
-          (finally (return `(:regions ,(make-local-regions type-cells v) ,@result))))))
-
 (defun make-local-regions (by-type cell-data)
   (let ((used (make-hash-table :test 'equal)))
     (labels ((gather-region (coord type)
@@ -753,6 +752,32 @@ joined the mission."
                   (unless (gethash coord used)
                     (push (cons type (gather-region coord type)) result)))
             (finally (return result))))))
+
+(defun make-model-state (player client-state)
+  (let ((m (player-mission player))
+        (result (iter (for pass-through :in '(:time :angle))
+                      (nconcing `(,pass-through ,(cdr (assoc  pass-through client-state)))
+                        :into passed-through)
+                      (finally (return `(,@passed-through
+                                         :center ,+center+
+                                         :speed ,(sqrt (apply #'+ (mapcar (rcurry #'expt 2)
+                                                                          (cdr (assoc :velocity client-state)))))
+                                         :view ,(make-array `(,+view-side+ ,+view-side+))))))))
+    (iter (with v := (getf result :view))
+          (with type-cells := nil)
+          (with off := (mapcar #'-
+                               (mapcar #'pixels-to-cells
+                                           (cdr (assoc :position client-state)))
+                               +center+))
+          (for x :from 0 :below +view-side+)
+          (iter (for y :from 0 :below +view-side+)
+                (for c := (mission-cell m (+ x (first off)) (+ y (second off))))
+                (unless c
+                  (next-iteration))
+                (for nm := (ct-name (cell-type c)))
+                (setf (aref v x y) (list nm (cell-burningp c)))
+                (push (list x y) (getf type-cells nm)))
+          (finally (return `(:regions ,(make-local-regions type-cells v) ,@result))))))
 
 (define-remote-call server-update (player-id state)
   (when-let* ((p (get-player player-id))
@@ -798,7 +823,15 @@ joined the mission."
            (with-point (x y) loc
              (modify-map ash x y)))))
 
+    `(ps:var pending-server-update nil)
+
+    `(defun set-server-update ()
+       (setf pending-server-update (set-timeout update-server ,+polling-interval+)))
+
     `(defun update-server ()
+       (when pending-server-update
+         (clear-timeout pending-server-update)
+         (setf pending-server-update nil))
        (let ((state (ps:create :time (@ document timeline current-time)
                                :position position
                                :target target
@@ -809,13 +842,13 @@ joined the mission."
                  (extinguish (@ json extinguish))
                  (ignite (@ json ignite))
                  (motion (@ json motion)))))
-       (set-timeout update-server ,+polling-interval+))
+       (set-server-update))
 
-    `(set-timeout update-server))
+    `(set-server-update))
 
 
 
-(js '(setf (@ window onload) load-test))
+(js '(setf (@ window onload) load-image-test-and-render))
 
 
 

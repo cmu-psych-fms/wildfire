@@ -17,8 +17,10 @@ features incrementally.
 ### Compatibility
 
 This *should* be playable in any major browser released since 2018, but will likely fail in earlier browser versions.
-The UI is aimed at a computer with a screen of at least 1920 × 1080 pixels, and with a mouse or touchpad. It may or may
-not be playable with a smaller screen, and almost certainly will not be playable on a phone or tablet.
+The UI is aimed at a computer with a screen of at least 1680 × 1050 pixels, and with a mouse or touchpad. It may or may
+not be playable with a smaller screen or touchscreen devices such as tablets or phones. Even if it is playable on these
+latter devices it is not recommended that serious data collection be done using them as human performance will probably be
+degraded compared to using the recommended screen size and/or pointing technology.
 As of 22 March 2024 there appears to be a bug when used with Apple Safari, but I hope to understand and fix that bug soon.
 
 The server-side code has only been tested in SBCL on Linux, but *should* run fine in any modern Common Lisp implementation
