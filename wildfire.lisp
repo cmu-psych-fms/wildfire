@@ -15,6 +15,8 @@
 ;;; TODO auto-compress log files
 ;;; TODO auto-compress log files
 ;;; TODO make debug output on Lisp side less voluminous
+;;; TODO note and report when connection to server is lost
+;;; TODO markers should be place by cell coordinates, not raw pixels
 
 #-(and cl-ppcre hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
@@ -59,8 +61,10 @@
 (define-constant +view-size+ (* +view-side+ +cell-size+)) ; in pixels, view is always square
 (define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point within plane about which to spin
 (define-constant +default-map-size+ 100)              ; in cells, default for both width and height
-(define-constant +polling-interval+ 3000)             ; milliseconds
+(define-constant +polling-interval+ 1000)             ; milliseconds
 (define-constant +flame-flicker-interval+ 150)        ; milliseconds
+(define-constant +marker-color+ "#c00" :test #'string-equal)
+(define-constant +marker-label-radius+ 4)
 
 (define-constant +cell-type-names+
     '((grass t) (ash nil) (water nil) (tree t) (road nil) (rock nil) (house t))
@@ -468,8 +472,10 @@ joined the mission."
     (:doctype)
     (:html :style (css :font-family "Merriweather Sans,sans-serif" :overflow-x :auto)
            (:head (:meta :name "viewport" :content "width=device-width, initial-scale=1")
-                  (:link :rel "stylesheet"
-                         :href "https://fonts.googleapis.com/css?family=Merriweather+Sans")
+                  (:link :href "https://fonts.googleapis.com/css?family=Merriweather+Sans"
+                         :rel "stylesheet")
+                  (:link :href "https://fonts.googleapis.com/icon?family=Material+Icons"
+                         :rel "stylesheet")
                   (:style *css*)
                   (:raw (generate-prologue *ajax*))
                   (:script (:raw (format nil "~%~A~4%// ** Wildfire **~2%~{~A~%~}"
@@ -534,7 +540,7 @@ joined the mission."
       (with-html
         (:div :style (css :display :flex :justify-content :center)
               (:div.uicol (:fieldset.component :style (css :width 10rem)
-                           (:legend :style (css :padding "0 0.3em") "Clicking on map")
+                           (:legend "Clicking on map")
                            (:div
                             (:input#move :type "radio" :name "click-action" :checked t)
                             (:label :for "move" "moves airplane"))
@@ -544,21 +550,39 @@ joined the mission."
                           (:div.component
                            (:input#extinguish :type "checkbox" :checked t)
                            (:label :for "extinguish" :style (css :width 80%
+                                                                 :margin-left 0.5rem
                                                                  :display :inline-block
                                                                  :vertical-align :middle)
-                                   "Extinguish fires at move destination")))
+                                   "Extinguish fires at move destination"))
+                          (:fieldset.component
+                           (:legend "Markers")
+                           ;; TODO debugging hack
+                           (:div (:ul.markers (:li "Lake")
+                                              (:li "Distant forest")
+                                              (:li "Plains")))))
               (:canvas#view :height +view-size+ :width +view-size+
                             :onclick (ps:ps (clicked-map (list (@ event offset-x)
                                                                (@ event offset-y))))
                             "Not supported in this browser")
               (:div.uicol (:div.component (:input#speed :type "range" :min 1 :max 10)
-                                          (:label :for "speed" "Airplane speed"))))
+                                          (:label :for "speed" "Speed"))))
         (:canvas#map :style #?'display: ${(if *debug* "block" "none")}'
                      :height (cells-to-pixels (game-height g))
-                     :width (cells-to-pixels (game-width g)))))))
+         :width (cells-to-pixels (game-width g)))
+        ;; the following foolishness is to ensure the Material Icons font is loaded
+        (:div (:span.material-icons :style (css :color :white) "location_on"))))))
 
-(defcss uicol :width 14rem :margin "0 0.7rem")
+(defcss uicol :width 12rem :margin "0 0.7rem")
+
 (defcss component :margin-bottom 0.8rex)
+
+(defcss "component legend" :padding "0 0.3rem")
+
+(defcss markers :list-style-type :none
+  :margin-block-start 0 :margin-block-end 0
+  :margin-inline-start -1.5rem :margin-inline-end 0.5rem)
+
+(defcss "markers li" :border "solid 1px gray" :margin 0.1rem :padding "0.1rex 0.5rem")
 
 (ps:defpsmacro with-point ((x y) value &body body)
   `(let (,x ,y)
@@ -619,6 +643,11 @@ joined the mission."
              (setf velocity '(0 0) last-update nil))
            (animation-update))))
 
+    ;; TODO temporary debugging hack
+    `(ps:var markers (list (ps:create name "Lake" x 1290 y 1311)
+                           (ps:create name "Distant forest" x 593 y 590)
+                           (ps:create name "Plains" x 990 y 752)))
+
     `(defun render (map-data w h)
        (loop :with ctx := (ps:chain document (get-element-by-id "map") (get-context "2d"))
              :for y :from 0 :below h
@@ -628,8 +657,27 @@ joined the mission."
                             (* x ,+cell-size+) (* y ,+cell-size+)
                             ,+cell-size+ ,+cell-size+))
              :finally (progn
+                        (dolist (m markers)
+                          (draw-marker ctx m))
                         (dlog "map rendered")
                         (animation-update))))
+
+    `(defun draw-marker (ctx marker)
+       ((@ ctx save))
+       ((@ ctx translate) (@ marker x) (@ marker y))
+       (setf (@ ctx fill-style) ,+marker-color+)
+       (setf (@ ctx font) "40px Material Icons")
+       ((@ ctx fill-text) "location_on" 0 0)
+       (setf (@ ctx font) "10pt Merriweather Sans")
+       (let* ((name (@ marker name))
+              (width (+ (@ ((@ ctx measure-text) name) width) 8)))
+         (setf (@ ctx fill-style) "white")
+         ((@ ctx begin-path))
+         ((@ ctx round-rect) 29 -53 width 18 ,+marker-label-radius+)
+         ((@ ctx fill))
+         (setf (@ ctx fill-style) "black")
+         ((@ ctx fill-text) name 33 -38))
+       ((@ ctx restore)))
 
     `(defun modify-map (image x y)
        ;; x and y are indices into the map
