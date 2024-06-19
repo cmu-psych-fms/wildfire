@@ -1,5 +1,8 @@
 ;;;; Copyright 2023-2024 Carnegie Mellon University
 
+;;; TODO why isn't the model extinguishing?
+;;; TODO when clicking and extinguishing if an adjacent cell is burning that should
+;;;      be good enough to trigger extinguishment
 ;;; TODO markers should be placed by cell coordinates, not raw pixels
 ;;; TODO generate Extinguishment area automatically from a simple radius, probably
 ;;;      configured on a per-game basis
@@ -69,6 +72,10 @@
 (define-constant +flame-flicker-interval+ 150)        ; milliseconds
 (define-constant +marker-color+ "#c00" :test #'string-equal)
 (define-constant +marker-label-radius+ 4)
+(define-constant +tolerance+ 1.0d-12)                 ; equality tolerance when compare floats
+
+(defun =~ (n &rest more)
+  (every (lambda (x) (< (abs (- x n)) +tolerance+)) more))
 
 (define-constant +cell-type-names+
     '((grass t) (ash nil) (water nil) (tree t) (road nil) (rock nil) (house t))
@@ -86,12 +93,6 @@
                         (unless (= (abs x) (abs y) 3)
                           (collect (list x y))))))
   :test #'equal)
-
-
-(define-constant +tolerance+ 1.0d-12)
-
-(defun =~ (n &rest more)
-  (every (lambda (x) (< (abs (- x n)) +tolerance+)) more))
 
 
 
@@ -296,8 +297,12 @@
   game
   map
   ignitions
+  (click-places-marker-p nil)
+  (move-extinguishes-p t)
   (fires (make-hash-table))
   (last-extinguish-click nil)
+  (markers nil)
+  (marker-name-index 0)
   log-file-path)
 
 (define-object-printer mission (s) "~A, ~A (~D))"
@@ -358,6 +363,22 @@
     (and (< -1 x (game-width g))
          (< -1 y (game-height g))
          (aref m x y))))
+
+
+
+(defstruct (marker (:print-object))
+  name
+  location)                             ; pixels, map coordinates
+
+(define-object-printer marker (m) "~A ~S"
+                       (marker-name m)
+                       (coerce (marker-location m) 'list))
+
+(defun add-marker (mission location &optional name)
+  ;; location is in pixels in the map's coordinate systems
+  (unless name
+    (setf name (format nil "Marker-~D" (incf (mission-marker-name-index mission)))))
+  (nconcf (mission-markers mission) (list (make-marker :name name :location location))))
 
 
 
@@ -534,29 +555,35 @@ joined the mission."
               (:div.uicol (:fieldset.component :style "width: 10rem"
                            (:legend "Clicking on map")
                            (:div
-                            (:input#move :type "radio" :name "click-action" :checked t)
+                            (:input#move :type "radio" :name "click-action"
+                                         :checked (not (mission-click-places-marker-p m))
+                                         :onclick (ps:ps (clicked-click-places-marker)))
                             (:label :for "move" "moves airplane"))
                            (:div
-                            (:input#mark :type "radio" :name "click-action")
+                            (:input#mark :type "radio" :name "click-action"
+                                         :checked (mission-click-places-marker-p m)
+                                         :onclick (ps:ps (clicked-click-places-marker)))
                             (:label :for "mark" "places marker")))
                           (:div.component
-                           (:input#extinguish :type "checkbox" :checked t)
+                           (:input#extinguish :type "checkbox"
+                                              :checked (mission-move-extinguishes-p m)
+                                              :onclick (ps:ps (clicked-move-extinguishes)))
                            (:label :for "extinguish"
                                    :style "width: 80%; margin-left: 0.5rem; display: inline-block; vertical-align: middle"
                                    "Extinguish fires at move destination"))
                           (:fieldset.component
                            (:legend "Markers")
-                           ;; TODO debugging hack
-                           (:div (:ul.markers (:li "Lake")
-                                              (:li "Distant forest")
-                                              (:li "Plains")))))
+                           (:div (:ul.markers#marker-names))))
+ ;; (:li "Lake")
+ ;;                                              (:li "Distant forest")
+ ;;                                              (:li "Plains")))))
               (:canvas#view :height +view-size+ :width +view-size+
                             :onclick (ps:ps (clicked-map (list (@ event offset-x)
                                                                (@ event offset-y))))
                             "Not supported in this browser")
               (:div.uicol (:div.component (:input#speed :type "range" :min 1 :max 10)
                                           (:label :for "speed" "Speed"))))
-        (:canvas#map :style #?'display: ${(if *debug* "block" "none")}'
+        (:canvas#map :style #?'display: ${(if *debug* "block" "none")}; margin-top: 3rex;'
                      :height (cells-to-pixels (game-height g))
          :width (cells-to-pixels (game-width g)))
         ;; the following foolishness is to ensure the Material Icons font is loaded
@@ -635,10 +662,11 @@ joined the mission."
              (setf velocity '(0 0) last-update nil))
            (animation-update))))
 
-    ;; TODO temporary debugging hack
-    `(ps:var markers (list (ps:create name "Lake" x 1290 y 1311)
-                           (ps:create name "Distant forest" x 593 y 590)
-                           (ps:create name "Plains" x 1100 y 1030)))
+    `(ps:var markers (list))
+
+    ;; (list (ps:create name "Lake" x 1290 y 1311)
+    ;;                        (ps:create name "Distant forest" x 593 y 590)
+    ;;                        (ps:create name "Plains" x 1100 y 1030)))
 
     `(defun render (map-data w h)
        (loop :with ctx := (map-context)
@@ -654,21 +682,22 @@ joined the mission."
                         (animation-update))))
 
     `(defun draw-marker (ctx marker)
-       ((@ ctx save))
-       ((@ ctx translate) (@ marker x) (@ marker y))
-       (setf (@ ctx fill-style) ,+marker-color+)
-       (setf (@ ctx font) "40px Material Icons")
-       ((@ ctx fill-text) "location_on" 0 0)
-       (setf (@ ctx font) "10pt Merriweather Sans")
-       (let* ((name (@ marker name))
-              (width (+ (@ ((@ ctx measure-text) name) width) 8)))
-         (setf (@ ctx fill-style) "white")
-         ((@ ctx begin-path))
-         ((@ ctx round-rect) 29 -53 width 18 ,+marker-label-radius+)
-         ((@ ctx fill))
-         (setf (@ ctx fill-style) "black")
-         ((@ ctx fill-text) name 33 -38))
-       ((@ ctx restore)))
+       (with-point (x y) (@ marker location)
+         ((@ ctx save))
+         ((@ ctx translate) x y)
+         (setf (@ ctx fill-style) ,+marker-color+)
+         (setf (@ ctx font) "40px Material Icons")
+         ((@ ctx fill-text) "location_on" 0 0)
+         (setf (@ ctx font) "10pt Merriweather Sans")
+         (let* ((name (@ marker name))
+                (width (+ (@ ((@ ctx measure-text) name) width) 8)))
+           (setf (@ ctx fill-style) "white")
+           ((@ ctx begin-path))
+           ((@ ctx round-rect) 29 -53 width 18 ,+marker-label-radius+)
+           ((@ ctx fill))
+           (setf (@ ctx fill-style) "black")
+           ((@ ctx fill-text) name 33 -38))
+         ((@ ctx restore))))
 
     `(defun draw-all-markers (ctx)
        (dolist (m markers)
@@ -684,7 +713,7 @@ joined the mission."
     `(setf (@ document onmousemove)
            (lambda () (setf (ps:chain document body style cursor) "default"))))
 
-(defun queue-motion (player-id target current extinguish-p)
+(defun %clicked-map (player-id target current &optional allow-marker-placement)
   ;; target is in pixels, in the visible region's coordinate system
   ;; current is in pixels, in the underlying map's coordinate system
   (when-let* ((p (get-player player-id))
@@ -696,38 +725,57 @@ joined the mission."
                  `(,least-negative-single-float ,least-negative-single-float)
                  new-pos
                  (mapcar #'* (array-dimensions map) `(,+cell-size+ ,+cell-size+)))
+      (when (and allow-marker-placement (mission-click-places-marker-p mission))
+        (add-marker mission new-pos)
+        (return-from %clicked-map
+          `((:markers . ,(iter (for m :in (mission-markers mission))
+                               (collect `((:name . ,(marker-name m))
+                                          (:location . ,(marker-location m)))))))))
       (let ((cell (apply #'aref map (mapcar #'pixels-to-cells new-pos))))
         (setf (mission-last-extinguish-click mission)
-              (and extinguish-p (cell-burningp cell) cell)))
+              (and (mission-move-extinguishes-p mission) (cell-burningp cell) cell)))
       (unless (apply #'=~ 0 d)
         (let ((angle (- (/ pi 2) (apply #'atan d))))
           (setf (player-motion p)
                 `((:target . ,new-pos)
                   (:angle . ,angle)
                   (:velocity . ,(mapcar (lambda (x) (* (player-speed p) x))
-                                     `(,(cos angle) ,(sin angle)))))))))))
+                                        `(,(cos angle) ,(sin angle))))))))))
+  nil)
 
-(defun new-maker (where)
-  `((:makrer . ,where)))
-
-(define-remote-call clicked-map (where player-id current action extinguish-p)
+(define-remote-call clicked-map (where player-id current)
   ;; where is in pixels, in the visible region's coordinate system
   ;; current is in pixels, in the underlying map's coordinate system
-  (eswitch (action :test #'string-equal)
-    ("move" (queue-motion player-id where current extinguish-p))
-    ("mark" nil)))
+  (%clicked-map player-id where current t))
 
-(js `(defun click-action ()
-       (dolist (action '("move" "mark"))
-             (when (@ ((@ document get-element-by-id) action) checked)
-               (return action))))
+(js `(defun clicked-map (location)
+       (call clicked-map (json) (location player position)
+             (let ((mkrs (@ json markers)))
+               (when mkrs
+                 (setf markers mkrs)
+                 (let ((ul (ps:chain document (get-element-by-id "marker-names"))))
+                   (setf (@ ul inner-h-t-m-l) "")
+                   (dolist (m mkrs)
+                     (let ((li (ps:chain document (create-element "li"))))
+                       (ps:chain li (append-child (ps:chain document (create-text-node (@ m name)))))
+                       (ps:chain ul (append-child li))))))
+               (update-server)))))
 
-    `(defun extinguish-p ()
-       (@ ((@ document get-element-by-id) "extinguish") checked))
+(define-remote-call clicked-click-places-marker (value player-id)
+  (setf (mission-click-places-marker-p (player-mission (get-player player-id))) value)
+  nil)
 
-    `(defun clicked-map (location)
-       (call clicked-map () (location player position (click-action) (extinguish-p)))
-       (update-server)))
+(js `(defun clicked-click-places-marker ()
+       (call clicked-click-places-marker ()
+             ((@ ((@ document get-element-by-id) "mark") checked) player))))
+
+(define-remote-call clicked-move-extinguishes (value player-id)
+  (setf (mission-move-extinguishes-p (player-mission (get-player player-id))) value)
+  nil)
+
+(js `(defun clicked-move-extinguishes ()
+       (call clicked-move-extinguishes ()
+             ((@ ((@ document get-element-by-id) "extinguish") checked) player))))
 
 
 
@@ -846,10 +894,9 @@ joined the mission."
       (write-to-mission-log m :call-model model-state)
       (when-let ((model-response (funcall mod model-state)))
         (write-to-mission-log m :model-response model-response)
-        (queue-motion player-id
+        (%clicked-map player-id
                       (mapcar #'cells-to-pixels (getf model-response :target))
-                      (cdr (assoc :position state))
-                      t))) ; TODO figure out how to deal with this stuff from the model
+                      (cdr (assoc :position state)))))
     (let ((response (multiple-value-bind (births deaths) (propagate-fires m state)
                       `((:motion . ,(shiftf (player-motion p) nil))
                         (:ignite . ,births)
