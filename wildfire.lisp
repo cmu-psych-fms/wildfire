@@ -1,7 +1,11 @@
 ;;;; Copyright 2023-2024 Carnegie Mellon University
 
+;;; TODO markers should be placed by cell coordinates, not raw pixels
 ;;; TODO generate Extinguishment area automatically from a simple radius, probably
 ;;;      configured on a per-game basis
+;;; TODO add animation showing extent of extinguishment area
+;;; TODO marker placement should be spring loaded instead of pervasive
+;;; TODO update modeling API to reflect all the UI stuff
 ;;; TODO include more metadata in the log, such as the contents of the game object and map
 ;;; TODO in queue-motion it should be possible  to extract current position from player
 ;;;      state instead of having to pass it as another paremeter
@@ -9,14 +13,14 @@
 ;;;      coordinate system
 ;;; TODO make fire scale fire probabilities by update speed
 ;;; TODO factor out various geometry things, like testing for a cell being in bounds
-;;; TODO figure out why this doesn't always work right on Safari
-;;; TODO figure out what's going wrong with logging near the map boundary
 ;;; TODO implement an end to game
-;;; TODO auto-compress log files
 ;;; TODO auto-compress log files
 ;;; TODO make debug output on Lisp side less voluminous
 ;;; TODO note and report when connection to server is lost
-;;; TODO markers should be place by cell coordinates, not raw pixels
+;;; TODO why does it sometimes not extinguish fires?
+;;; TODO figure out why this doesn't always work right on Safari
+;;; TODO figure out what's going wrong with logging near the map boundary
+;;; TODO make use of JS foreach and more Lisp parenscript stuff consistent
 
 #-(and cl-ppcre hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
@@ -153,8 +157,8 @@
   start-x
   start-y
   regions
-  (fire-exhaustion-probability 0.005)
-  (fire-propagation-probability 0.01)
+  (fire-exhaustion-probability 0.002)
+  (fire-propagation-probability 0.02)
   ignitions
   (model nil))
 
@@ -293,7 +297,7 @@
   map
   ignitions
   (fires (make-hash-table))
-  (last-click nil)
+  (last-extinguish-click nil)
   log-file-path)
 
 (define-object-printer mission (s) "~A, ~A (~D))"
@@ -412,20 +416,8 @@ joined the mission."
                                   :adjustable t
                                   :fill-pointer 1))
 
-(defun %css (&rest args)
-  (format nil "~{~(~A:~A~);~}" args))
-
-(defmacro css (&rest args &key &allow-other-keys)
-  `(apply #'%css ',args))
-
-(defun %defcss (class &rest args)
-  (format *css* "~(.~A~) {~A}~%" class (apply #'%css args))
-  nil)
-
-(defmacro defcss (class &rest args &key &allow-other-keys)
-  `(apply #'%defcss ',class ',args))
-
-
+(defun add-css (&rest strings)
+  (format *css* "~{~A~%~}" strings))
 
 (defparameter *js* nil)
 
@@ -470,7 +462,7 @@ joined the mission."
     (setf (header-out :X-Clacks-Overhead) "GNU Terry Pratchett"))
   (with-html-string
     (:doctype)
-    (:html :style (css :font-family "Merriweather Sans,sans-serif" :overflow-x :auto)
+    (:html :style "font-family: 'Merriweather Sans', sans-serif; overflow-x: auto"
            (:head (:meta :name "viewport" :content "width=device-width, initial-scale=1")
                   (:link :href "https://fonts.googleapis.com/css?family=Merriweather+Sans"
                          :rel "stylesheet")
@@ -481,13 +473,13 @@ joined the mission."
                   (:script (:raw (format nil "~%~A~4%// ** Wildfire **~2%~{~A~%~}"
                                          (ps:ps* ps:*ps-lisp-library*) *js*)))
                   (:title title))
-           (:body :style (css :margin-left 4rem :margin-top 4rex)
+           (:body :style "margin-left: 4rem; margin-top: 4rex"
                   (funcall thunk)))))
 
 (defun failure (fmt &rest args)
   (with-page ("Error")
     (with-html
-      (:div :style (css :text-align center :font-size larger :color red :margin-top 6rex)
+      (:div :style "text-align: center; font-size: larger; color: red; margin-top: 6rex"
             (apply #'format nil fmt args)))))
 
 (js `(defun clog (&rest args)
@@ -538,8 +530,8 @@ joined the mission."
                      ,(game-width g) ,(game-height g)))))
     (with-page ("Mission")
       (with-html
-        (:div :style (css :display :flex :justify-content :center)
-              (:div.uicol (:fieldset.component :style (css :width 10rem)
+        (:div :style "display: flex; justify-content: center"
+              (:div.uicol (:fieldset.component :style "width: 10rem"
                            (:legend "Clicking on map")
                            (:div
                             (:input#move :type "radio" :name "click-action" :checked t)
@@ -549,10 +541,8 @@ joined the mission."
                             (:label :for "mark" "places marker")))
                           (:div.component
                            (:input#extinguish :type "checkbox" :checked t)
-                           (:label :for "extinguish" :style (css :width 80%
-                                                                 :margin-left 0.5rem
-                                                                 :display :inline-block
-                                                                 :vertical-align :middle)
+                           (:label :for "extinguish"
+                                   :style "width: 80%; margin-left: 0.5rem; display: inline-block; vertical-align: middle"
                                    "Extinguish fires at move destination"))
                           (:fieldset.component
                            (:legend "Markers")
@@ -570,29 +560,30 @@ joined the mission."
                      :height (cells-to-pixels (game-height g))
          :width (cells-to-pixels (game-width g)))
         ;; the following foolishness is to ensure the Material Icons font is loaded
-        (:div (:span.material-icons :style (css :color :white) "location_on"))))))
+        (:div (:span.material-icons :style "visibility:hidden" "location_on"))))))
 
-(defcss uicol :width 12rem :margin "0 0.7rem")
-
-(defcss component :margin-bottom 0.8rex)
-
-(defcss "component legend" :padding "0 0.3rem")
-
-(defcss markers :list-style-type :none
-  :margin-block-start 0 :margin-block-end 0
-  :margin-inline-start -1.5rem :margin-inline-end 0.5rem)
-
-(defcss "markers li" :border "solid 1px gray" :margin 0.1rem :padding "0.1rex 0.5rem")
+(add-css ".uicol { width:12rem; margin:0 0.7rem }"
+         ".component { margin-bottom: 0.8rex }"
+         ".component legend { padding: 0 0.3rem }"
+         ".markers { list-style-type: none; margin-block-start: 0; margin-block-end: 0;
+                     margin-inline-start: -1.5rem; margin-inline-end: 0.5rem }"
+         ".markers li { border: solid 1px gray; margin: 0.1rem; padding: 0.1rex 0.5rem }")
 
 (ps:defpsmacro with-point ((x y) value &body body)
   `(let (,x ,y)
      (setf (list ,x ,y) ,value)
      ,@body))
 
-(js (destructuring-bind (xp yp) +plane-axis+
+(js `(defun map-context ()
+       (ps:chain document (get-element-by-id "map") (get-context "2d")))
+
+    `(defun view-context ()
+       (ps:chain document (get-element-by-id "view") (get-context "2d")))
+
+    (destructuring-bind (xp yp) +plane-axis+
       (let* ((view-center (/ +view-size+ 2.0)))
         `(defun display-map ()
-           (let ((ctx (ps:chain document (get-element-by-id "view") (get-context "2d"))))
+           (let ((ctx (view-context)))
              ((@ ctx draw-image) dragons 0 0 ,+view-size+ ,+view-size+)
              (with-point (x y) position
                ((@ ctx draw-image) (ps:chain document (get-element-by-id "map"))
@@ -622,6 +613,7 @@ joined the mission."
          ((@ fires for-each) (lambda (v)
                                (with-point (x y) ((@ ((@ v split) ",") map) -Number)
                                  (modify-map (flame) x y))))
+         (draw-all-markers (map-context))
          (setf last-flame-time ms))
        (with-point (x y) position
          (with-point (tx ty) target
@@ -646,10 +638,10 @@ joined the mission."
     ;; TODO temporary debugging hack
     `(ps:var markers (list (ps:create name "Lake" x 1290 y 1311)
                            (ps:create name "Distant forest" x 593 y 590)
-                           (ps:create name "Plains" x 990 y 752)))
+                           (ps:create name "Plains" x 1100 y 1030)))
 
     `(defun render (map-data w h)
-       (loop :with ctx := (ps:chain document (get-element-by-id "map") (get-context "2d"))
+       (loop :with ctx := (map-context)
              :for y :from 0 :below h
              :do (loop :for x :from 0 :below w
                        :do ((@ ctx draw-image)
@@ -657,8 +649,7 @@ joined the mission."
                             (* x ,+cell-size+) (* y ,+cell-size+)
                             ,+cell-size+ ,+cell-size+))
              :finally (progn
-                        (dolist (m markers)
-                          (draw-marker ctx m))
+                        (draw-all-markers ctx)
                         (dlog "map rendered")
                         (animation-update))))
 
@@ -679,9 +670,13 @@ joined the mission."
          ((@ ctx fill-text) name 33 -38))
        ((@ ctx restore)))
 
+    `(defun draw-all-markers (ctx)
+       (dolist (m markers)
+         (draw-marker ctx m)))
+
     `(defun modify-map (image x y)
        ;; x and y are indices into the map
-       (let ((ctx (ps:chain document (get-element-by-id "map") (get-context "2d"))))
+       (let ((ctx (map-context)))
          ((@ ctx draw-image) image
           (* x ,+cell-size+) (* y ,+cell-size+)
           ,+cell-size+ ,+cell-size+)))
@@ -689,7 +684,7 @@ joined the mission."
     `(setf (@ document onmousemove)
            (lambda () (setf (ps:chain document body style cursor) "default"))))
 
-(defun queue-motion (player-id target current)
+(defun queue-motion (player-id target current extinguish-p)
   ;; target is in pixels, in the visible region's coordinate system
   ;; current is in pixels, in the underlying map's coordinate system
   (when-let* ((p (get-player player-id))
@@ -702,8 +697,8 @@ joined the mission."
                  new-pos
                  (mapcar #'* (array-dimensions map) `(,+cell-size+ ,+cell-size+)))
       (let ((cell (apply #'aref map (mapcar #'pixels-to-cells new-pos))))
-        (setf (mission-last-click mission)
-              (and (cell-burningp cell) cell)))
+        (setf (mission-last-extinguish-click mission)
+              (and extinguish-p (cell-burningp cell) cell)))
       (unless (apply #'=~ 0 d)
         (let ((angle (- (/ pi 2) (apply #'atan d))))
           (setf (player-motion p)
@@ -712,13 +707,27 @@ joined the mission."
                   (:velocity . ,(mapcar (lambda (x) (* (player-speed p) x))
                                      `(,(cos angle) ,(sin angle)))))))))))
 
-(define-remote-call clicked-map (where player-id current)
+(defun new-maker (where)
+  `((:makrer . ,where)))
+
+(define-remote-call clicked-map (where player-id current action extinguish-p)
   ;; where is in pixels, in the visible region's coordinate system
   ;; current is in pixels, in the underlying map's coordinate system
-  (queue-motion player-id where current))
+  (eswitch (action :test #'string-equal)
+    ("move" (queue-motion player-id where current extinguish-p))
+    ("mark" nil)))
 
-(js `(defun clicked-map (location)
-       (call clicked-map () (location player position))))
+(js `(defun click-action ()
+       (dolist (action '("move" "mark"))
+             (when (@ ((@ document get-element-by-id) action) checked)
+               (return action))))
+
+    `(defun extinguish-p ()
+       (@ ((@ document get-element-by-id) "extinguish") checked))
+
+    `(defun clicked-map (location)
+       (call clicked-map () (location player position (click-action) (extinguish-p)))
+       (update-server)))
 
 
 
@@ -736,7 +745,7 @@ joined the mission."
                (setf (cell-burningp cell) t)
                (setf (gethash cell (mission-fires mission)) t)
                (push (coords cell) births)))
-      (when-let ((last-click (mission-last-click mission)))
+      (when-let ((last-click (mission-last-extinguish-click mission)))
         (when (and (every #'zerop (cdr (assoc :velocity state)))
                    (equal (mapcar #'pixels-to-cells (cdr (assoc :position state)))
                           (coords last-click)))
@@ -839,7 +848,8 @@ joined the mission."
         (write-to-mission-log m :model-response model-response)
         (queue-motion player-id
                       (mapcar #'cells-to-pixels (getf model-response :target))
-                      (cdr (assoc :position state)))))
+                      (cdr (assoc :position state))
+                      t))) ; TODO figure out how to deal with this stuff from the model
     (let ((response (multiple-value-bind (births deaths) (propagate-fires m state)
                       `((:motion . ,(shiftf (player-motion p) nil))
                         (:ignite . ,births)
@@ -862,14 +872,16 @@ joined the mission."
          (dolist (loc locs)
            (with-point (x y) loc
              (modify-map (flame) x y))
-           ((@ fires add) ((@ loc join))))))
+           ((@ fires add) ((@ loc join))))
+         (draw-all-markers (map-context))))
 
     `(defun extinguish (locs)
        (when locs
          (dolist (loc locs)
            ((@ fires delete) ((@ loc join)))
            (with-point (x y) loc
-             (modify-map ash x y)))))
+             (modify-map ash x y)))
+         (draw-all-markers (map-context))))
 
     `(ps:var pending-server-update nil)
 
