@@ -1,5 +1,7 @@
 ;;;; Copyright 2023-2024 Carnegie Mellon University
 
+;;; TODO tweak marker positioning
+;;; TODO improve the macro wrapping the SmackJack stuff
 ;;; TODO why isn't the model extinguishing?
 ;;; TODO when clicking and extinguishing if an adjacent cell is burning that should
 ;;;      be good enough to trigger extinguishment

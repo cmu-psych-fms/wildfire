@@ -6,7 +6,7 @@ significantly different from Shawn’s original game, being largely mouse driven
 The game is intended not as entertainment but rather as a platform for experiments in psychology.
 Players fly virtual airplanes over a virtual terrain extinguishing wildfires.
 
-As of 22 March 2024 this remains just the beginnings of this new implementation, but incorporates an example
+As of 24 June 2024 this remains a work in progress, but incorporates an example
 of what is believed to be every major component the finished version will require, and it appears to work well.
 As additional features are added they will be documented in this README. In what follows I describe the current
 state of the game, but also point out many of the features I hope to implement as development progresses.
@@ -17,15 +17,17 @@ features incrementally.
 ### Compatibility
 
 This *should* be playable in any major browser released since 2018, but will likely fail in earlier browser versions.
-The UI is aimed at a computer with a screen of at least 1680 × 1050 pixels, and with a mouse or touchpad. It may or may
-not be playable with a smaller screen or touchscreen devices such as tablets or phones. Even if it is playable on these
+The UI is aimed at a computer with a screen of at least 1680 × 1050 pixels, and with a mouse or touchpad. Efforts have
+been made to keep it playable on smaller screens and/or touchscreen devices such as tablets or phones, but they are not the primary target, and
+interaction on those devices may be suboptimal.
+Even if it is playable on these
 latter devices it is not recommended that serious data collection be done using them as human performance will probably be
 degraded compared to using the recommended screen size and/or pointing technology.
-As of 22 March 2024 there appears to be a bug when used with Apple Safari, but I hope to understand and fix that bug soon.
+As of 24 June 2024 there appears to be a bug when used with Apple Safari that will need some deep investigation to repair.
 
 The server-side code has only been tested in SBCL on Linux, but *should* run fine in any modern Common Lisp implementation
 that can run USOCKET and Bordeaux Threads. It *should* be possible to run it in Windows, though some minor modifications
-may be necessary; if so, this must be made by someone who understands Windows better than I do, and who has
+may be necessary, for example dealing with files; if so, this must be made by someone who understands Windows better than I do, and who has
 access to a Windows machine.
 
 
@@ -33,14 +35,14 @@ access to a Windows machine.
 
 Wildfire has *games*, *missions* and *players*.
 
-A *game* brings together attributes of a particular virtual environment, or experiment. It’s most important
+A *game* brings together attributes of a particular virtual environment, or experiment. Its most important
 component is *map*, describing the terrain. The map is rectangular, and divided into square *cells*, each *cell*
 being a particular type of terrain, such as grass or woodland. When defining a *map* polygonal *regions* are
 defined and named, being contiguous sets of *cells* of the same type. A game has a *name* and an *id*, as well
 as various other parameters such as where in the *map* the *player* starts and details of fire initiation and
 propagation. There may be any number of *games* available, and they are defined before the server is started,
 using `defgame` forms in `.lisp` files in the `games/` subdirectory of the main server directory. This is described
-in more detail below under the heading Defining Games.
+in more detail below under the heading [Defining Games](#defgame).
 
 A *player* is one participant. Currently a *player* can only manipulate a single airplane, and each airplane has a
 single *player* associated with it; in the future I expect to allow one *player* to manipulate multiple planes.
@@ -72,36 +74,33 @@ When starting a game in this way the names of the mission and game are provided 
 can be provided using `?mission=` and/or `?player=`, which facilitates multiple players joining the same
 mission. While multiple players in a mission is not yet supported, the code exists for joining such missions
 as soon as it is. Similarly, this allows the same player to participate in different missions but have their
-name recorded to ease comparison of their performance. For example
+name recorded to ease comparison of their performances. For example
 
     http://koalemos.psy.cmu.edu:8978/?game=conflagration&player=fred&misison=fred-and-john-mission
 
 
 ### Game Play
 
-In the browser window the user is presented with a *view* into the game’s map, 39 cells by 39 cells.
+In the browser window the user is presented with a *view* into the game’s map, 39 cells by 39 cells, with furthr information
+an affordances on either side of it.
 
 ![screen image](/images/screen-for-doc.png)
 
-The player’s plane is centered in this image, and remains so as the plane flies about the landscape, with
+The player’s plane is centered in this *view*, and remains so as the plane flies about the landscape, with
 the terrain shown varying as the plane’s position on the underlying map changes. If the plane is not moving
-it should be interpreted as it circling above the location at which is is stopped. When moving the plane
-currently travels at a constant speed, but in the future it will be possible to vary the speed of he plane.
+it should be interpreted as it circling above the location at which is is stopped.
 The plane cannot fly off the underlying map, when it reaches the edge of the underlying map it stops.
+While not yet present, in the future there will be indicators on the border of the *view* showing the direction in which lie various
+items outside the current view, but still known to the player,
 
-While not yet present, in the future there will be
-
-* indicators on the border of the view showing the direction in which lie various items outside the current
-view, but still known to the player,
-* further pieces of information about he state of the mission displayed in the margins around the view,
-* and affordances for various possible actions the player can perform displayed in the margins around the view.
-
-To fly to a particular location simply left click on that location in the view. To fly to locations not in the current
+The user interface for declaring what a mouse click in the *view* should do will evolve in the future, but currently allows moving to
+a specific location that is currently visible, or placing a marker at such a location.
+To fly to locations not in the current
 view you must first click on a location in the correct location and then click again as new terrain comes into view.
-This will likely be augmented with other gestures for flying in a direction off the view. In addition, it will
-in the future be possible to lay down markers, which will persist even when out of the view, but can be cited
-as places to visit. Also, currently clicking on a location while the plane is en route immediately changes the plane’s
-destination; in the future it will instead be possible to queue up a sequence of destinations.
+This will be augmented to allow flying in a direction off the view, as well as flying to any of the markers, including those
+not visible in the *view*.
+While clicking on a location while the plane is en route currently immediately changes the plane’s
+destination, in the future it will instead be possible to queue up a sequence of destinations.
 
 In the view there are currently seven types of cells that might be present
 
@@ -118,12 +117,13 @@ In the future there may be other types of cells, too.
 In addition, a grass, tree or house cell might be on fire, in which case it is augmented with flames
 ![flames](/images/flame.png).
 
-A game typically designates one or more cells that are ignited at specific times after the game begins.
+A game designates one or more cells that are ignited at specific times after the game begins.
 These fires then slowly spread stochasticly to neighboring flammable cells. Fires also stochasticly burn
 themselves out, the burned out cells changing to ash. Fires cannot propagate across roads, water, rocks or ash.
 
-The goal of the game is for the player(s) to find and extinguish these fires. Currently the mechanism for extinguishing a fire is simply to click on or near it: when the plane reaches a location clicked on it extinguishes any burning cells within
-a small radius of the location clicked on. In the future this mechanism will become more complex, with the player(s) needing
+The goal of the game is for the player(s) to find and extinguish these fires. The mechanism for extinguishing a fire is clicking on an inflamed cell to tell the
+plane to fly there and extinguish all inflamed cells within a certain radius of that clicked on.
+In the future this mechanism will become more complex, with the player(s) needing
 to explicitly drop an extinguishing agent on a fire. A plane will only carry a limited quantity of such an agent, and will
 need to refill it periodically. Planning and coördinating such use of an extinguishing agent and the required travel will
 be an important part of the players efforts.
@@ -144,7 +144,7 @@ Installation and running should be straightforward:
 * point a browser at a suitable URL, as described above
 
 
-### Defining Games
+### <a name="defgame"></a>Defining Games
 
 The available games are defined using the `defgame` form.
 
@@ -272,7 +272,7 @@ This example model is used by the example `model-game` defined in `games/test-ga
 
 ### Mission Logs
 
-Each mission writes a details description of what has transpired in the mission into a file in the `mission-logs/`
+Each mission writes a detailed description of what has transpired in the mission into a file in the `mission-logs/`
 subdirectory of the main server diretory. This file has a name of the form `mission-<id>-log.lisp` where `<id>` is
 replaced by the mission ID, the string representation of a
 [UUID](https://datatracker.ietf.org/doc/html/rfc4122), for example
@@ -280,7 +280,7 @@ replaced by the mission ID, the string representation of a
     mission-logs/mission-03F3D280-E7E2-11EE-A371-64006A6189B3-log.lisp
 
 The primary purpose of these log files is to record detailed information about the interrelations of users with
-Wildfire for subsequent analysis. While not yet implemented, it will also eventually be possible to play back these log
+Wildfire for subsequent analysis. While not yet implemented, it is expected also eventually to be possible to play back these log
 files as a way to observe previous game play as an aid to such analysis.
 
 A mission log file contains a sequence of textual representations of Common Lisp lists. The first element (car) of each
@@ -313,4 +313,31 @@ provided to the model as it is called. If the model returns a non-nil response t
 `mofrl-trdpondr` record containing that response.
 
 Mission log files can grow large quickly, on the order of Gigabytes, especially if a model is in use.
-The do, however, compress well.
+The do, however, compress well. It is expected that eventually on mission termination the corresponding log
+file will be automatically compressed.
+
+
+### License
+
+This new version of Wildfire is released under the MIT License:
+
+> Copyright (c) 2023-2024 Carnegie Mellon University
+>
+> Permission is hereby granted, free of charge, to any person obtaining
+> a copy of this software and associated documentation files (the
+> “Software”), to deal in the Software without restriction, including
+> without limitation the rights to use, copy, modify, merge, publish,
+> distribute, sublicense, and/or sell copies of the Software, and to
+> permit persons to whom the Software is furnished to do so, subject to
+> the following conditions:
+>
+> The above copyright notice and this permission notice shall be
+> included in all copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND,
+> EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+> MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+> LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+> OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+> WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
