@@ -1,5 +1,6 @@
 ;;;; Copyright 2023-2024 Carnegie Mellon University
 
+;;; TODO double check that markers are being tidily positioned
 ;;; TODO tweak marker positioning
 ;;; TODO improve the macro wrapping the SmackJack stuff
 ;;; TODO why isn't the model extinguishing?
