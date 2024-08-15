@@ -807,9 +807,9 @@ joined the mission."
       (queue-motion p target angle))))
 
 (js `(defun speed-changed ()
-       (clog "target" target)
        (call speed-changed () ((@ ((@ document get-element-by-id) "speed") value)
-                               player position target angle))))
+                               player position target angle))
+       (update-server)))
 
 
 
