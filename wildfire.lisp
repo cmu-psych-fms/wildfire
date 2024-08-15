@@ -13,9 +13,9 @@
 ;;; TODO marker placement should be spring loaded instead of pervasive
 ;;; TODO update modeling API to reflect all the UI stuff
 ;;; TODO include more metadata in the log, such as the contents of the game object and map
-;;; TODO in queue-motion it should be possible  to extract current position from player
-;;;      state instead of having to pass it as another paremeter
-;;; TODO queue-motion should probably be changed to take the target in the map's
+;;; TODO in ?? (was older form of queue-motion) it should be possible to extract current position from player
+;;;      state instead of having to pass it as another parameter
+;;; TODO ?? (was older from of queue-motion) should probably be changed to take the target in the map's
 ;;;      coordinate system
 ;;; TODO make fire scale fire probabilities by update speed
 ;;; TODO factor out various geometry things, like testing for a cell being in bounds
@@ -26,6 +26,7 @@
 ;;; TODO why does it sometimes not extinguish fires?
 ;;; TODO figure out why this doesn't always work right on Safari
 ;;; TODO figure out what's going wrong with logging near the map boundary
+;;; TODO why does movement clicking not work once the boundary shows?
 ;;; TODO make use of JS foreach and more Lisp parenscript stuff consistent
 
 #-(and cl-ppcre hunchentoot cl-json parenscript)
@@ -65,17 +66,20 @@
 
 (define-constant +source-file-type+ "lisp" :test #'string=)
 (define-constant +default-port+ 8978)
-(define-constant +view-side+ 39)                      ; number of cells on one side of the view
-(assert (oddp +view-side+))                           ; must be odd
-(define-constant +cell-size+ 20)                      ; in pixels, cells are always square
+(define-constant +view-side+ 39)                          ; number of cells on one side of the view
+(assert (oddp +view-side+))                               ; must be odd
+(define-constant +cell-size+ 20)                          ; in pixels, cells are always square
 (define-constant +view-size+ (* +view-side+ +cell-size+)) ; in pixels, view is always square
-(define-constant +plane-axis+ '(47 47) :test #'equal) ; in pixels, point within plane about which to spin
-(define-constant +default-map-size+ 100)              ; in cells, default for both width and height
-(define-constant +polling-interval+ 1000)             ; milliseconds
-(define-constant +flame-flicker-interval+ 150)        ; milliseconds
+(define-constant +plane-axis+ '(47 47) :test #'equal)     ; in pixels, point within plane about which to spin
+(define-constant +default-map-size+ 100)                  ; in cells, default for both width and height
+(define-constant +polling-interval+ 1000)                 ; milliseconds
+(define-constant +flame-flicker-interval+ 150)            ; milliseconds
 (define-constant +marker-color+ "#c00" :test #'string-equal)
 (define-constant +marker-label-radius+ 4)
-(define-constant +tolerance+ 1.0d-12)                 ; equality tolerance when compare floats
+(define-constant +tolerance+ 1.0d-12)                     ; equality tolerance when compare floats
+(define-constant +minimum-speed+ (floor +cell-size+ 4))  ; pixels per second
+(define-constant +maximum-speed+ (* 6 +cell-size+))
+(define-constant +initial-speed+ (floor +cell-size+ 0.66))
 
 (defun =~ (n &rest more)
   (every (lambda (x) (< (abs (- x n)) +tolerance+)) more))
@@ -390,7 +394,7 @@
   id
   name
   mission
-  (speed 30)
+  (speed +initial-speed+)
   (motion nil))
 
 (define-object-printer player (p) "~A~:[ (~A)~;~*~] ~A"
@@ -577,14 +581,12 @@ joined the mission."
                           (:fieldset.component
                            (:legend "Markers")
                            (:div (:ul.markers#marker-names))))
- ;; (:li "Lake")
- ;;                                              (:li "Distant forest")
- ;;                                              (:li "Plains")))))
               (:canvas#view :height +view-size+ :width +view-size+
                             :onclick (ps:ps (clicked-map (list (@ event offset-x)
                                                                (@ event offset-y))))
                             "Not supported in this browser")
-              (:div.uicol (:div.component (:input#speed :type "range" :min 1 :max 10)
+              (:div.uicol (:div.component (:input#speed :type "range" ; range defaults to 0 to 100
+                                                        :onchange (ps:ps (speed-changed)))
                                           (:label :for "speed" "Speed"))))
         (:canvas#map :style #?'display: ${(if *debug* "block" "none")}; margin-top: 3rex;'
                      :height (cells-to-pixels (game-height g))
@@ -716,6 +718,12 @@ joined the mission."
     `(setf (@ document onmousemove)
            (lambda () (setf (ps:chain document body style cursor) "default"))))
 
+(defun queue-motion (player target angle)
+  (setf (player-motion player) `((:target . ,target)
+                                 (:angle . ,angle)
+                                 (:velocity . ,(mapcar (lambda (x) (* (player-speed player) x))
+                                                       `(,(cos angle) ,(sin angle)))))))
+
 (defun %clicked-map (player-id target current &optional allow-marker-placement)
   ;; target is in pixels, in the visible region's coordinate system
   ;; current is in pixels, in the underlying map's coordinate system
@@ -739,11 +747,7 @@ joined the mission."
               (and (mission-move-extinguishes-p mission) (cell-burningp cell) cell)))
       (unless (apply #'=~ 0 d)
         (let ((angle (- (/ pi 2) (apply #'atan d))))
-          (setf (player-motion p)
-                `((:target . ,new-pos)
-                  (:angle . ,angle)
-                  (:velocity . ,(mapcar (lambda (x) (* (player-speed p) x))
-                                        `(,(cos angle) ,(sin angle))))))))))
+          (queue-motion p new-pos angle)))))
   nil)
 
 (define-remote-call clicked-map (where player-id current)
@@ -751,7 +755,10 @@ joined the mission."
   ;; current is in pixels, in the underlying map's coordinate system
   (%clicked-map player-id where current t))
 
-(js `(defun clicked-map (location)
+(js `(defun marker-name-clicked (evt)
+       (clog "click" evt))
+
+    `(defun clicked-map (location)
        (call clicked-map (json) (location player position)
              (let ((mkrs (@ json markers)))
                (when mkrs
@@ -759,8 +766,10 @@ joined the mission."
                  (let ((ul (ps:chain document (get-element-by-id "marker-names"))))
                    (setf (@ ul inner-h-t-m-l) "")
                    (dolist (m mkrs)
-                     (let ((li (ps:chain document (create-element "li"))))
-                       (ps:chain li (append-child (ps:chain document (create-text-node (@ m name)))))
+                     (let ((li (ps:chain document (create-element "li")))
+                           (txt (ps:chain document (create-text-node (@ m name)))))
+                       (ps:chain li (add-event-listener "click" marker-name-clicked))
+                       (ps:chain li (append-child txt))
                        (ps:chain ul (append-child li))))))
                (update-server)))))
 
@@ -779,6 +788,20 @@ joined the mission."
 (js `(defun clicked-move-extinguishes ()
        (call clicked-move-extinguishes ()
              ((@ ((@ document get-element-by-id) "extinguish") checked) player))))
+
+(define-remote-call speed-changed (value player-id position target angle)
+  (let ((p (get-player player-id)))
+    ;; the 0.01 below reflects an HTML range defaulting to 0 to 100
+    (setf (player-speed p) (+ (floor (* (parse-integer value) 0.01
+                                        (- +maximum-speed+ +minimum-speed+)))
+                              +minimum-speed+))
+    (unless (equal target position)
+      (queue-motion p target angle))))
+
+(js `(defun speed-changed ()
+       (clog "target" target)
+       (call speed-changed () ((@ ((@ document get-element-by-id) "speed") value)
+                               player position target angle))))
 
 
 
