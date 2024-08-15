@@ -28,6 +28,8 @@
 ;;; TODO figure out what's going wrong with logging near the map boundary
 ;;; TODO why does movement clicking not work once the boundary shows?
 ;;; TODO make use of JS foreach and more Lisp parenscript stuff consistent
+;;; TODO figure out how to deal with the angle when moving to a marker, etc.
+;;; TODO get the destination right when moving to a marker
 
 #-(and cl-ppcre hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
@@ -669,10 +671,6 @@ joined the mission."
 
     `(ps:var markers (list))
 
-    ;; (list (ps:create name "Lake" x 1290 y 1311)
-    ;;                        (ps:create name "Distant forest" x 593 y 590)
-    ;;                        (ps:create name "Plains" x 1100 y 1030)))
-
     `(defun render (map-data w h)
        (loop :with ctx := (map-context)
              :for y :from 0 :below h
@@ -755,8 +753,18 @@ joined the mission."
   ;; current is in pixels, in the underlying map's coordinate system
   (%clicked-map player-id where current t))
 
+(define-remote-call clicked-marker-name (name player-id position)
+  (let* ((p (get-player player-id))
+         (loc (marker-location (find name (mission-markers (player-mission p))
+                                    :key #'marker-name
+                                    :test #'string-equal))))
+    (unless (equal loc position)
+      (queue-motion p loc 0))))      ; TODO compute the real angle somehow
+
 (js `(defun marker-name-clicked (evt)
-       (clog "click" evt))
+       (let ((name (@ evt src-element first-child node-value)))
+         (clog "click" name)
+         (call clicked-marker-name () (name player position))))
 
     `(defun clicked-map (location)
        (call clicked-map (json) (location player position)
