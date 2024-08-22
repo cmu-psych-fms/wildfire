@@ -901,6 +901,7 @@ joined the mission."
                                          :center ,+center+
                                          :speed ,(sqrt (apply #'+ (mapcar (rcurry #'expt 2)
                                                                           (cdr (assoc :velocity client-state)))))
+                                         :regions nil
                                          :view ,(make-array `(,+view-side+ ,+view-side+))))))))
     (iter (with v := (getf result :view))
           (with type-cells := nil)
@@ -916,7 +917,8 @@ joined the mission."
                 (for nm := (ct-name (cell-type c)))
                 (setf (aref v x y) (list nm (cell-burningp c)))
                 (push (list x y) (getf type-cells nm)))
-          (finally (return `(:regions ,(make-local-regions type-cells v) ,@result))))))
+          (finally (setf (getf result :regions) (make-local-regions type-cells v))
+                   (return result)))))
 
 (define-remote-call server-update (player-id state)
   (when-let* ((p (get-player player-id))

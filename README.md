@@ -93,7 +93,7 @@ The plane cannot fly off the underlying map, when it reaches the edge of the und
 While not yet present, in the future there will be indicators on the border of the *view* showing the direction in which lie various
 items outside the current view, but still known to the player,
 
-The user interface for declaring what a mouse click in the *view* should do will evolve in the future, but currently allows moving to
+The user interface for declaring what a mouse click in the *view* should do may evolve in the future, but currently allows moving to
 a specific location that is currently visible, or placing a marker at such a location.
 To fly to locations not in the current
 view you must first click on a location in the correct location and then click again as new terrain comes into view.
@@ -248,6 +248,9 @@ element list, a keyword denoting the type of cell (*e. g.* :grass or :rock) and 
 cell is currently on fire
 * `:center`, a two element list the position in the view that the plane occupies; this is essentially a constant
 that could easily be computed from the dimensions of the view array, but is supplied as a convenience.
+* `:regions`, a list of alists, the car of each element being a type of cell, as above, and the cdr being a list
+of cell coördinates of all the cells that constitute a contiguous region in the view of cells of the same type;
+note that two different regions may, if the location of the view changes, coalesce into a single region
 
 In the future more information will be supplied as part of this argument.
 

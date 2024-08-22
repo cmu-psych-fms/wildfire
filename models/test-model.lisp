@@ -6,16 +6,29 @@
 ;;;
 ;;; a) if the player is moving, does nothing
 ;;;
-;;; b) if the player is stopped it looks for cells in its view that are on fire, and if it
-;;;    finds any that it is not already directly on top of it picks one at random and moves to
-;;;    it
+;;; b) if the player is stopped it looks for cells in its view that are on fire, and if
+;;;    it finds any that it is not already directly on top of it picks one at random and
+;;;    moves to it
 ;;;
-;;; c) if the player is topped and no such fires are found it selects a cell at random that is
-;;;    at least three cells away from the current position and moves to it.
+;;; c) if the player is stopped and no such fires are found it selects a cell at random
+;;;    that is at least three cells away from the current position and moves to it.
+;;;
+;;; If *model-trace-output* is non-nil it should be a text stream open for writing, in
+;;; in which case this example writes the data supplied on each call to this stream.
+
+(defvar *model-trace-output* nil)
 
 (defun test-model (state)
+  (when *model-trace-output*
+    (format *model-trace-output* "~&;;; test-model called:~%~:W~%" state))
+  (let ((result (%test-model state)))
+    (when *model-trace-output*
+      (format *model-trace-output* ";;; returning:~%~:W~2%" result))
+    result))
+
+(defun %test-model (state)
   (unless (and (zerop (getf state :speed)) (> (getf state :time) 5000))
-    (return-from test-model))
+    (return-from %test-model))
   (let ((v (getf state :view))
         (ctr (getf state :center)))
     (labels ((matching-locs (pred)
