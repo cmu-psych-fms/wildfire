@@ -30,6 +30,8 @@
 ;;; TODO make use of JS foreach and more Lisp parenscript stuff consistent
 ;;; TODO figure out how to deal with the angle when moving to a marker, etc.
 ;;; TODO get the destination right when moving to a marker
+;;; TODO seems to be something wrong with :angle reporting
+;;; TODO display elapsed time, and maybe remaining time, in UI
 
 #-(and cl-ppcre hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
@@ -74,6 +76,7 @@
 (define-constant +view-size+ (* +view-side+ +cell-size+)) ; in pixels, view is always square
 (define-constant +plane-axis+ '(47 47) :test #'equal)     ; in pixels, point within plane about which to spin
 (define-constant +default-map-size+ 100)                  ; in cells, default for both width and height
+(define-constant +default-duration+ (* 10 60))            ; in seconds
 (define-constant +polling-interval+ 1000)                 ; milliseconds
 (define-constant +flame-flicker-interval+ 150)            ; milliseconds
 (define-constant +marker-color+ "#c00" :test #'string-equal)
@@ -166,6 +169,7 @@
   height
   start-x
   start-y
+  duration
   regions
   (fire-exhaustion-probability 0.002)
   (fire-propagation-probability 0.02)
@@ -240,6 +244,7 @@
                                            (height +default-map-size+)
                                            (start-x (round width 2))
                                            (start-y (round height 2))
+                                           (duration +default-duration+)
                                            (ignitions nil)
                  &allow-other-keys)
   (let ((m (make-array (list width height)
@@ -291,6 +296,7 @@
                                                    :height height
                                                    :map (copy-array m)
                                                    :start-x start-x
+                                                   :duration duration
                                                    :start-y start-y
                                                    :regions reg
                                                    :ignitions ign
@@ -397,7 +403,8 @@
   name
   mission
   (speed +initial-speed+)
-  (motion nil))
+  (motion nil)
+  (map-sent-to-model-p nil))
 
 (define-object-printer player (p) "~A~:[ (~A)~;~*~] ~A"
                        (player-name p)
@@ -520,6 +527,8 @@ joined the mission."
 
 (js `(ps:var load-count ,(+ (length +cell-types+) 4 1)) ; number of images + 1 document
 
+    `(ps:var game-over false)
+
     `(defun load-image (path)
        (let ((img (ps:new (-image))))
          (setf (@ img onload) load-image-test-and-render)
@@ -531,6 +540,7 @@ joined the mission."
     `(ps:var plane (load-image "images/plane.png"))
     `(ps:var flames (map load-image '("images/flame.png" "images/flame2.png")))
     `(ps:var flame-index 0)
+    `(ps:var game-over-image (load-image "images/mission-concluded.png"))
     `(ps:var velocity '(0 0))
     `(ps:var angle ,(- (/ pi 2)))
 
@@ -627,8 +637,12 @@ joined the mission."
                 ,+view-size+ ,+view-size+)
                ((@ ctx save))
                ((@ ctx translate) ,view-center ,view-center)
+               ((@ ctx save))
                ((@ ctx rotate) angle)
                ((@ ctx draw-image) plane ,(- xp) ,(- yp))
+               ((@ ctx restore))
+               (when game-over
+                 ((@ ctx draw-image) game-over-image ,(- xp 200) ,(- yp 180)))
                ((@ ctx restore)))))))
 
     `(defun animation-update () ((@ window request-animation-frame) update-position))
@@ -651,7 +665,7 @@ joined the mission."
          (setf last-flame-time ms))
        (with-point (x y) position
          (with-point (tx ty) target
-           (with-point (sx sy) velocity
+           (with-point (sx sy) (if game-over '(0 0) velocity)
              (unless (= sx sy 0)
                (let ((d (/ (- ms last-update) 1000))) ; velocity is pixels per second
                  (labels ((change (spd cur lim)
@@ -664,6 +678,9 @@ joined the mission."
                    (setf y (change sy y ty))))))
            (setf position (list x y))
            (display-map)
+           (when game-over
+             (clear-timeout pending-server-update)
+             (return-from update-position))
            (setf last-update ms)
            (when (and (= x tx) (= y ty))
              (setf velocity '(0 0) last-update nil))
@@ -892,15 +909,44 @@ joined the mission."
                     (push (cons type (gather-region coord type)) result)))
             (finally (return result))))))
 
-(defun make-model-state (player client-state)
+(defun make-model-private-state (player client-state)
+  (let ((result nil))
+    (labels ((push-item (key value)
+               (push (cons key value) result)))
+      (unless (player-map-sent-to-model-p player)
+        (let* ((m (player-mission player))
+               (g (mission-game m))
+               (gmap (game-map g))
+               (map (make-array (array-dimensions gmap))))
+          (iter (for x :from 0 :below (array-dimension gmap 0))
+                (iter (for y :from 0 :below (array-dimension gmap 1))
+                      (setf (aref map x y) (ct-name (aref +cell-types+ (aref gmap x y))))))
+          (push-item :map map)
+          (push-item :regions (iter (for r :in (game-regions g))
+                                    (collect `(,(region-name r) . ,(region-cells r)))))
+          (push-item :ignitions (game-ignitions g))
+          (push-item :fire-propagation-probability (game-fire-propagation-probability g))
+          (push-item :fire-exhaustion-probability (game-fire-exhaustion-probability g))
+          (push-item :duration (game-duration g))
+          (push-item :start-y (game-start-y g))
+          (push-item :start-x (game-start-x g))
+          (push-item :height (game-height g))
+          (push-item :width (game-width g))
+          (push-item :mission-id (mission-id m))
+          (push-item :game (game-name g)))
+      (setf (player-map-sent-to-model-p player) t)))
+    (alist-plist (append client-state result))))
+
+(defun make-model-public-state (player client-state)
   (let ((m (player-mission player))
         (result (iter (for pass-through :in '(:time :angle))
                       (nconcing `(,pass-through ,(cdr (assoc  pass-through client-state)))
                         :into passed-through)
                       (finally (return `(,@passed-through
                                          :center ,+center+
-                                         :speed ,(sqrt (apply #'+ (mapcar (rcurry #'expt 2)
-                                                                          (cdr (assoc :velocity client-state)))))
+                                         :speed ,(/ (sqrt (apply #'+ (mapcar (rcurry #'expt 2)
+                                                                             (cdr (assoc :velocity client-state)))))
+                                                    +maximum-speed+)
                                          :regions nil
                                          :view ,(make-array `(,+view-side+ ,+view-side+))))))))
     (iter (with v := (getf result :view))
@@ -925,18 +971,22 @@ joined the mission."
               (m (player-mission p))
               (g (mission-game m)))
     (write-to-mission-log m :update-request-from-client (alist-plist state))
-    (when-let ((mod (game-model g))
-               (model-state (make-model-state p state)))
-      (write-to-mission-log m :call-model model-state)
-      (when-let ((model-response (funcall mod model-state)))
-        (write-to-mission-log m :model-response model-response)
-        (%clicked-map player-id
-                      (mapcar #'cells-to-pixels (getf model-response :target))
-                      (cdr (assoc :position state)))))
-    (let ((response (multiple-value-bind (births deaths) (propagate-fires m state)
-                      `((:motion . ,(shiftf (player-motion p) nil))
-                        (:ignite . ,births)
-                        (:extinguish . ,deaths)))))
+    (let (response)
+      (cond ((>= (cdr (assoc :time state)) (* (game-duration g) 1000))
+             (setf response '((:concluded . t))))
+            (t (when-let ((mod (game-model g))
+                          (private (make-model-private-state p state))
+                          (public (make-model-public-state p state)))
+                 (write-to-mission-log m :call-model `(:public ,public :private ,private))
+                 (when-let ((model-response (funcall mod public private)))
+                   (write-to-mission-log m :model-response model-response)
+                   (%clicked-map player-id
+                                 (mapcar #'cells-to-pixels (getf model-response :target))
+                                 (cdr (assoc :position state)))))
+               (multiple-value-bind (births deaths) (propagate-fires m state)
+                 (setf response `((:motion . ,(shiftf (player-motion p) nil))
+                                  (:ignite . ,births)
+                                  (:extinguish . ,deaths))))))
       (write-to-mission-log m :update-from-server (alist-plist response))
       response)))
 
@@ -981,10 +1031,11 @@ joined the mission."
                                :velocity velocity
                                :angle angle)))
          (call server-update (json) (player state)
-               (progn
-                 (extinguish (@ json extinguish))
-                 (ignite (@ json ignite))
-                 (motion (@ json motion)))))
+               (cond ((@ json concluded)
+                      (setf game-over true))
+                     (t (extinguish (@ json extinguish))
+                        (ignite (@ json ignite))
+                        (motion (@ json motion))))))
        (set-server-update))
 
     `(set-server-update))

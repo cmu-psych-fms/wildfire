@@ -146,6 +146,8 @@ Installation and running should be straightforward:
 
 ### <a name="defgame"></a>Defining Games
 
+TODO document duration
+
 The available games are defined using the `defgame` form.
 
     (defgame <name> (*key <keyword arguments>) &rest <region descriptions>)
@@ -222,10 +224,15 @@ which the former does not.
 In addition to human players, there can, though do not have to be, mechanical players, *models*. Once multiple players
 in a single mission are supported it will be possible to have both humans and models playing in a single mission.
 
-A *model* is implemented as a Lisp function of one argument. This function is called each time the server and client
-interact and exchange information, currently at a rate of approximately 1 Hz. Th argument is a plist describing the
-then current state of the mission from this modeled players perspective. The model can simply learn from this
-information, or it can decide to take one or more actions. To take actions, the model function should return a plist,
+A *model* is implemented as a Lisp function of two arguments. This function is called each time the server and client
+interact and exchange information, currently at a rate of approximately 1 Hz. Both arguments are plists describing the
+then current state of the mission from this modeled players perspective.
+The first argument is the “public” state of the mission; that is, the information visible to a human player.
+The second argument is the “private” state, information available within the system, but not normally visible
+to a human player, such as the cells on the portions of the map not currently visible; a disciplined model will
+typically try not to use the private information, but it may be useful as an expedient or for special purposes.
+The model can simply learn from the
+information supplied in the arguments, or it can decide to take one or more actions. To take actions, the model function should return a plist,
 describing the action or actions to be taken; if it takes no actions it should return `nil`.
 
 To ease the addition of models to Wildfire when the server starts it looks in the `models/` subdirectory of the
@@ -238,10 +245,12 @@ As of right now a game uses a model function for the player in a mission playing
 cites the function in a `:model` keyword argument. When support for multiple players in a mission is supported
 this mechanism will necessarily change slightly, but will be similar.
 
-Among the items in the plist argument supplied to a model function are
+Among the items in the first plist argument supplied to a model function are
 
 * `:time`, the current model time, in seconds, where zero was the start of the game
-* `speed`, the current speed of the modeled player’s plane, in abstract units
+* `angle`, the orientation of the plane, in radians
+* `speed`, the current speed of the modeled player’s plane, a real number between 0 and 1 inclusive,
+the fraction of maximum possible speed
 * `view`, a two dimensional array, each element corresponding to a cell that is currently visible to the player;
 each element is either `nil`, denoting a cell of the view that is off the map and cannot be visited, or a two
 element list, a keyword denoting the type of cell (*e. g.* :grass or :rock) and a Boolean indicting whether the
@@ -252,7 +261,29 @@ that could easily be computed from the dimensions of the view array, but is supp
 of cell coördinates of all the cells that constitute a contiguous region in the view of cells of the same type;
 note that two different regions may, if the location of the view changes, coalesce into a single region
 
+Here’s an example:
+
+    (:time 33161
+     :angle 2.884269
+     :center (19 19)
+     :speed 0.25
+     :regions ((WILDFIRE:ROAD (0 0) (0 1) (0 2) ...)
+               (WILDFIRE:GRASS (0 38) (0 37) (1 17) ...)
+               (WILDFIRE:GRASS (21 21) (22 21) (21 22) ...)
+               (WILDFIRE:TREE (2 16) (1 16) (1 15) ...) ...)
+     :view #2A(((WILDFIRE:ROAD NIL) (WILDFIRE:ROAD NIL) (WILDFIRE:ROAD NIL)
+                (WILDFIRE:ROAD NIL) ...)
+               ((WILDFIRE:GRASS NIL) (WILDFIRE:GRASS NIL) (WILDFIRE:GRASS NIL)
+                (WILDFIRE:GRASS NIL) ...)
+               ((WILDFIRE:GRASS NIL) (WILDFIRE:GRASS NIL) (WILDFIRE:GRASS NIL)
+                (WILDFIRE:GRASS NIL) ...)
+               ((WILDFIRE:GRASS NIL) (WILDFIRE:GRASS NIL) (WILDFIRE:GRASS NIL)
+                (WILDFIRE:GRASS NIL) ...)
+               ...)
+
 In the future more information will be supplied as part of this argument.
+
+TODO document the private information supplied
 
 The only currently supported action that the model can return is motion to a target location in the view.
 To do this return `(:target <x> <y>)`, where `<x>` and `<y>` are the indices into the view array of the cell
