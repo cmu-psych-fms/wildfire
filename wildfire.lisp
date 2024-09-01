@@ -484,7 +484,8 @@ joined the mission."
      ,(and jvar `((@ vals push) (lambda (,jvar)
                                   (dlog "from server" ',name ((@ +json+ stringify) ,jvar))
                                   ,@callback-body)))
-     (apply (@ smackjack ,name) vals)))
+     (unless mission-over
+       (apply (@ smackjack ,name) vals))))
 
 
 
@@ -527,7 +528,7 @@ joined the mission."
 
 (js `(ps:var load-count ,(+ (length +cell-types+) 4 1)) ; number of images + 1 document
 
-    `(ps:var game-over false)
+    `(ps:var mission-over false)
 
     `(defun load-image (path)
        (let ((img (ps:new (-image))))
@@ -540,7 +541,7 @@ joined the mission."
     `(ps:var plane (load-image "images/plane.png"))
     `(ps:var flames (map load-image '("images/flame.png" "images/flame2.png")))
     `(ps:var flame-index 0)
-    `(ps:var game-over-image (load-image "images/mission-concluded.png"))
+    `(ps:var mission-over-image (load-image "images/mission-concluded.png"))
     `(ps:var velocity '(0 0))
     `(ps:var angle ,(- (/ pi 2)))
 
@@ -641,8 +642,8 @@ joined the mission."
                ((@ ctx rotate) angle)
                ((@ ctx draw-image) plane ,(- xp) ,(- yp))
                ((@ ctx restore))
-               (when game-over
-                 ((@ ctx draw-image) game-over-image ,(- xp 200) ,(- yp 180)))
+               (when mission-over
+                 ((@ ctx draw-image) mission-over-image ,(- xp 200) ,(- yp 180)))
                ((@ ctx restore)))))))
 
     `(defun animation-update () ((@ window request-animation-frame) update-position))
@@ -665,7 +666,7 @@ joined the mission."
          (setf last-flame-time ms))
        (with-point (x y) position
          (with-point (tx ty) target
-           (with-point (sx sy) (if game-over '(0 0) velocity)
+           (with-point (sx sy) (if mission-over '(0 0) velocity)
              (unless (= sx sy 0)
                (let ((d (/ (- ms last-update) 1000))) ; velocity is pixels per second
                  (labels ((change (spd cur lim)
@@ -678,7 +679,7 @@ joined the mission."
                    (setf y (change sy y ty))))))
            (setf position (list x y))
            (display-map)
-           (when game-over
+           (when mission-over
              (clear-timeout pending-server-update)
              (return-from update-position))
            (setf last-update ms)
@@ -1032,7 +1033,7 @@ joined the mission."
                                :angle angle)))
          (call server-update (json) (player state)
                (cond ((@ json concluded)
-                      (setf game-over true))
+                      (setf mission-over true))
                      (t (extinguish (@ json extinguish))
                         (ignite (@ json ignite))
                         (motion (@ json motion))))))
