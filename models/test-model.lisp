@@ -44,7 +44,6 @@
                                                            3))))))))))
 
 (defun test-model (public private)
-  (:_ :time (getf public :time))
   (labels ((trace-test-model (stream public private)
              (labels ((fmt (&rest args)
                         (when stream

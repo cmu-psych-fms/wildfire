@@ -32,10 +32,11 @@
 ;;; TODO get the destination right when moving to a marker
 ;;; TODO seems to be something wrong with :angle reporting
 ;;; TODO display elapsed time, and maybe remaining time, in UI
+;;; TODO finish headless missions
 
-#-(and cl-ppcre hunchentoot cl-json parenscript)
-(ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre
-                :spinneret :hunchentoot :smackjack :cl-json :parenscript
+#-(and cl-ppcre bordeaux-threads hunchentoot cl-json parenscript)
+(ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre :bordeaux-threads
+                :usocket-server :spinneret :hunchentoot :smackjack :cl-json :parenscript
                 :uuid :cl-geometry :uiop :local-time :vom))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -45,11 +46,11 @@
 
 (defpackage :wildfire
   (:nicknames :wf)
-  (:use :common-lisp :alexandria :iterate :ppcre
+  (:use :common-lisp :alexandria :iterate :ppcre :bt :usocket
         :spinneret :hunchentoot :smackjack :json :uuid)
   (:local-nicknames (:v :vom) (:g :geometry) (:lt :local-time))
   (:import-from :ps ps:@)
-  (:export #:start-server #:stop-server #:run-standalone #:defgame
+  (:export #:start-server #:stop-server #:run-standalone #:defgame #:request-mission
            #:grass #:ash #:water #:tree #:road #:rock #:house))
 
 (in-package :wildfire)
@@ -60,16 +61,17 @@
 
 ;;; Configuration
 
+(defparameter *debug* nil)
+(defparameter *data-directory* *default-pathname-defaults*)
 (define-constant +version+ "1.0" :test #'equal)
 (define-constant +mission-log-format-version+ "1.0" :test #'equal)
 
-(defparameter *debug* nil)
-(defparameter *data-directory* *default-pathname-defaults*)
 (defparameter *access-log* "wildfire.log")
 (defparameter *default-game* 'test-game)
 
 (define-constant +source-file-type+ "lisp" :test #'string=)
 (define-constant +default-port+ 8978)
+(define-constant +default-model-port+ 8979)
 (define-constant +view-side+ 39)                          ; number of cells on one side of the view
 (assert (oddp +view-side+))                               ; must be odd
 (define-constant +cell-size+ 20)                          ; in pixels, cells are always square
@@ -86,17 +88,19 @@
 (define-constant +maximum-speed+ (* 6 +cell-size+))
 (define-constant +initial-speed+ (floor +cell-size+ 0.66))
 
+(defparameter *port* +default-port+)
+
 (defun =~ (n &rest more)
   (every (lambda (x) (< (abs (- x n)) +tolerance+)) more))
 
 (define-constant +cell-type-names+
-    '((grass t) (ash nil) (water nil) (tree t) (road nil) (rock nil) (house t))
+    '((:grass t) (:ash nil) (:water nil) (:tree t) (:road nil) (:rock nil) (:house t))
   :test #'equal)
-(define-constant +default-cell-type+ (position 'grass +cell-type-names+ :key #'first))
+(define-constant +default-cell-type+ (position :grass +cell-type-names+ :key #'first))
 (define-constant +image-template+ "images/~(~A~).png" :test #'string=)
 (define-constant +region-types+
-    '((grass) (lake water) (river water t) (forest tree) (road road t) (outcrop rock)
-      (houses house))
+    '((:grass) (:lake :water) (:river :water t) (:forest :tree) (:road :road t)
+      (:outcrop :rock) (:houses :house))
   :test #'equal)
 
 (define-constant +extinguish-area+
@@ -318,6 +322,9 @@
   (last-extinguish-click nil)
   (markers nil)
   (marker-name-index 0)
+  (concluded-p nil)
+  (model nil)
+  (remote-model-stream nil)
   log-file-path)
 
 (define-object-printer mission (s) "~A, ~A (~D))"
@@ -333,11 +340,15 @@
                           :direction :output
                           :if-exists :append
                           :if-does-not-exist :create)
-    (format stream "~:[~%~;~](~S ~S~%~{ ~S ~:W~^~%~})~%"
-            (eq kind :metadata)
-            kind
-            (lt:format-timestring nil (lt:now))
-            plist)))
+    (when (oddp (length plist))
+      (v:warn "Malformed plist ~S ~S" plist kind))
+    (handler-case
+        (format stream "~:[~%~;~](~S ~S~%~{ ~S ~:W~^~%~})~%"
+                (eq kind :metadata)
+                kind
+                (lt:format-timestring nil (lt:now))
+                plist)
+      (error () (v:error "Error writing to mission log (~S, ~S)" kind plist)))))
 
 (defun create-mission-log (mission)
   (write-to-mission-log mission :metadata
@@ -358,7 +369,8 @@
               (%make-mission :id id
                              :game game
                              :ignitions (game-ignitions game)
-                             :log-file-path (merge-pathnames (format nil "~A-log.lisp" id)
+                             :model (game-model game)
+                            :log-file-path (merge-pathnames (format nil "~A-log.lisp" id)
                                                              (uiop:subpathname *data-directory*
                                                                                "mission-logs/"))))
         (for y :from 0 :below (game-height game))
@@ -428,11 +440,13 @@
 
 
 
-(defun join-mission (mission &optional player-name game)
+(defun join-mission (&optional mission player-name game)
   "Returns a player named PLAYER-NAME playing a mission with id MISSION.
 If PLAYER-NAME is not supplied or is null a new uuid is allocated and used for the name.
-If such a mission already exists it is joined, and otherwise one is created, playing the
-game named GAME. Signals a SIMPLE-ERROR if the mission already exists and is not playing
+If GAME is not supplied or is null the *default-game* is used. If such a mission already
+exists it is joined, and otherwise one is created, playing the game named GAME. MISSION
+should be a mission ID; if it is not supplied or is mull a new one with a generated ID is
+created and used. Signals a SIMPLE-ERROR if the mission already exists and is not playing
 the game name, if the game does not exist, or if a player of the same name has already
 joined the mission."
   (unless game
@@ -445,6 +459,117 @@ joined the mission."
         (error "A player named ~A is already in mission ~A" player-name mission))
       (make-player m player-name))
     (error "No game named ~A is available." game)))
+
+
+
+;;; Remote models
+
+(defparameter *pending-remote-models* (make-hash-table :test 'equal))
+(defparameter *remote-model-client-host* "koalemos.lan.cmu.edu")
+(defparameter *remote-model-client-port* +default-model-port+)
+(defparameter +rmmote-model-timeout+ 10)              ; seconds
+(defparameter *previous-pending-remote-model* 0)
+
+(defun remote-model (stream)
+  (let ((key (format nil "~D" (incf *previous-pending-remote-model*))))
+    (unwind-protect
+         (progn
+           (setf (gethash key *pending-remote-models*) stream)
+           (format stream "~S~%" `(:key ,key :port ,*port*))
+           (finish-output stream)
+           (v:info "Waiting for remotely modeled game ~D to start" key)
+           (iter (sleep 60)
+                 (while (open-stream-p stream))))
+      (close stream)                    ; in case of a non-local transfer of control
+      (remhash key *pending-remote-models*))))
+
+;;; Calling read on a TCP socket-stream is courting disaster if things stall, so we
+;;; use line delimited strings. This means we really don't want linefeeds in any Lisp
+;;; strings we serialize, so we replace them with spaces; this shouldn't cause any trouble
+;;; with the Wildfire use cases.
+
+(defmacro with-standard-io-syntax* (&body forms)
+  ;; Deal with the nasty interaction between SBCL's over-finicky *print-readably*
+  ;; semantics and prin1-to-string results.
+  `(with-standard-io-syntax
+     (let ((*print-readably* nil))
+       ,@forms)))
+
+(defun tcp-write (object stream)
+  (with-standard-io-syntax*
+    (handler-case
+        (let ((s (prin1-to-string object)))
+          (when (find #\Newline s)
+            (v:warn "Replacing unexpected newline(s) by space(s) in serialized object ~S"
+                    object)
+            (setf s (nsubstitute #\Space #\Newline s)))
+          (format stream "~A~%" s)
+          (finish-output stream)
+          t)
+      (error () nil))))
+
+(defun tcp-read (stream)
+  (with-standard-io-syntax*
+    (if-let ((s (read-line stream nil)))
+      (read-from-string s)
+      :eof)))
+
+(defun conclude-mission (mission)
+  (v:debug "Concluding mission ~S" mission)
+  (setf (mission-concluded-p mission) t)
+  (when-let ((s (mission-remote-model-stream mission))
+             (msg `((:concluded . t))))
+    (ignore-errors
+     (tcp-write (alist-plist msg) s)
+     (close s))
+    msg))                               ; value to return to the web client
+
+(defun remote-model-wrapper (mission public private)
+  (let ((stream (mission-remote-model-stream mission))
+        response)
+    (if (and (tcp-write public stream)
+             (tcp-write private stream)
+             (not (eq (setf response (tcp-read stream)) :eof)))
+        response
+        (alist-plist (conclude-mission mission)))))
+
+(defun request-mission (model-function &key (host *remote-model-client-host*)
+                                         (port *remote-model-client-port*) game trace)
+  (labels ((tr* (fmt &rest args)
+             (format *trace-output* ";;; ~?~%" fmt args))
+           (tr (fmt &rest args)
+             (when trace
+               (apply #'tr* fmt args))))
+    (tr "Note that trace output from REQUEST-MISSION is voluminous")
+    (setf *remote-model-client-host* host)
+    (setf *remote-model-client-port* port)
+    (tr "Requesting mission ~A:~D~@[ (~A)~]" host port game)
+    (let ((stream nil) (key nil) game-port)
+      (unwind-protect
+           (setf stream (socket-stream (socket-connect host port :timeout +rmmote-model-timeout+)))
+        (unless stream
+          (tr* "Failed to connect to server ~A:~D" host port)))
+      (unwind-protect
+           (let ((response (tcp-read stream)))
+             (when (eq response :eof)
+               (return-from request-mission))
+             (setf game-port (getf response :port))
+             (setf key (and game-port (getf response :key))))
+        (unless key
+          (tr* "Indecipherable response from server ~A:~D" host port)))
+      (format t "~%;;; To start the mission point a web browser at http://~A:~D/?remote-model=~D~@[&game=~A~]~2%"
+              host game-port key game)
+      (iter (for public := (tcp-read stream))
+            (until (or (eq public :eof) (getf public :concluded)))
+            (tr "Model called")
+            (tr "Public:~%~:W" public)
+            (for private := (tcp-read stream))
+            (until (or (eq private :eof) (getf private :concluded)))
+            (tr "Private:~%~:W" private)
+            (for response := (funcall model-function public private))
+            (tr "Response:~%~:W~%" response)
+            (while (tcp-write response stream))))
+    (tr "Mission finished")))
 
 
 
@@ -549,13 +674,18 @@ joined the mission."
        ;; returns one of the two flame images selected pseudo-randomly
        (aref flames (mod (setf flame-index (logand (1+ (* 257 flame-index)) #x1ffff)) 2))))
 
-(define-easy-handler (mission :uri "/") (game mission player)
+(define-easy-handler (mission :uri "/") (game mission player remote-model)
   (let* ((p (handler-case (join-mission mission player game)
               (simple-error (e)
                 (return-from mission (failure #?"${e}")))))
          (m (player-mission p))
          (g (mission-game m))
          (*js* *js*))           ; all parenscript added here is only local to this mission
+    (when-let ((remote-model-stream (gethash remote-model *pending-remote-models*)))
+      (v:info "Remotely modeled game ~D starting" remote-model)
+      (remhash remote-model *pending-remote-models*)
+      (setf (mission-remote-model-stream m) remote-model-stream)
+      (setf (mission-model m) (curry #'remote-model-wrapper m)))
     (js :front `(ps:var debug ,(if *debug* t 'false)))
     (js `(ps:var player ,(player-id p))
         `(ps:var position '(,(cells-to-pixels (game-start-x g) t)
@@ -836,9 +966,10 @@ joined the mission."
          (m (mission-map mission))
          (exhaustion-probability (game-fire-exhaustion-probability g))
          (propagation-probability (game-fire-propagation-probability g))
-         (ash-type (get-ct 'ash))
+         (ash-type (get-ct :ash))
          (births nil)
          (deaths nil))
+    (assert ash-type)
     (labels ((coords (cell)
                (list (cell-x cell) (cell-y cell)))
              (ignite (cell)
@@ -934,7 +1065,7 @@ joined the mission."
           (push-item :height (game-height g))
           (push-item :width (game-width g))
           (push-item :mission-id (mission-id m))
-          (push-item :game (game-name g)))
+          (push-item :game (string (game-name g))))
       (setf (player-map-sent-to-model-p player) t)))
     (alist-plist (append client-state result))))
 
@@ -974,12 +1105,14 @@ joined the mission."
     (write-to-mission-log m :update-request-from-client (alist-plist state))
     (let (response)
       (cond ((>= (cdr (assoc :time state)) (* (game-duration g) 1000))
-             (setf response '((:concluded . t))))
-            (t (when-let ((mod (game-model g))
+             (setf response (conclude-mission m)))
+            (t (when-let ((mod (mission-model m))
                           (private (make-model-private-state p state))
                           (public (make-model-public-state p state)))
                  (write-to-mission-log m :call-model `(:public ,public :private ,private))
                  (when-let ((model-response (funcall mod public private)))
+                   (when (and model-response (atom model-response))
+                     (v:error "Horrible disaster reading model response!! ~S" model-response))
                    (write-to-mission-log m :model-response model-response)
                    (%clicked-map player-id
                                  (mapcar #'cells-to-pixels (getf model-response :target))
@@ -999,7 +1132,7 @@ joined the mission."
          (setf (ps:chain document body style cursor) "none")
          (update-position)))
 
-    `(ps:var ash (aref images ,(position 'ash +cell-type-names+ :key #'car)))
+    `(ps:var ash (aref images ,(position :ash +cell-type-names+ :key #'car)))
 
     `(defun ignite (locs)
        (when locs
@@ -1047,21 +1180,29 @@ joined the mission."
 
 
 
-(defparameter *port* +default-port+)
-
+(defparameter *model-port* +default-model-port+)
 (defvar *server* nil)
+(defvar *remote-model-thread* nil)
+(defvar *remote-model-socket* nil)
 
 (push (create-ajax-dispatcher *ajax*) *dispatch-table*)
 
 (push (create-folder-dispatcher-and-handler "/images/" "images/") *dispatch-table*)
 
 (defun stop-server (&optional (soft t))
-  (cond (*server*
-         (v:info "Stopping ~A" *server*)
-         (stop *server* :soft soft)
-         (v:info "~A stopped" *server*)
-         (setf *server* nil))
-        (t (v:warn "No server was running"))))
+  (let ((result *server*))
+    (cond (*server*
+           (v:info "Stopping ~A" *server*)
+           (stop *server* :soft soft)
+           (v:info "~A stopped" *server*)
+           (setf *server* nil))
+          (t (v:warn "No server was running")))
+    (when *remote-model-socket*
+      (socket-close *remote-model-socket*))
+    (sleep 0.2)
+    (when (and *remote-model-thread* (thread-alive-p *remote-model-thread*))
+      (destroy-thread *remote-model-thread*))
+    result))
 
 (defun enable-debug (&optional (debug t))
   (cond ((null debug) (setf *debug* nil))
@@ -1081,15 +1222,19 @@ joined the mission."
     (v:info "Loading ~A" (namestring f))
     (load f)))
 
-(defun start-server (&key (port *port*) debug)
+(defun start-server (&key (port *port*) (model-port *model-port*) debug)
   (enable-debug debug)
   (setf *port* port)
+  (setf *model-port* model-port)
   (when *server*
     (v:warn "Server ~S already running, restarting it" *server*)
     (stop-server))
   (load-from-subdirectory "games/")
   (assert (get-game *default-game*))
   (load-from-subdirectory "models/")
+  (multiple-value-setq (*remote-model-thread* *remote-model-socket*)
+    (socket-server nil model-port 'remote-model () :in-new-thread t)) ; :multi-threading t))
+  (v:info "Model port ~D" model-port)
   (setf *server* (start (make-instance 'easy-acceptor
                                        :document-root *data-directory*
                                        :access-log-destination *access-log*
@@ -1097,9 +1242,30 @@ joined the mission."
   (v:info "Started ~A" *server*)
   *server*)
 
+
+
 (defun run-standalone ()
   (start-server)
   (loop (sleep 100000000)))
+
+;;; TODO This will need to keep trace of where the current location is, which
+;;;      is currently done by the browser; note that the browser is doing this in pixels.
+;;;      This will also have to use the velocity and target to update the position, and
+;;;      have some sort of magic for landing on the target: maybe the way to do that is to
+;;;      compute the motion in a ~ms time granularity loop? And, of course, it must send a
+;;;      state update every +polling-interval+ milliseconds.
+(defun headless-mission (&key model game mission player)
+  (let* ((p (join-mission mission player game))
+         (m (player-mission p))
+         (g (mission-game m)))
+    (when model
+      (setf (mission-model m) model))
+    (unless (mission-model m)
+      (error "A headless mission cannot be run without a model, either one supplied ~
+              explicitly in the call to HEADLESS-MISSION or implicitly in ~A."
+             g))
+    (iter (for i from 1 to 100)
+          (server-update p nil))))
 
 
 
