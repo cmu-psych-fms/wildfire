@@ -515,6 +515,7 @@ joined the mission."
       :eof)))
 
 (defun conclude-mission (mission)
+  ;; (v:info "Concluding mission ~S" mission)
   (v:debug "Concluding mission ~S" mission)
   (setf (mission-concluded-p mission) t)
   (when-let ((s (mission-remote-model-stream mission))
@@ -1232,9 +1233,9 @@ joined the mission."
   (load-from-subdirectory "games/")
   (assert (get-game *default-game*))
   (load-from-subdirectory "models/")
-  (multiple-value-setq (*remote-model-thread* *remote-model-socket*)
-    (socket-server nil model-port 'remote-model () :in-new-thread t)) ; :multi-threading t))
-  (v:info "Model port ~D" model-port)
+  ;; (multiple-value-setq (*remote-model-thread* *remote-model-socket*)
+  ;;   (socket-server nil model-port 'remote-model () :in-new-thread t)) ; :multi-threading t))
+  ;; (v:info "Model port ~D" model-port)
   (setf *server* (start (make-instance 'easy-acceptor
                                        :document-root *data-directory*
                                        :access-log-destination *access-log*
@@ -1268,6 +1269,9 @@ joined the mission."
           (server-update p nil))))
 
 
+
+(when (y-or-n-p "Start Wildfire server?")
+  (start-server))
 
 #|
 
