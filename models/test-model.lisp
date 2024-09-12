@@ -1,6 +1,6 @@
 ;;;; Copyright 2024 Carnegie Mellon University
 
-(in-package :wildfire)
+; (in-package :wildfire)
 
 ;;; This simple example waits five seconds after the mission starts, and then
 ;;;
