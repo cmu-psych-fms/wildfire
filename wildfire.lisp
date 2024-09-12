@@ -1,4 +1,4 @@
-;;;; Copyright 2023-2024 Carnegie Mellon University
+ ;;;; Copyright 2023-2024 Carnegie Mellon University
 
 ;;; TODO double check that markers are being tidily positioned
 ;;; TODO tweak marker positioning
@@ -157,7 +157,7 @@
                        (ct-name (cell-type cell))
                        (cell-burningp cell))
 
-(defun cells-to-pixels (n &optional centerp)
+(defun cells-to-pixels (n &optional (centerp t))
   (let ((raw (* n +cell-size+)))
     (if centerp
         (+ raw (round +cell-size+ 2))
@@ -733,8 +733,8 @@ joined the mission."
                                                         :onchange (ps:ps (speed-changed)))
                                           (:label :for "speed" "Speed"))))
         (:canvas#map :style #?'display: ${(if *debug* "block" "none")}; margin-top: 3rex;'
-                     :height (cells-to-pixels (game-height g))
-         :width (cells-to-pixels (game-width g)))
+                     :height (cells-to-pixels (game-height g) nil)
+         :width (cells-to-pixels (game-width g) nil))
         ;; the following foolishness is to ensure the Material Icons font is loaded
         (:div (:span.material-icons :style "visibility:hidden" "location_on"))))))
 
@@ -1270,7 +1270,8 @@ joined the mission."
 
 
 
-(when (y-or-n-p "Start Wildfire server?")
+;; need to figure out what to do so this doesn't get in the way on Koalemos
+(when (and (not (find-package "SWANK")) (y-or-n-p "Start Wildfire server?"))
   (start-server))
 
 #|
