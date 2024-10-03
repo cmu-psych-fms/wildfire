@@ -1335,9 +1335,9 @@ joined the mission."
 
 
 
-;; TODO need to figure out what to do so this doesn't get in the way on Koalemos
-(when (and (not (find-package "SWANK")) (y-or-n-p "Start Wildfire server?"))
-  (start-server))
+;; ;; TODO need to figure out what to do so this doesn't get in the way on Koalemos
+;; (when (and (not (find-package "SWANK")) (y-or-n-p "Start Wildfire server?"))
+;;   (start-server))
 
 #|
 
