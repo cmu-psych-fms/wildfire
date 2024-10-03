@@ -745,7 +745,16 @@ joined the mission."
                             "Not supported in this browser")
               (:div.uicol (:div.component (:input#speed :type "range" ; range defaults to 0 to 100
                                                         :onchange (ps:ps (speed-changed)))
-                                          (:label :for "speed" "Speed"))))
+                                          (:label :for "speed" "Speed"))
+                          (:table.component#data :style "margin-top: 3rex"
+                           (:tr (:td (:label :for "fuel" "Fuel"))
+                                (:td (:meter#fuel :low 0.1 :value 0.8)))
+                           (:tr (:td (:label :for "retardant" "Retardant"))
+                                (:td (:meter#retardant :low 0.1 :value 0.6)))
+                           (:tr (:td "Time left")
+                                (:td (:output#time-remaining "10:15")))
+                           (:tr (:td "Damage")
+                                (:td (:output#damage "0"))))))
         (:canvas#map :style #?'display: ${(if *debug* "block" "none")}; margin-top: 3rex;'
                      :height (cells-to-pixels (game-height g) nil)
          :width (cells-to-pixels (game-width g) nil))
@@ -755,6 +764,8 @@ joined the mission."
 (add-css ".uicol { width:12rem; margin:0 0.7rem }"
          ".component { margin-bottom: 0.8rex }"
          ".component legend { padding: 0 0.3rem }"
+         "#data td { padding: 0.3rem }"
+         ".red { color: red }"
          ".markers { list-style-type: none; margin-block-start: 0; margin-block-end: 0;
                      margin-inline-start: -1.5rem; margin-inline-end: 0.5rem }"
          ".markers li { border: solid 1px gray; margin: 0.1rem; padding: 0.1rex 0.5rem }")
@@ -1137,13 +1148,18 @@ joined the mission."
           (finally (setf (getf result :regions) (make-local-regions type-cells v))
                    (return result)))))
 
+(defun format-time (sec)
+  (multiple-value-bind (m s) (floor sec 60)
+    (format nil "~D:~2,'0D" m s)))
+
 (define-remote-call server-update (player-id state)
   (when-let* ((p (get-player player-id))
               (m (player-mission p))
-              (g (mission-game m)))
+              (g (mission-game m))
+              (tm (round (- (game-duration g) (/ (cdr (assoc :time state)) 1000)))))
     (write-to-mission-log m :update-request-from-client (alist-plist state))
     (let (response)
-      (cond ((>= (cdr (assoc :time state)) (* (game-duration g) 1000))
+      (cond ((<= tm 0)
              (setf response (conclude-mission m)))
             (t (when-let ((mod (mission-model m))
                           (private (make-model-private-state p state))
@@ -1159,7 +1175,9 @@ joined the mission."
                (multiple-value-bind (births deaths) (propagate-fires m state)
                  (setf response `((:motion . ,(shiftf (player-motion p) nil))
                                   (:ignite . ,births)
-                                  (:extinguish . ,deaths))))))
+                                  (:extinguish . ,deaths)
+                                  (:damage . ,(format nil "~:D" (mission-damage m)))
+                                  (:time-remaining . ,(format-time tm)))))))
       (write-to-mission-log m :update-from-server (alist-plist response))
       response)))
 
@@ -1189,6 +1207,12 @@ joined the mission."
              (modify-map ash x y)))
          (draw-all-markers (map-context))))
 
+    `(defun damage (n)
+       (let ((e (ps:chain document (get-element-by-id "damage"))))
+         (when (> n 0)
+           (setf (@ e class-name) "red"))
+         (setf (@ e value) n)))
+
     `(ps:var pending-server-update nil)
 
     `(defun set-server-update ()
@@ -1206,8 +1230,11 @@ joined the mission."
          (call server-update (json) (player state)
                (cond ((@ json concluded)
                       (setf mission-over true))
-                     (t (extinguish (@ json extinguish))
+                     (t (setf (ps:chain document (get-element-by-id "time-remaining") value)
+                              (@ json time-remaining))
+                        (extinguish (@ json extinguish))
                         (ignite (@ json ignite))
+                        (damage (@ json damage))
                         (motion (@ json motion))))))
        (set-server-update))
 
