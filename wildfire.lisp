@@ -1,4 +1,4 @@
- ;;;; Copyright 2023-2024 Carnegie Mellon University
+;;;; Copyright 2023-2024 Carnegie Mellon University
 
 ;;; TODO double check that markers are being tidily positioned
 ;;; TODO tweak marker positioning
@@ -33,6 +33,9 @@
 ;;; TODO seems to be something wrong with :angle reporting
 ;;; TODO display elapsed time, and maybe remaining time, in UI
 ;;; TODO finish headless missions
+;;; TODO try to implement HTTP version of remote modeling
+;;; TODO expose damages in the UI
+;;; TODO place hold UI stuff for fuel and water
 
 #-(and cl-ppcre bordeaux-threads hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre :bordeaux-threads
