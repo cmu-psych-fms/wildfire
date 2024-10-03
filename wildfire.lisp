@@ -119,7 +119,7 @@
 
 (defstruct (cell-type (:conc-name ct-) (:print-object))
   name
-  (flamablep nil)
+  (flammablep nil)
   image-path
   index)
 
@@ -128,10 +128,10 @@
   (ct-index ct))
 
 (defparameter +cell-types+
-  (iter (for (name flamablep) :in +cell-type-names+)
+  (iter (for (name flammablep) :in +cell-type-names+)
         (for i :from 0)
         (collect (make-cell-type :name name
-                                 :flamablep flamablep
+                                 :flammablep flammablep
                                  :image-path (format nil +image-template+ name)
                                  :index i)
           :into result)
@@ -178,6 +178,7 @@
   (fire-exhaustion-probability 0.002)
   (fire-propagation-probability 0.02)
   ignitions
+  (costs nil)
   (model nil))
 
 (define-object-printer game () "~A (~D×~D)"
@@ -250,6 +251,7 @@
                                            (start-y (round height 2))
                                            (duration +default-duration+)
                                            (ignitions nil)
+                                           (costs nil)
                  &allow-other-keys)
   (let ((m (make-array (list width height)
                        :element-type '(unsigned-byte 8)
@@ -272,6 +274,13 @@
                                                 (finally (return (list result))))))
                           #'<
                           :key #'first)))
+    (iter (for (ctn cost) :on costs :by #'cddr)
+          (for ct := (or (get-ct ctn) (v:warn "Unknown cell type ~S in game ~S" ctn name)))
+          (unless (and ct (ct-flammablep ct))
+            (v:warn "Cell type ~S is not flammable in game ~S" ctn name))
+          (unless (and (integerp cost) (> cost 0))
+            (v:warn "Burning cost of cell type ~S, ~S, is not a positive integer in game ~S"
+                    ctn cost name)))
     (iter (for r :in regions)
           (for i :from 0)
           (collect (destructuring-bind (kind (&optional name) &rest coords) r
@@ -304,6 +313,7 @@
                                                    :start-y start-y
                                                    :regions reg
                                                    :ignitions ign
+                                                   :costs costs
                                                    keys))))))
   name)
 
@@ -316,6 +326,7 @@
   game
   map
   ignitions
+  (damage 0)
   (click-places-marker-p nil)
   (move-extinguishes-p t)
   (fires (make-hash-table))
@@ -767,12 +778,34 @@ joined the mission."
                 ,+view-size+ ,+view-size+
                 0 0
                 ,+view-size+ ,+view-size+)
+
                ((@ ctx save))
                ((@ ctx translate) ,view-center ,view-center)
                ((@ ctx save))
                ((@ ctx rotate) angle)
                ((@ ctx draw-image) plane ,(- xp) ,(- yp))
                ((@ ctx restore))
+
+               ;; ((@ ctx save))
+               ;; ((@ ctx translate) ,(- view-center) ,(+ (- view-center) 200))
+               ;; (setf (@ ctx fill-style) ,+marker-color+)
+               ;; (setf (@ ctx font) "20px Material Icons")
+               ;; ((@ ctx fill-text) "location_on" 0 0)
+               ;; ((@ ctx restore))
+
+    ;; `(defun draw-marker (ctx marker)
+    ;;    (with-point (x y) (@ marker location)
+    ;;      (setf (@ ctx font) "10pt Merriweather Sans")
+    ;;      (let* ((name (@ marker name))
+    ;;             (width (+ (@ ((@ ctx measure-text) name) width) 8)))
+    ;;        (setf (@ ctx fill-style) "white")
+    ;;        ((@ ctx begin-path))
+    ;;        ((@ ctx round-rect) 29 -53 width 18 ,+marker-label-radius+)
+    ;;        ((@ ctx fill))
+    ;;        (setf (@ ctx fill-style) "black")
+    ;;        ((@ ctx fill-text) name 33 -38))
+    ;;      ((@ ctx restore))))
+
                (when mission-over
                  ((@ ctx draw-image) mission-over-image ,(- xp 200) ,(- yp 180)))
                ((@ ctx restore)))))))
@@ -976,7 +1009,9 @@ joined the mission."
              (ignite (cell)
                (setf (cell-burningp cell) t)
                (setf (gethash cell (mission-fires mission)) t)
-               (push (coords cell) births)))
+               (push (coords cell) births)
+               (incf (mission-damage mission)
+                     (getf (game-costs g) (ct-name (cell-type cell)) 1))))
       (when-let ((last-click (mission-last-extinguish-click mission)))
         (when (and (every #'zerop (cdr (assoc :velocity state)))
                    (equal (mapcar #'pixels-to-cells (cdr (assoc :position state)))
@@ -1002,7 +1037,7 @@ joined the mission."
                            (for y := (+ (cell-y c) yo))
                            (for candidate := (mission-cell mission x y))
                            (when (and candidate
-                                      (ct-flamablep (cell-type candidate))
+                                      (ct-flammablep (cell-type candidate))
                                       (not (cell-burningp candidate))
                                       (<= (random 1.0) propagation-probability))
                              (ignite candidate))))))
