@@ -13,8 +13,8 @@
 ;;; c) if the player is stopped and no such fires are found it selects a cell at random
 ;;;    that is at least three cells away from the current position and moves to it.
 ;;;
-;;; If *model-trace-output* is non-nil it should be a string, a pathname  or be a text
-;;; stream open for writing,in which case this example writes the data supplied on each
+;;; If *model-trace-output* is non-nil it should be a string, a pathname or be a text
+;;; stream open for writing, in which case this example writes the data supplied on each
 ;;; call to a file of the given name or to the supplied stream.
 
 (defvar *model-trace-output* nil)

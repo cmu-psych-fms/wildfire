@@ -6,7 +6,7 @@ significantly different from Shawn’s original game, being largely mouse driven
 The game is intended not as entertainment but rather as a platform for experiments in psychology.
 Players fly virtual airplanes over a virtual terrain extinguishing wildfires.
 
-As of 24 June 2024 this remains a work in progress, but incorporates an example
+As of 1 October 2024 this remains a work in progress, but incorporates an example
 of what is believed to be every major component the finished version will require, and it appears to work well.
 As additional features are added they will be documented in this README. In what follows I describe the current
 state of the game, but also point out many of the features I hope to implement as development progresses.
@@ -347,7 +347,7 @@ provided to the model as it is called. If the model returns a non-nil response t
 `mofrl-trdpondr` record containing that response.
 
 Mission log files can grow large quickly, on the order of Gigabytes, especially if a model is in use.
-The do, however, compress well. It is expected that eventually on mission termination the corresponding log
+They do, however, compress well. It is expected that eventually on mission termination the corresponding log
 file will be automatically compressed.
 
 
@@ -355,7 +355,7 @@ file will be automatically compressed.
 
 This new version of Wildfire is released under the MIT License:
 
-> Copyright (c) 2024 Carnegie Mellon University
+> Copyright 2024 Carnegie Mellon University
 >
 > Permission is hereby granted, free of charge, to any person obtaining
 > a copy of this software and associated documentation files (the
