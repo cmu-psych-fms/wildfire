@@ -19,7 +19,7 @@
 ;;;      coordinate system
 ;;; TODO make fire scale fire probabilities by update speed
 ;;; TODO factor out various geometry things, like testing for a cell being in bounds
-;;; TODO implement an end to game
+;;; TODO debug end of game
 ;;; TODO auto-compress log files
 ;;; TODO make debug output on Lisp side less voluminous
 ;;; TODO note and report when connection to server is lost
@@ -34,8 +34,10 @@
 ;;; TODO display elapsed time, and maybe remaining time, in UI
 ;;; TODO finish headless missions
 ;;; TODO try to implement HTTP version of remote modeling
-;;; TODO expose damages in the UI
-;;; TODO place hold UI stuff for fuel and water
+;;; TODO at end of game time and damage shouldn't go to undefined
+;;; TODO consider using sasht or jzon instead of cl-json
+;;; TODO consider if some alists should be plists
+;;; TODO maybe use multiple levels to make debugging output more useful?
 
 #-(and cl-ppcre bordeaux-threads hunchentoot cl-json parenscript)
 (ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre :bordeaux-threads
@@ -79,6 +81,7 @@
 (assert (oddp +view-side+))                               ; must be odd
 (define-constant +cell-size+ 20)                          ; in pixels, cells are always square
 (define-constant +view-size+ (* +view-side+ +cell-size+)) ; in pixels, view is always square
+(define-constant +view-margin+ 90)                        ; in pixels
 (define-constant +plane-axis+ '(47 47) :test #'equal)     ; in pixels, point within plane about which to spin
 (define-constant +default-map-size+ 100)                  ; in cells, default for both width and height
 (define-constant +default-duration+ (* 10 60))            ; in seconds
@@ -90,6 +93,8 @@
 (define-constant +minimum-speed+ (floor +cell-size+ 4))  ; pixels per second
 (define-constant +maximum-speed+ (* 6 +cell-size+))
 (define-constant +initial-speed+ (floor +cell-size+ 0.66))
+(define-constant +default-exhaustion-probability+ 0.002)
+(define-constant +default-progagation-probability+ 0.02)
 
 (defparameter *port* +default-port+)
 
@@ -178,8 +183,8 @@
   start-y
   duration
   regions
-  (fire-exhaustion-probability 0.002)
-  (fire-propagation-probability 0.02)
+  (fire-exhaustion-probability +default-exhaustion-probability+)
+  (fire-propagation-probability +default-progagation-probability+)
   ignitions
   (costs nil)
   (model nil))
