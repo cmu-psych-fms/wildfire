@@ -534,15 +534,9 @@ joined the mission."
       :eof)))
 
 (defun conclude-mission (mission)
-  ;; (v:info "Concluding mission ~S" mission)
   (v:debug "Concluding mission ~S" mission)
   (setf (mission-concluded-p mission) t)
-  (when-let ((s (mission-remote-model-stream mission))
-             (msg `((:concluded . t))))
-    (ignore-errors
-     (tcp-write (alist-plist msg) s)
-     (close s))
-    msg))                               ; value to return to the web client
+  `((:concluded . t)))                  ; value to return to the web client
 
 (defun remote-model-wrapper (mission public private)
   (let ((stream (mission-remote-model-stream mission))
@@ -555,6 +549,7 @@ joined the mission."
 
 (defun request-mission (model-function &key (host *remote-model-client-host*)
                                          (port *remote-model-client-port*) game trace)
+  (declare (ignorable model-function))
   (labels ((tr* (fmt &rest args)
              (format *trace-output* ";;; ~?~%" fmt args))
            (tr (fmt &rest args)
@@ -579,16 +574,17 @@ joined the mission."
           (tr* "Indecipherable response from server ~A:~D" host port)))
       (format t "~%;;; To start the mission point a web browser at http://~A:~D/?remote-model=~D~@[&game=~A~]~2%"
               host game-port key game)
-      (iter (for public := (tcp-read stream))
-            (until (or (eq public :eof) (getf public :concluded)))
-            (tr "Model called")
-            (tr "Public:~%~:W" public)
-            (for private := (tcp-read stream))
-            (until (or (eq private :eof) (getf private :concluded)))
-            (tr "Private:~%~:W" private)
-            (for response := (funcall model-function public private))
-            (tr "Response:~%~:W~%" response)
-            (while (tcp-write response stream))))
+      ;; (iter (for public := (tcp-read stream))
+      ;;       (until (or (eq public :eof) (getf public :concluded)))
+      ;;       (tr "Model called")
+      ;;       (tr "Public:~%~:W" public)
+      ;;       (for private := (tcp-read stream))
+      ;;       (until (or (eq private :eof) (getf private :concluded)))
+      ;;       (tr "Private:~%~:W" private)
+      ;;       (for response := (funcall model-function public private))
+      ;;       (tr "Response:~%~:W~%" response)
+      ;;       (while (tcp-write response stream)))
+      )
     (tr "Mission finished")))
 
 
@@ -801,7 +797,6 @@ joined the mission."
                 ,+view-size+ ,+view-size+
                 ,+view-margin+ ,+view-margin+
                 ,+view-size+ ,+view-size+)
-
                ((@ ctx save))
                ((@ ctx translate) (+ ,view-center ,+view-margin+) (+ ,view-center ,+view-margin+))
                ((@ ctx save))
@@ -1217,6 +1212,7 @@ joined the mission."
                                :angle angle)))
          (call server-update (json) (player state)
                (cond ((@ json concluded)
+                      (clog "concluded")
                       (setf mission-over true))
                      (t (setf (ps:chain document (get-element-by-id "time-remaining") value)
                               (@ json time-remaining))
