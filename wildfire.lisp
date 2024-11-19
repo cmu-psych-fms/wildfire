@@ -744,7 +744,8 @@ joined the mission."
                           (:fieldset.component
                            (:legend "Markers")
                            (:div (:ul.markers#marker-names))))
-              (:canvas#view :height +view-size+ :width +view-size+
+              (:canvas#view :height (+ +view-size+ +view-margin+)
+                            :width (+ +view-size+ +view-margin+)
                             :onclick (ps:ps (clicked-map (list (@ event offset-x)
                                                                (@ event offset-y))))
                             "Not supported in this browser")
@@ -790,41 +791,23 @@ joined the mission."
       (let* ((view-center (/ +view-size+ 2.0)))
         `(defun display-map ()
            (let ((ctx (view-context)))
-             ((@ ctx draw-image) dragons 0 0 ,+view-size+ ,+view-size+)
+             ((@ ctx draw-image) dragons 0 0
+              ,+view-size+ ,+view-size+
+              ,+view-margin+ ,+view-margin+
+              ,+view-size+ ,+view-size+)
              (with-point (x y) position
                ((@ ctx draw-image) (ps:chain document (get-element-by-id "map"))
                 (- x ,view-center) (- y ,view-center)
                 ,+view-size+ ,+view-size+
-                0 0
+                ,+view-margin+ ,+view-margin+
                 ,+view-size+ ,+view-size+)
 
                ((@ ctx save))
-               ((@ ctx translate) ,view-center ,view-center)
+               ((@ ctx translate) (+ ,view-center ,+view-margin+) (+ ,view-center ,+view-margin+))
                ((@ ctx save))
                ((@ ctx rotate) angle)
                ((@ ctx draw-image) plane ,(- xp) ,(- yp))
                ((@ ctx restore))
-
-               ;; ((@ ctx save))
-               ;; ((@ ctx translate) ,(- view-center) ,(+ (- view-center) 200))
-               ;; (setf (@ ctx fill-style) ,+marker-color+)
-               ;; (setf (@ ctx font) "20px Material Icons")
-               ;; ((@ ctx fill-text) "location_on" 0 0)
-               ;; ((@ ctx restore))
-
-    ;; `(defun draw-marker (ctx marker)
-    ;;    (with-point (x y) (@ marker location)
-    ;;      (setf (@ ctx font) "10pt Merriweather Sans")
-    ;;      (let* ((name (@ marker name))
-    ;;             (width (+ (@ ((@ ctx measure-text) name) width) 8)))
-    ;;        (setf (@ ctx fill-style) "white")
-    ;;        ((@ ctx begin-path))
-    ;;        ((@ ctx round-rect) 29 -53 width 18 ,+marker-label-radius+)
-    ;;        ((@ ctx fill))
-    ;;        (setf (@ ctx fill-style) "black")
-    ;;        ((@ ctx fill-text) name 33 -38))
-    ;;      ((@ ctx restore))))
-
                (when mission-over
                  ((@ ctx draw-image) mission-over-image ,(- xp 200) ,(- yp 180)))
                ((@ ctx restore)))))))
@@ -929,7 +912,7 @@ joined the mission."
   (when-let* ((p (get-player player-id))
               (mission (player-mission p))
               (map (mission-map mission))
-              (d (mapcar #'- target `(,#0=(/ +view-size+ 2.0) ,#0#)))
+              (d (mapcar #'- target `(,#0=(+ (/ +view-size+ 2.0) +view-margin+) ,#0#)))
               (new-pos (mapcar #'+ current d))) ; pixels, map's coordinate system
     (when (every #'<
                  `(,least-negative-single-float ,least-negative-single-float)
