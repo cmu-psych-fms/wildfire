@@ -34,7 +34,7 @@
 ;;; TODO display elapsed time, and maybe remaining time, in UI
 ;;; TODO finish headless missions
 ;;; TODO try to implement HTTP version of remote modeling
-;;; TODO at end of game time and damage shouldn't go to undefined
+;;; TODO finish obliterating old attempts at remote models
 ;;; TODO consider using sasht or jzon instead of cl-json
 ;;; TODO consider if some alists should be plists
 ;;; TODO maybe use multiple levels to make debugging output more useful?
@@ -81,7 +81,7 @@
 (assert (oddp +view-side+))                               ; must be odd
 (define-constant +cell-size+ 20)                          ; in pixels, cells are always square
 (define-constant +view-size+ (* +view-side+ +cell-size+)) ; in pixels, view is always square
-(define-constant +view-margin+ 90)                        ; in pixels
+(define-constant +view-margin+ 24)                        ; in pixels
 (define-constant +plane-axis+ '(47 47) :test #'equal)     ; in pixels, point within plane about which to spin
 (define-constant +default-map-size+ 100)                  ; in cells, default for both width and height
 (define-constant +default-duration+ (* 10 60))            ; in seconds
@@ -89,6 +89,8 @@
 (define-constant +flame-flicker-interval+ 150)            ; milliseconds
 (define-constant +marker-color+ "#c00" :test #'string-equal)
 (define-constant +marker-label-radius+ 4)
+(define-constant +marker-characters+ "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱" :test #'string-equal)
+(define-constant +marker-number-color+ "#00f" :test #'string-equal)
 (define-constant +tolerance+ 1.0d-12)                     ; equality tolerance when compare floats
 (define-constant +minimum-speed+ (floor +cell-size+ 4))  ; pixels per second
 (define-constant +maximum-speed+ (* 6 +cell-size+))
@@ -740,8 +742,8 @@ joined the mission."
                           (:fieldset.component
                            (:legend "Markers")
                            (:div (:ul.markers#marker-names))))
-              (:canvas#view :height (+ +view-size+ +view-margin+)
-                            :width (+ +view-size+ +view-margin+)
+              (:canvas#view :height (+ +view-size+ (* 2 +view-margin+))
+                            :width  (+ +view-size+ (* 2 +view-margin+))
                             :onclick (ps:ps (clicked-map (list (@ event offset-x)
                                                                (@ event offset-y))))
                             "Not supported in this browser")
