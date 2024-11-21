@@ -1,4 +1,4 @@
-;;;; Copyright 2024 Carnegie Mellon University
+ ;;;; Copyright 2024 Carnegie Mellon University
 
 ;;; TODO double check that markers are being tidily positioned
 ;;; TODO tweak marker positioning
@@ -90,7 +90,6 @@
 (define-constant +marker-color+ "#c00" :test #'string-equal)
 (define-constant +marker-label-radius+ 4)
 (define-constant +marker-characters+ "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱" :test #'string-equal)
-(define-constant +marker-number-color+ "#00f" :test #'string-equal)
 (define-constant +tolerance+ 1.0d-12)                     ; equality tolerance when compare floats
 (define-constant +minimum-speed+ (floor +cell-size+ 4))  ; pixels per second
 (define-constant +maximum-speed+ (* 6 +cell-size+))
@@ -789,6 +788,8 @@ joined the mission."
       (let* ((view-center (/ +view-size+ 2.0)))
         `(defun display-map ()
            (let ((ctx (view-context)))
+             ((@ ctx clear-rect) 0 0
+              (+ ,+view-size+ (* 2 ,+view-margin+)) (+ ,+view-size+ (* 2 ,+view-margin+)))
              ((@ ctx draw-image) dragons 0 0
               ,+view-size+ ,+view-size+
               ,+view-margin+ ,+view-margin+
@@ -807,7 +808,39 @@ joined the mission."
                ((@ ctx restore))
                (when mission-over
                  ((@ ctx draw-image) mission-over-image ,(- xp 200) ,(- yp 180)))
-               ((@ ctx restore)))))))
+               ((@ ctx restore)))
+             (draw-margin-markers ctx)))))
+
+    `(defun draw-margin-markers (ctx)
+       (let ((hv (/ ,+view-size+ 2.0))
+             (n 0))
+         (with-point (xp yp) position
+           (dolist (m markers)
+             (with-point (x y) (@ m location)
+               (let* ((xd (- x xp))
+                      (xa (abs xd))
+                      (yd (- y yp))
+                      (ya (abs yd)))
+                 (incf n)
+                 (cond ((and (< xa  hv) (< ya hv))) ; marker is visible, do nothing
+                       ((<= ya xa)
+                        (if (< x xp)
+                            ;; on left side
+                            (draw-marker-character ctx n 0 (* hv (- 1 (/ yd xd))))
+                            ;; on right side
+                            (draw-marker-character ctx n (+ ,+view-margin+ ,+view-size+) (* hv (+ 1 (/ yd xd))))))
+                       (t (if (< y yp)
+                              ;; on top
+                              (draw-marker-character ctx n (* hv (- 1 (/ xd yd))) ,+view-margin+)
+                              ;; on bottom
+                              (draw-marker-character ctx n (* hv (+ 1 (/ xd yd))) (+ ,+view-size+ (* 2 ,+view-margin+))))))))))))
+
+    `(defun draw-marker-character (ctx n x y)
+       ((@ ctx save))
+       (setf (@ ctx fill-style) ,+marker-color+)
+       (setf (@ ctx font) "24pt Merriweather Sans")
+       ((@ ctx fill-text) ((@ ,+marker-characters+ substring) (- n 1) n) x y ,+view-margin+)
+       ((@ ctx restore)))
 
     `(defun animation-update () ((@ window request-animation-frame) update-position))
 
@@ -1134,8 +1167,11 @@ joined the mission."
                    (return result)))))
 
 (defun format-time (sec)
-  (multiple-value-bind (m s) (floor sec 60)
-    (format nil "~D:~2,'0D" m s)))
+  (multiple-value-bind (min s) (floor sec 60)
+    (if (<= min 60)
+        (format nil "~D:~2,'0D" min s)
+        (multiple-value-bind (h m) (floor min 60)
+          (format nil "~D:~2,'0D:~2,'0D" h m s)))))
 
 (define-remote-call server-update (player-id state)
   (when-let* ((p (get-player player-id))
@@ -1196,7 +1232,8 @@ joined the mission."
        (let ((e (ps:chain document (get-element-by-id "damage"))))
          (when (> n 0)
            (setf (@ e class-name) "red"))
-         (setf (@ e value) n)))
+         (when n
+           (setf (@ e value) n))))
 
     `(ps:var pending-server-update nil)
 
@@ -1215,14 +1252,18 @@ joined the mission."
          (call server-update (json) (player state)
                (cond ((@ json concluded)
                       (clog "concluded")
-                      (setf mission-over true))
-                     (t (setf (ps:chain document (get-element-by-id "time-remaining") value)
-                              (@ json time-remaining))
+                      (setf mission-over true)
+                      (set-time-display))
+                     (t (set-time-display (@ json time-remaining))
                         (extinguish (@ json extinguish))
                         (ignite (@ json ignite))
                         (damage (@ json damage))
                         (motion (@ json motion))))))
        (set-server-update))
+
+    `(defun set-time-display (&optional val)
+       (setf (ps:chain document (get-element-by-id "time-remaining") value)
+             (or val "0:00")))
 
     `(set-server-update))
 
