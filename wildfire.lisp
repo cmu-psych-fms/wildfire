@@ -15,7 +15,7 @@
 ;;; TODO include more metadata in the log, such as the contents of the game object and map
 ;;; TODO in ?? (was older form of queue-motion) it should be possible to extract current position from player
 ;;;      state instead of having to pass it as another parameter
-;;; TODO ?? (was older from of queue-motion) should probably be changed to take the target in the map's
+;;; TODO ?? (was older form of queue-motion) should probably be changed to take the target in the map's
 ;;;      coordinate system
 ;;; TODO make fire scale fire probabilities by update speed
 ;;; TODO factor out various geometry things, like testing for a cell being in bounds
@@ -973,15 +973,22 @@ joined the mission."
                                     :key #'marker-name
                                     :test #'string-equal))))
     (unless (equal loc position)
-      (queue-motion p loc 0))))      ; TODO compute the real angle somehow
+      (v:info "should move ~A ~A ~S ~S" name p position loc)
+      (let ((angle (apply #'atan (mapcar #'- position loc))))
+        (queue-motion p loc angle)))))      ; TODO compute the real angle somehow
+;; I think the computation in %click-map is using view coordinates, but markers are
+;; necessarily in map coordinates, so we need something a bit different to compute
+;; the angle, very confusing.
 
 (js `(defun marker-name-clicked (evt)
        (let ((name (@ evt src-element first-child node-value)))
          (clog "click" name)
-         (call clicked-marker-name () (name player position))))
+         (call clicked-marker-name (json) (name player position)
+               (clog json))))
 
     `(defun clicked-map (location)
        (call clicked-map (json) (location player position)
+             (clog json)
              (let ((mkrs (@ json markers)))
                (when mkrs
                  (setf markers mkrs)
