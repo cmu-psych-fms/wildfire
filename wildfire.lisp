@@ -40,7 +40,7 @@
 ;;; TODO maybe use multiple levels to make debugging output more useful?
 
 #-(and cl-ppcre bordeaux-threads hunchentoot cl-json parenscript)
-(ql:quickload '(:cl-interpol :alexandria :iterate :cl-ppcre :bordeaux-threads
+(ql:quickload '(:cl-interpol :alexandria :cl-strings :iterate :cl-ppcre :bordeaux-threads
                 :usocket-server :spinneret :hunchentoot :smackjack :cl-json :parenscript
                 :uuid :cl-geometry :uiop :local-time :vom))
 
@@ -53,7 +53,7 @@
   (:nicknames :wf)
   (:use :common-lisp :alexandria :iterate :ppcre :bt :usocket
         :spinneret :hunchentoot :smackjack :json :uuid)
-  (:local-nicknames (:v :vom) (:g :geometry) (:lt :local-time))
+  (:local-nicknames (:v :vom) (:g :geometry) (:lt :local-time) (:s :cl-strings))
   (:import-from :ps ps:@)
   (:export #:start-server #:stop-server #:run-standalone #:defgame #:request-mission
            #:grass #:ash #:water #:tree #:road #:rock #:house))
@@ -421,10 +421,35 @@
                        (marker-name m)
                        (coerce (marker-location m) 'list))
 
+(defun location-region (mission location)
+  ;; location is in pixels in the map's coordinate system
+  ;; With some effort this could be made faster, but it doesn't seem worth it for
+  ;; current use case; maybe someday it will become worthwhile.
+  (iter (with map := (mission-map mission))
+        (with type := (cell-type (apply #'aref map location)))
+        (for r :in (game-regions (mission-game mission)))
+        (for c := (region-cells r))
+        (unless (eq (cell-type (apply #'aref map (first c))) type)
+          (next-iteration))
+        (when (member location c :test #'equal)
+          (return r))))
+
 (defun add-marker (mission location &optional name)
   ;; location is in pixels in the map's coordinate systems
   (unless name
-    (setf name (format nil "Marker-~D" (incf (mission-marker-name-index mission)))))
+    (setf name (format nil "~D ~A"
+                       (incf (mission-marker-name-index mission))
+                       (s:shorten (iter (with map := (mission-map mission))
+                                        (with coords := (mapcar #'pixels-to-cells location))
+                                        (with type := (cell-type (apply #'aref map coords)))
+                                        (for r :in (game-regions (mission-game mission)))
+                                        (for c := (region-cells r))
+                                        (unless (eq (cell-type (apply #'aref map (first c))) type)
+                                          (next-iteration))
+                                        (when (member coords c :test #'equal)
+                                          (return (region-name r)))
+                                        (finally (return (string-capitalize (ct-name type)))))
+                                  10))))
   (nconcf (mission-markers mission) (list (make-marker :name name :location location))))
 
 
@@ -479,6 +504,30 @@ joined the mission."
         (error "A player named ~A is already in mission ~A" player-name mission))
       (make-player m player-name))
     (error "No game named ~A is available." game)))
+
+
+
+#|
+
+variables:
+  fuel
+  water
+  speed
+
+parameters:
+  dead weight
+  min speed
+  max speed
+  max fuel
+  max water
+  fuel consumption rate
+  water per extinquishment
+
+at each time step reduce the fuel level by
+  fuel consumption rate * speed * (dead weight + fuel + water)
+
+
+|#
 
 
 
