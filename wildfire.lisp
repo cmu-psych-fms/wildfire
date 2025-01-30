@@ -434,6 +434,9 @@
         (when (member location c :test #'equal)
           (return r))))
 
+;; temporary, make this configurable per game
+(defparameter *markers-use-region-names-p* nil)
+
 (defun add-marker (mission location &optional name)
   ;; location is in pixels in the map's coordinate systems
   (unless name
@@ -442,6 +445,8 @@
                        (s:shorten (iter (with map := (mission-map mission))
                                         (with coords := (mapcar #'pixels-to-cells location))
                                         (with type := (cell-type (apply #'aref map coords)))
+                                        (unless *markers-use-region-names-p*
+                                          (finish))
                                         (for r :in (game-regions (mission-game mission)))
                                         (for c := (region-cells r))
                                         (unless (eq (cell-type (apply #'aref map (first c))) type)
