@@ -4,8 +4,6 @@
 ;;; TODO tweak marker positioning
 ;;; TODO improve the macro wrapping the SmackJack stuff
 ;;; TODO why isn't the model extinguishing?
-;;; TODO when clicking and extinguishing if an adjacent cell is burning that should
-;;;      be good enough to trigger extinguishment
 ;;; TODO markers should be placed by cell coordinates, not raw pixels
 ;;; TODO generate Extinguishment area automatically from a simple radius, probably
 ;;;      configured on a per-game basis
