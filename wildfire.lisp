@@ -341,6 +341,7 @@
   (move-extinguishes-p t)
   (fires (make-hash-table))
   (last-extinguish-click nil)
+  (show-extinguishment-p nil)
   (markers nil)
   (marker-name-index 0)
   (concluded-p nil)
@@ -857,6 +858,8 @@ at each time step reduce the fuel level by
     `(defun view-context ()
        (ps:chain document (get-element-by-id "view") (get-context "2d")))
 
+    `(ps:var extinguish-start 0)
+
     (destructuring-bind (xp yp) +plane-axis+
       (let* ((view-center (/ +view-size+ 2.0)))
         `(defun display-map ()
@@ -877,16 +880,15 @@ at each time step reduce the fuel level by
                ((@ ctx translate) (+ ,view-center ,+view-margin+) (+ ,view-center ,+view-margin+))
                ((@ ctx save))
 
-               ((@ ctx begin-path))
-               (setf (@ ctx fill-style) ,+extinguishment-color+)
-               ((@ ctx arc) 0 0 100 0 ,(* 2 pi))
-               ((@ ctx fill))
+               (when (> extinguish-start 0)
+                 ((@ ctx begin-path))
+                 (setf (@ ctx fill-style) ,+extinguishment-color+)
+                 ((@ ctx arc) 0 0 100 0 ,(* 2 pi))
+                 ((@ ctx fill)))
 
                ((@ ctx rotate) angle)
                ((@ ctx draw-image) plane ,(- xp) ,(- yp))
                ((@ ctx restore))
-
-
                (when mission-over
                  ((@ ctx draw-image) mission-over-image ,(- xp 200) ,(- yp 180)))
                ((@ ctx restore)))
@@ -1037,7 +1039,7 @@ at each time step reduce the fuel level by
                                           (:location . ,(marker-location m)))))))))
       (let ((cell (apply #'aref map (mapcar #'pixels-to-cells new-pos))))
         (setf (mission-last-extinguish-click mission)
-              (and (mission-move-extinguishes-p mission) (cell-burningp cell) cell)))
+              (and (mission-move-extinguishes-p mission) cell)))
       (unless (apply #'=~ 0 d)
         (let ((angle (- (/ pi 2) (apply #'atan d))))
           (queue-motion p new-pos angle)))))
@@ -1054,7 +1056,6 @@ at each time step reduce the fuel level by
                                     :key #'marker-name
                                     :test #'string-equal))))
     (unless (equal loc position)
-      (v:info "should move ~A ~A ~S ~S" name p position loc)
       (let ((angle (apply #'atan (mapcar #'- position loc))))
         (queue-motion p loc angle)))))      ; TODO compute the real angle somehow
 ;; I think the computation in %click-map is using view coordinates, but markers are
@@ -1063,13 +1064,10 @@ at each time step reduce the fuel level by
 
 (js `(defun marker-name-clicked (evt)
        (let ((name (@ evt src-element first-child node-value)))
-         (clog "click" name)
-         (call clicked-marker-name (json) (name player position)
-               (clog json))))
+         (call clicked-marker-name (json) (name player position))))
 
     `(defun clicked-map (location)
        (call clicked-map (json) (location player position)
-             (clog json)
              (let ((mkrs (@ json markers)))
                (when mkrs
                  (setf markers mkrs)
@@ -1136,6 +1134,8 @@ at each time step reduce the fuel level by
         (when (and (every #'zerop (cdr (assoc :velocity state)))
                    (equal (mapcar #'pixels-to-cells (cdr (assoc :position state)))
                           (coords last-click)))
+          (setf (mission-show-extinguishment-p mission) t)
+          (setf (mission-last-extinguish-click mission) nil)
           ;; refactor for commonality with what follows
           (iter (for (xo yo) :in +extinguish-area+)
                 (for x := (+ (cell-x last-click) xo))
@@ -1286,7 +1286,10 @@ at each time step reduce the fuel level by
                                   (:ignite . ,births)
                                   (:extinguish . ,deaths)
                                   (:damage . ,(format nil "~:D" (mission-damage m)))
-                                  (:time-remaining . ,(format-time tm)))))))
+                                  (:time-remaining . ,(format-time tm))))
+                 (when (mission-show-extinguishment-p m)
+                   (push '(:show-extinguishment . t) response)
+                   (setf (mission-show-extinguishment-p m) nil)))))
       (write-to-mission-log m :update-from-server (alist-plist response))
       response)))
 
@@ -1332,18 +1335,20 @@ at each time step reduce the fuel level by
        (when pending-server-update
          (clear-timeout pending-server-update)
          (setf pending-server-update nil))
-       (let ((state (ps:create :time (@ document timeline current-time)
-                               :position position
-                               :target target
-                               :velocity velocity
-                               :angle angle)))
+       (setf extinguish-start 0)
+       (let* ((time (@ document timeline current-time))
+              (state (ps:create :time time
+                                :position position
+                                :target target
+                                :velocity velocity
+                                :angle angle)))
          (call server-update (json) (player state)
                (cond ((@ json concluded)
-                      (clog "concluded")
                       (setf mission-over true)
                       (set-time-display))
                      (t (set-time-display (@ json time-remaining))
                         (extinguish (@ json extinguish))
+                        (setf extinguish-start (if (@ json show-extinguishment) time 0))
                         (ignite (@ json ignite))
                         (damage (@ json damage))
                         (motion (@ json motion))))))
