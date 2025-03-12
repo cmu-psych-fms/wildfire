@@ -90,6 +90,9 @@
 (define-constant +marker-color+ "#c00" :test #'string-equal)
 (define-constant +marker-label-radius+ 4)
 (define-constant +marker-characters+ "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱" :test #'string-equal)
+(define-constant +default-extinguish-radius+ 3)           ; cells
+(define-constant +minimum-spread+ 2)
+(define-constant +maximum-spread+ 5)
 (define-constant +extinguishment-color+ "rgb(0 150 255 / 40%)" :test #'string-equal)
 (define-constant +tolerance+ 1.0d-12)                     ; equality tolerance when compare floats
 (define-constant +minimum-speed+ (floor +cell-size+ 4))  ; pixels per second
@@ -111,13 +114,6 @@
 (define-constant +region-types+
     '((:grass) (:lake :water) (:river :water t) (:forest :tree) (:road :road t)
       (:outcrop :rock) (:houses :house))
-  :test #'equal)
-
-(define-constant +extinguish-area+
-  (iter (for x :from -3 :to 3)
-        (nconcing (iter (for y :from -3 :to 3)
-                        (unless (= (abs x) (abs y) 3)
-                          (collect (list x y))))))
   :test #'equal)
 
 
@@ -329,6 +325,14 @@
 
 
 
+(defun compute-extinguish-area (radius)
+  ;; doesn't really make it a circle, just a square without the corners,
+  ;; but empirically that seems to be more pleasing
+  (iter (for x :from (- radius) :to radius)
+        (nconcing (iter (for y :from (- radius) :to radius)
+                        (unless (= (abs x) (abs y) 3)
+                          (collect (list x y)))))))
+
 (defstruct (mission (:constructor %make-mission)
                     (:print-object))
   id
@@ -342,6 +346,8 @@
   (fires (make-hash-table))
   (last-extinguish-click nil)
   (show-extinguishment-p nil)
+  (extinguish-radius +default-extinguish-radius+)
+  (extinguish-area (compute-extinguish-area +default-extinguish-radius+))
   (markers nil)
   (marker-name-index 0)
   (concluded-p nil)
@@ -355,6 +361,13 @@
                        (length (mission-players s)))
 
 (defparameter *missions* (make-hash-table :test 'equalp))
+
+;; (define-constant +extinguish-area+
+  ;; (iter (for x :from -3 :to 3)
+  ;;       (nconcing (iter (for y :from -3 :to 3)
+  ;;                       (unless (= (abs x) (abs y) 3)
+  ;;                         (collect (list x y))))))
+;;   :test #'equal)
 
 (defun write-to-mission-log (mission kind plist)
   (check-type kind keyword)
@@ -816,7 +829,7 @@ at each time step reduce the fuel level by
                           (:div.fillable
                            (:div (:input#spread :type "range" ; range defaults to 0 to 100
                                                 :value 30
-                                               :onchange (ps:ps (spread-changed)))
+                                                :onchange (ps:ps (spread-changed)))
                                  (:label :for "spread" "Spread"))
                            (:table
                             (:tr (:td (:label :for "water" "Water"))
@@ -859,6 +872,7 @@ at each time step reduce the fuel level by
        (ps:chain document (get-element-by-id "view") (get-context "2d")))
 
     `(ps:var extinguish-start 0)
+    `(ps:var extinguish-radius 0)
 
     (destructuring-bind (xp yp) +plane-axis+
       (let* ((view-center (/ +view-size+ 2.0)))
@@ -881,10 +895,17 @@ at each time step reduce the fuel level by
                ((@ ctx save))
 
                (when (> extinguish-start 0)
-                 ((@ ctx begin-path))
-                 (setf (@ ctx fill-style) ,+extinguishment-color+)
-                 ((@ ctx arc) 0 0 100 0 ,(* 2 pi))
-                 ((@ ctx fill)))
+                 (let* ((frac (/ (- (@ document timeline current-time) extinguish-start)
+                                ,+polling-interval+
+                                0.3))
+                        (r (* extinguish-radius frac)))
+                   (clog "what?" frac r)
+                   ((@ ctx begin-path))
+                   (setf (@ ctx fill-style) ,+extinguishment-color+)
+                   ((@ ctx arc) 0 0 (if (< r extinguish-radius) r extinguish-radius) 0 ,(* 2 pi))
+                   ((@ ctx fill))
+
+                   ))
 
                ((@ ctx rotate) angle)
                ((@ ctx draw-image) plane ,(- xp) ,(- yp))
@@ -1111,6 +1132,20 @@ at each time step reduce the fuel level by
                                player position target angle))
        (update-server)))
 
+(define-remote-call spread-changed (value player-id)
+  ;; TODO the spread should be per player, not per mission, FIX this
+  (let* ((p (get-player player-id))
+         (m (player-mission p)))
+    ;; the 0.01 below reflects an HTML range defaulting to 0 to 100
+    (setf (mission-extinguish-radius m) (+ (floor (* (parse-integer value) 0.01
+                                                     (- +maximum-spread+ +minimum-spread+)))
+                                           +minimum-spread+))))
+
+(js `(defun spread-changed () (value player-id)
+       (call spread-changed () ((@ ((@ document get-element-by-id) "spread") value)
+                                player))
+       (update-server)))
+
 
 
 (defun propagate-fires (mission state)
@@ -1137,7 +1172,7 @@ at each time step reduce the fuel level by
           (setf (mission-show-extinguishment-p mission) t)
           (setf (mission-last-extinguish-click mission) nil)
           ;; refactor for commonality with what follows
-          (iter (for (xo yo) :in +extinguish-area+)
+          (iter (for (xo yo) :in (mission-extinguish-area mission))
                 (for x := (+ (cell-x last-click) xo))
                 (for y := (+ (cell-y last-click) yo))
                 (for candidate := (mission-cell mission x y))
@@ -1288,7 +1323,9 @@ at each time step reduce the fuel level by
                                   (:damage . ,(format nil "~:D" (mission-damage m)))
                                   (:time-remaining . ,(format-time tm))))
                  (when (mission-show-extinguishment-p m)
-                   (push '(:show-extinguishment . t) response)
+                   (push `(:show-extinguishment
+                           . ,(* (+ (mission-extinguish-radius m) 0.8) +cell-size+))
+                         response)
                    (setf (mission-show-extinguishment-p m) nil)))))
       (write-to-mission-log m :update-from-server (alist-plist response))
       response)))
@@ -1348,11 +1385,14 @@ at each time step reduce the fuel level by
                       (set-time-display))
                      (t (set-time-display (@ json time-remaining))
                         (extinguish (@ json extinguish))
-                        (setf extinguish-start (if (@ json show-extinguishment) time 0))
+                        (let ((r (@ json show-extinguishment)))
+                          (if (and r (> r 0))
+                              (setf extinguish-start time extinguish-radius r)
+                              (setf extinguish-start 0))
                         (ignite (@ json ignite))
                         (damage (@ json damage))
                         (motion (@ json motion))))))
-       (set-server-update))
+       (set-server-update)))
 
     `(defun set-time-display (&optional val)
        (setf (ps:chain document (get-element-by-id "time-remaining") value)
