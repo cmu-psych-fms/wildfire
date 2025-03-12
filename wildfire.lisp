@@ -90,6 +90,7 @@
 (define-constant +marker-color+ "#c00" :test #'string-equal)
 (define-constant +marker-label-radius+ 4)
 (define-constant +marker-characters+ "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱" :test #'string-equal)
+(define-constant +extinguishment-color+ "rgb(0 150 255 / 40%)" :test #'string-equal)
 (define-constant +tolerance+ 1.0d-12)                     ; equality tolerance when compare floats
 (define-constant +minimum-speed+ (floor +cell-size+ 4))  ; pixels per second
 (define-constant +maximum-speed+ (* 6 +cell-size+))
@@ -875,9 +876,17 @@ at each time step reduce the fuel level by
                ((@ ctx save))
                ((@ ctx translate) (+ ,view-center ,+view-margin+) (+ ,view-center ,+view-margin+))
                ((@ ctx save))
+
+               ((@ ctx begin-path))
+               (setf (@ ctx fill-style) ,+extinguishment-color+)
+               ((@ ctx arc) 0 0 100 0 ,(* 2 pi))
+               ((@ ctx fill))
+
                ((@ ctx rotate) angle)
                ((@ ctx draw-image) plane ,(- xp) ,(- yp))
                ((@ ctx restore))
+
+
                (when mission-over
                  ((@ ctx draw-image) mission-over-image ,(- xp 200) ,(- yp 180)))
                ((@ ctx restore)))
