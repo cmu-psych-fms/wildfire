@@ -800,14 +800,29 @@ at each time step reduce the fuel level by
                             :onclick (ps:ps (clicked-map (list (@ event offset-x)
                                                                (@ event offset-y))))
                             "Not supported in this browser")
-              (:div.uicol (:div.component (:input#speed :type "range" ; range defaults to 0 to 100
-                                                        :onchange (ps:ps (speed-changed)))
-                                          (:label :for "speed" "Speed"))
+              (:div.uicol (:div.fillable
+                           (:div (:input#speed :type "range" ; range defaults to 0 to 100
+                                               :value 55
+                                               :onchange (ps:ps (speed-changed)))
+                                 (:label :for "speed" "Speed"))
+                           (:table
+                            (:tr (:td (:label :for "fuel" "Fuel"))
+                                 (:td (:meter.fill-control#fuel :low 0.1 :value 0.8)))
+                            (:tr (:td.fill-label (:label :for "fuel-fill" "Fill level"))
+                                 (:td (:input.fill-control#fuel-fill :type "range"
+                                                                     :value 100))))) ; range defaults to 0 to 100
+                          (:div.fillable
+                           (:div (:input#spread :type "range" ; range defaults to 0 to 100
+                                                :value 30
+                                               :onchange (ps:ps (spread-changed)))
+                                 (:label :for "spread" "Spread"))
+                           (:table
+                            (:tr (:td (:label :for "water" "Water"))
+                                 (:td (:meter.fill-control#water :low 0.1 :value 0.8)))
+                            (:tr (:td.fill-label (:label :for "water-fill" "Fill level"))
+                                 (:td (:input.fill-control#water-fill :type "range"
+                                                                      :value 100))))) ; range defaults to 0 to 100
                           (:table.component#data :style "margin-top: 3rex"
-                           (:tr (:td (:label :for "fuel" "Fuel"))
-                                (:td (:meter#fuel :low 0.1 :value 0.8)))
-                           (:tr (:td (:label :for "retardant" "Retardant"))
-                                (:td (:meter#retardant :low 0.1 :value 0.6)))
                            (:tr (:td "Time left")
                                 (:td (:output#time-remaining "10:15")))
                            (:tr (:td "Damage")
@@ -818,10 +833,13 @@ at each time step reduce the fuel level by
         ;; the following foolishness is to ensure the Material Icons font is loaded
         (:div (:span.material-icons :style "visibility:hidden" "location_on"))))))
 
-(add-css ".uicol { width:12rem; margin:0 0.7rem }"
+(add-css ".uicol { width: 12rem; margin: 0 0.7rem }"
          ".component { margin-bottom: 0.8rex }"
          ".component legend { padding: 0 0.3rem }"
-         "#data td { padding: 0.3rem }"
+         ".fillable { margin-bottom: 2.5rex }"
+         ".fill-label { font-size: 75%; padding-left: 0.5em }"
+         ".fill-control { width: 6rem }"
+         "#data td { padding: 0 0.3rem 0.3rem 0 }"
          ".red { color: red }"
          ".markers { list-style-type: none; margin-block-start: 0; margin-block-end: 0;
                      margin-inline-start: -1.5rem; margin-inline-end: 0.5rem }"
