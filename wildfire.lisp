@@ -97,7 +97,7 @@
 (define-constant +maximum-speed+ (* 6 +cell-size+))
 (define-constant +initial-speed+ (floor +cell-size+ 0.66))
 (define-constant +default-exhaustion-probability+ 0.002)
-(define-constant +default-progagation-probability+ 0.02)
+(define-constant +default-progagation-probability+ 0.01)
 
 (defparameter *port* +default-port+)
 
@@ -340,7 +340,7 @@
   ignitions
   (damage 0)
   (click-places-marker-p nil)
-  (move-extinguishes-p t)
+  (move-extinguishes-p nil)
   (fires (make-hash-table))
   (last-extinguish-click nil)
   (show-extinguishment-p nil)
