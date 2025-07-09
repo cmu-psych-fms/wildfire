@@ -552,7 +552,7 @@ at each time step reduce the fuel level by
 ;;; Remote models
 
 (defparameter *pending-remote-models* (make-hash-table :test 'equal))
-(defparameter *remote-model-client-host* "koalemos.lan.cmu.edu")
+(defparameter *remote-model-client-host* "mneme.lan.cmu.edu")
 (defparameter *remote-model-client-port* +default-model-port+)
 (defparameter +rmmote-model-timeout+ 10)              ; seconds
 (defparameter *previous-pending-remote-model* 0)
@@ -1493,7 +1493,7 @@ at each time step reduce the fuel level by
 
 
 
-;; ;; TODO need to figure out what to do so this doesn't get in the way on Koalemos
+;; ;; TODO need to figure out what to do so this doesn't get in the way on Mneme
 ;; (when (and (not (find-package "SWANK")) (y-or-n-p "Start Wildfire server?"))
 ;;   (start-server))
 

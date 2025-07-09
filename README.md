@@ -61,14 +61,14 @@ a browser at
 
     http://<server>:<port>/
 
-For example, if the server is `koalemos.psy.cmu.edu` and the port is `8978` (the default)
+For example, if the server is `mneme.lan.cmu.edu` and the port is `8978` (the default)
 
-    http://koalemos.psy.cmu.edu:8978/
+    http://mneme.lan.cmu.edu:8978/
 
 This will create a new player playing a new mission using a default game. It is possible to provide the name of an
 alternative game using `?game=`. For example, to play the `model-game` game
 
-    http://koalemos.psy.cmu.edu:8978/?game=model-game
+    http://mneme.lan.cmu.edu:8978/?game=model-game
 
 When starting a game in this way the names of the mission and game are provided by the server. However, names
 can be provided using `?mission=` and/or `?player=`, which facilitates multiple players joining the same
@@ -76,7 +76,7 @@ mission. While multiple players in a mission is not yet supported, the code exis
 as soon as it is. Similarly, this allows the same player to participate in different missions but have their
 name recorded to ease comparison of their performances. For example
 
-    http://koalemos.psy.cmu.edu:8978/?game=conflagration&player=fred&misison=fred-and-john-mission
+    http://mneme.lan.cmu.edu:8978/?game=conflagration&player=fred&misison=fred-and-john-mission
 
 
 ### Game Play
