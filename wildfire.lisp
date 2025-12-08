@@ -1,4 +1,4 @@
- ;;;; Copyright 2024 Carnegie Mellon University
+ ;;;; Copyright 2024–2025 Carnegie Mellon University
 
 ;;; TODO double check that markers are being tidily positioned
 ;;; TODO tweak marker positioning
@@ -98,6 +98,8 @@
 (define-constant +initial-speed+ (floor +cell-size+ 0.66))
 (define-constant +default-exhaustion-probability+ 0.002)
 (define-constant +default-progagation-probability+ 0.01)
+(define-constant +water-fuel-density-ratio+ 1.4) ; water is denser than avgas
+(define-constant +dead-weight+ 1)                ; the dead weight of the plane in arbitrary units
 
 (defparameter *port* +default-port+)
 
@@ -183,6 +185,8 @@
   (fire-propagation-probability +default-progagation-probability+)
   ignitions
   (costs nil)
+  ;; TODO make fuel-consumption-rate settable, and define a constant for its default
+  (fuel-consumption-rate 0.00000001)
   (model nil))
 
 (define-object-printer game () "~A (~D×~D)"
@@ -479,6 +483,11 @@
   mission
   (speed +initial-speed+)
   (motion nil)
+  ;; TODO make the following four fields more realistic
+  (fuel-level 1.0)
+  (fuil-fill-level 1.0)
+  (water-level 100)
+  (water-fill-level 100)
   (map-sent-to-model-p nil))
 
 (define-object-printer player (p) "~A~:[ (~A)~;~*~] ~A"
@@ -522,30 +531,6 @@ joined the mission."
         (error "A player named ~A is already in mission ~A" player-name mission))
       (make-player m player-name))
     (error "No game named ~A is available." game)))
-
-
-
-#|
-
-variables:
-  fuel
-  water
-  speed
-
-parameters:
-  dead weight
-  min speed
-  max speed
-  max fuel
-  max water
-  fuel consumption rate
-  water per extinquishment
-
-at each time step reduce the fuel level by
-  fuel consumption rate * speed * (dead weight + fuel + water)
-
-
-|#
 
 
 
@@ -814,10 +799,10 @@ at each time step reduce the fuel level by
                                                                (@ event offset-y))))
                             "Not supported in this browser")
               (:div.uicol (:div.fillable
-                           (:div (:input#speed :type "range" ; range defaults to 0 to 100
+                           (:div (:label :for "speed" "Speed")
+                                 (:input#speed :type "range" ; range defaults to 0 to 100
                                                :value 55
-                                               :onchange (ps:ps (speed-changed)))
-                                 (:label :for "speed" "Speed"))
+                                               :onchange (ps:ps (speed-changed))))
                            (:table
                             (:tr (:td (:label :for "fuel" "Fuel"))
                                  (:td (:meter.fill-control#fuel :low 0.1 :value 0.8)))
@@ -825,10 +810,10 @@ at each time step reduce the fuel level by
                                  (:td (:input.fill-control#fuel-fill :type "range"
                                                                      :value 100))))) ; range defaults to 0 to 100
                           (:div.fillable
-                           (:div (:input#spread :type "range" ; range defaults to 0 to 100
+                           (:div (:label :for "spread" "Spread")
+                                 (:input#spread :type "range" ; range defaults to 0 to 100
                                                 :value 30
-                                                :onchange (ps:ps (spread-changed)))
-                                 (:label :for "spread" "Spread"))
+                                                :onchange (ps:ps (spread-changed))))
                            (:table
                             (:tr (:td (:label :for "water" "Water"))
                                  (:td (:meter.fill-control#water :low 0.1 :value 0.8)))
@@ -1294,6 +1279,28 @@ at each time step reduce the fuel level by
         (multiple-value-bind (h m) (floor min 60)
           (format nil "~D:~2,'0D:~2,'0D" h m s)))))
 
+#|
+
+variables:
+  fuel
+  water
+  speed
+
+parameters:
+  dead weight
+  min speed
+  max speed
+  max fuel
+  max water
+  fuel consumption rate
+  water per extinquishment
+
+at each time step reduce the fuel level by
+  fuel consumption rate * speed * (dead weight + fuel + water)
+
+
+|#
+
 (define-remote-call server-update (player-id state)
   (when-let* ((p (get-player player-id))
               (m (player-mission p))
@@ -1314,11 +1321,26 @@ at each time step reduce the fuel level by
                    (%clicked-map player-id
                                  (mapcar #'cells-to-pixels (getf model-response :target))
                                  (cdr (assoc :position state)))))
+               (let* ((v (cdr (assoc :velocity state)))
+                      (speed^2 (+ (expt (first v) 2) (expt (second v) 2))))
+                 (when (> speed^2 0)
+                   (setf (player-fuel-level p)
+                         (max (- (player-fuel-level p)
+                                 ;; TODO augment with the dead weight/fuel/water factor
+                                 (* (game-fuel-consumption-rate g)
+                                    speed^2
+                                    (+ +dead-weight+
+                                       (player-fuel-level p)
+                                       (* +water-fuel-density-ratio+ (player-water-level p)))))
+                              0))
+                   ;; TODO invoke whatever happens when fuel goes to zero
+                   ))
                (multiple-value-bind (births deaths) (propagate-fires m state)
                  (setf response `((:motion . ,(shiftf (player-motion p) nil))
                                   (:ignite . ,births)
                                   (:extinguish . ,deaths)
                                   (:damage . ,(format nil "~:D" (mission-damage m)))
+                                  (:fuel-level . ,(player-fuel-level p))
                                   (:time-remaining . ,(format-time tm))))
                  (when (mission-show-extinguishment-p m)
                    (push `(:show-extinguishment
@@ -1361,6 +1383,11 @@ at each time step reduce the fuel level by
          (when n
            (setf (@ e value) n))))
 
+    `(defun fuel-level (n)
+       ;; TODO when fuel gets low the gauge should change color
+       (let ((e (ps:chain document (get-element-by-id "fuel"))))
+         (setf (@ e value) n)))
+
     `(ps:var pending-server-update nil)
 
     `(defun set-server-update ()
@@ -1387,9 +1414,10 @@ at each time step reduce the fuel level by
                           (if (and r (> r 0))
                               (setf extinguish-start time extinguish-radius r)
                               (setf extinguish-start 0))
-                        (ignite (@ json ignite))
-                        (damage (@ json damage))
-                        (motion (@ json motion))))))
+                          (ignite (@ json ignite))
+                          (damage (@ json damage))
+                          (fuel-level (@ json fuel-level))
+                          (motion (@ json motion))))))
        (set-server-update)))
 
     `(defun set-time-display (&optional val)
