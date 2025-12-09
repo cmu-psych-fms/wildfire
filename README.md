@@ -6,7 +6,7 @@ significantly different from Shawn’s original game, being largely mouse driven
 The game is intended not as entertainment but rather as a platform for experiments in psychology.
 Players fly virtual airplanes over a virtual terrain extinguishing wildfires.
 
-As of 2 Decenber 2025 this remains a work in progress, but incorporates an example
+As of 1 Decenber 2025 this remains a work in progress, but incorporates an example
 of what is believed to be every major component the finished version will require, and it appears to work well.
 As additional features are added they will be documented in this README. In what follows I describe the current
 state of the game, but also point out many of the features I hope to implement as development progresses.
@@ -23,7 +23,7 @@ interaction on those devices may be suboptimal.
 Even if it is playable on these
 latter devices it is not recommended that serious data collection be done using them as human performance will probably be
 degraded compared to using the recommended screen size and/or pointing technology.
-As of 2 December 2025 there appears to be a bug when used with Apple Safari that will need some deep investigation to repair.
+As of 1 December 2025 there appears to be a bug when used with Apple Safari that will need some deep investigation to repair.
 
 The server-side code has only been tested in SBCL on Linux, but *should* run fine in any modern Common Lisp implementation
 that can run USOCKET and Bordeaux Threads. It *should* be possible to run it in Windows, though some minor modifications
